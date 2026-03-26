@@ -142,8 +142,8 @@ def parse_result(txt_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
 
         # 着順行パース 例: "  01  1 4786 佐　藤　　博　亮 29  104  6.80   1    0.15     1.51.0"
         rank_match = re.match(
-            r"^\s+(0[1-6])\s+([1-6])\s+(\d{4})\s+(.+?)\s{2,}(\d{2,3})\s+(\d{2,3})\s+"
-            r"([\d.]+)\s+([1-6])\s+([\d.FL+]+)\s+([\d.]+|\.\s+\.)",
+            r"^\s+(0[1-6])\s+([1-6])\s+(\d{4})\s+(.+?)\s+(\d{2,3})\s+(\d{2,3})\s+"
+            r"([\d.]+)\s+([1-6])\s+([\d.FL+]+)\s*([\d.]+|\.\s*\.)",
             line
         )
         if rank_match and venue_code and race_no:
