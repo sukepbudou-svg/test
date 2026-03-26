@@ -135,19 +135,20 @@ def parse_result(txt_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
         if re.match(r"^\d{2}KBGN", line):
             venue_code = line[:2]
 
-        # レース番号取得
-        race_match = re.match(r"[\s　]*(\d{1,2})Ｒ", line)
+        # レース番号取得（半角R）例: "   1R       カタメン１予"
+        race_match = re.match(r"^\s{3}(\d{1,2})R\s", line)
         if race_match:
             race_no = int(race_match.group(1))
 
-        # 着順行パース（1〜6着）
+        # 着順行パース 例: "  01  1 4786 佐　藤　　博　亮 29  104  6.80   1    0.15     1.51.0"
         rank_match = re.match(
-            r"^([1-6])\s+([1-6])\s+(\d{4})\s*(.+?)\s+(\d+)\s+(\d+)"
-            r"\s+([\d.]+)\s+([1-6])\s+([\d.F+L]+)\s+([\d:']+)",
+            r"^\s+(0[1-6])\s+([1-6])\s+(\d{4})\s+(.+?)\s{2,}(\d{2,3})\s+(\d{2,3})\s+"
+            r"([\d.]+)\s+([1-6])\s+([\d.FL+]+)\s+([\d.]+|\.\s+\.)",
             line
         )
         if rank_match and venue_code and race_no:
             g = rank_match.groups()
+            race_time = g[9].strip()
             rank_records.append({
                 "date": date_str,
                 "venue_code": venue_code,
@@ -162,14 +163,13 @@ def parse_result(txt_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
                 "exhibition_time": float(g[6]),
                 "course": int(g[7]),
                 "start_timing": g[8],
-                "race_time": g[9],
+                "race_time": race_time if race_time != "." else None,
             })
 
-        # 払戻行パース
-        # 3連単: 例「３連単  1-2-3  12340円  人気 5」
+        # 払戻行パース 例: "        ３連単   1-2-4      350  人気     1"
         payout_match = re.match(
-            r"^(３連単|３連複|２連単|２連複|単勝|複勝|拡連複)\s+"
-            r"([\d\-]+)\s+([\d,]+)円?\s*(?:人気\s+(\d+))?",
+            r"^\s+(３連単|３連複|２連単|２連複|単勝|複勝|拡連複)\s+"
+            r"([\d\-]+)\s+([\d,]+)\s+人気\s+(\d+)",
             line
         )
         if payout_match and venue_code and race_no:
@@ -182,7 +182,7 @@ def parse_result(txt_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
                 "bet_type": g[0],
                 "combination": g[1],
                 "payout": int(g[2].replace(",", "")),
-                "popularity": int(g[3]) if g[3] else None,
+                "popularity": int(g[3]),
             })
 
         i += 1
