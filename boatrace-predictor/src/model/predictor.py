@@ -54,10 +54,10 @@ def predict_race(model: lgb.Booster, race_features: pd.Series) -> pd.DataFrame:
 
         prob = p1 * p2_given_p1 * p3_given_p12
 
-        # 期待回収率 = 的中確率 × 平均払戻 / 購入金額
-        # 平均払戻は確率の逆数 × 控除率で近似
-        expected_payout = (1 / prob * TRIFECTA_RETURN_RATE) if prob > 0 else 0
-        expected_roi = prob * expected_payout
+        # 期待回収率 = モデル予測確率 / 市場確率（均等配分） × 控除率
+        # 市場が均等と仮定した場合の確率 = 1/120（3連単全120通り）
+        market_prob = 1 / 120
+        expected_roi = (prob / market_prob) * TRIFECTA_RETURN_RATE if prob > 0 else 0
 
         results.append({
             "combination": f"{b1}-{b2}-{b3}",

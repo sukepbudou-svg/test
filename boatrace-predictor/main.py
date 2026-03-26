@@ -138,12 +138,13 @@ def cmd_predict():
     print(recommendations[recommendations["combination"] != "見送り"].to_string(index=False))
 
     # スプレッドシートに出力
-    spreadsheet_id = os.environ.get("SPREADSHEET_ID")
-    if spreadsheet_id:
+    spreadsheet_id = os.environ.get("SPREADSHEET_ID", "")
+    credentials_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "")
+    if spreadsheet_id and spreadsheet_id != "your_spreadsheet_id_here" and Path(credentials_path).exists():
         write_predictions(spreadsheet_id, recommendations)
     else:
-        print("\n[INFO] SPREADSHEET_ID が未設定のため、スプレッドシート出力をスキップしました")
-        print("      .env ファイルに SPREADSHEET_ID=<あなたのスプレッドシートID> を設定してください")
+        print("\n[INFO] スプレッドシート出力をスキップしました（未設定）")
+        print("      Google連携を設定する場合は .env ファイルを編集してください")
 
 
 def cmd_backtest():
