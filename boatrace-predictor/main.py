@@ -119,14 +119,9 @@ def cmd_predict():
         print("[ERROR] 番組表のパースに失敗しました")
         return
 
-    # 特徴量生成（成績データなしで番組表のみ）
+    # 特徴量生成（番組表のみ・予測モード）
     import pandas as pd
-    df_features = build_features(df_program, pd.DataFrame({"date": df_program["date"],
-                                                            "venue_code": df_program["venue_code"],
-                                                            "race_no": df_program["race_no"],
-                                                            "rank": [1]*len(df_program),
-                                                            "boat_no": df_program["boat_no"]}),
-                                  pd.DataFrame())
+    df_features = build_features(df_program, pd.DataFrame(), pd.DataFrame())
 
     # モデル読み込み
     model = load_model()

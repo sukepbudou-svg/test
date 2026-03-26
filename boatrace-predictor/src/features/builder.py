@@ -19,43 +19,56 @@ def build_features(df_program: pd.DataFrame, df_rank: pd.DataFrame, df_payout: p
     Returns:
         特徴量DataFrame（モデル学習・予測用）
     """
-    if df_program.empty or df_rank.empty:
+    if df_program.empty:
         return pd.DataFrame()
 
+    # レースごとに6艇分の特徴量をピボット（予測モードでは成績なしで動作）
+    predict_only = df_rank.empty
+
     # 3連単の払戻を結合用に整形
-    trifecta = df_payout[df_payout["bet_type"] == "３連単"][
-        ["date", "venue_code", "race_no", "combination", "payout", "popularity"]
-    ].copy()
+    if not predict_only and not df_payout.empty and "bet_type" in df_payout.columns:
+        trifecta = df_payout[df_payout["bet_type"] == "３連単"][
+            ["date", "venue_code", "race_no", "combination", "payout", "popularity"]
+        ].copy()
+    else:
+        trifecta = pd.DataFrame(columns=["date", "venue_code", "race_no", "combination", "payout", "popularity"])
 
     # 着順から1〜3着の艇番を取得
-    top3 = (
-        df_rank[df_rank["rank"] <= 3]
-        .sort_values(["date", "venue_code", "race_no", "rank"])
-        .groupby(["date", "venue_code", "race_no"])["boat_no"]
-        .apply(list)
-        .reset_index()
-        .rename(columns={"boat_no": "top3_boats"})
-    )
-    top3 = top3[top3["top3_boats"].apply(len) == 3].copy()
-    top3["result_combination"] = top3["top3_boats"].apply(
-        lambda x: f"{x[0]}-{x[1]}-{x[2]}"
-    )
-    top3["winner_boat"] = top3["top3_boats"].apply(lambda x: x[0])
+    if not predict_only:
+        top3 = (
+            df_rank[df_rank["rank"] <= 3]
+            .sort_values(["date", "venue_code", "race_no", "rank"])
+            .groupby(["date", "venue_code", "race_no"])["boat_no"]
+            .apply(list)
+            .reset_index()
+            .rename(columns={"boat_no": "top3_boats"})
+        )
+        top3 = top3[top3["top3_boats"].apply(len) == 3].copy()
+        top3["result_combination"] = top3["top3_boats"].apply(
+            lambda x: f"{x[0]}-{x[1]}-{x[2]}"
+        )
+        top3["winner_boat"] = top3["top3_boats"].apply(lambda x: x[0])
+    else:
+        top3 = pd.DataFrame(columns=["date", "venue_code", "race_no", "result_combination", "winner_boat"])
 
     # レースごとに6艇分の特徴量をピボット
     program_pivot = _pivot_program(df_program)
 
     # 結合
-    df = program_pivot.merge(top3, on=["date", "venue_code", "race_no"], how="inner")
-    df = df.merge(
-        trifecta[["date", "venue_code", "race_no", "payout", "popularity"]],
-        on=["date", "venue_code", "race_no"],
-        how="left"
-    )
-
-    # 回収率計算用の期待値フラグ（学習用ラベル）
-    # 1: 的中（3連単）, 0: 外れ
-    df["trifecta_payout"] = df["payout"].fillna(0).astype(int)
+    if predict_only:
+        # 予測モード: 番組表のみ（成績なし）
+        df = program_pivot
+        df["winner_boat"] = None
+        df["trifecta_payout"] = 0
+    else:
+        df = program_pivot.merge(top3, on=["date", "venue_code", "race_no"], how="inner")
+        if not trifecta.empty:
+            df = df.merge(
+                trifecta[["date", "venue_code", "race_no", "payout", "popularity"]],
+                on=["date", "venue_code", "race_no"],
+                how="left"
+            )
+        df["trifecta_payout"] = df.get("payout", pd.Series(0, index=df.index)).fillna(0).astype(int)
 
     return df
 
