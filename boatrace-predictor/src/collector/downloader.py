@@ -99,12 +99,18 @@ def extract_lzh(lzh_path: Path) -> Path | None:
         解凍したテキストファイルパス（失敗時はNone）
     """
     try:
-        from lhafile import LhaFile
-        archive = LhaFile(str(lzh_path))
-        info = archive.infolist()[0]
-        content = archive.read(info.filename)
-        txt_path = lzh_path.with_suffix(".txt")
-        txt_path.write_bytes(content)
+        import py7zr
+        import tempfile
+        with py7zr.SevenZipFile(str(lzh_path), mode="r") as archive:
+            names = archive.getnames()
+            with tempfile.TemporaryDirectory() as tmpdir:
+                archive.extractall(path=tmpdir)
+                extracted = list(Path(tmpdir).iterdir())
+                if not extracted:
+                    print(f"[ERROR] 解凍結果が空: {lzh_path}")
+                    return None
+                txt_path = lzh_path.with_suffix(".txt")
+                txt_path.write_bytes(extracted[0].read_bytes())
         print(f"[OK] 解凍完了: {txt_path.name}")
         return txt_path
     except Exception as e:
