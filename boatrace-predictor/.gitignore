@@ -1,0 +1,21 @@
+# 環境設定・認証情報（絶対にコミットしない）
+.env
+credentials.json
+
+# データファイル（容量が大きいため除外）
+data/raw/
+data/processed/
+data/models/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
