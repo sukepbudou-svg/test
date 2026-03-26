@@ -47,22 +47,34 @@ def parse_program(txt_path: Path) -> pd.DataFrame:
 
     venue_code = None
     race_no = None
+    # 全角数字→半角変換テーブル
+    fw2hw = str.maketrans("０１２３４５６７８９Ｒ", "0123456789R")
 
     for i, line in enumerate(lines):
         # 場コード取得
         if re.match(r"^\d{2}BBGN", line):
             venue_code = line[:2]
 
-        # レース番号取得
-        race_match = re.match(r"[\s　]*(\d{1,2})Ｒ", line)
+        # レース番号取得（全角数字・全角R 例: "　１Ｒ  カタメン１予"）
+        line_hw = line.translate(fw2hw)
+        race_match = re.match(r"[　\s]*(\d{1,2})R\s", line_hw)
         if race_match:
             race_no = int(race_match.group(1))
 
-        # 選手データ行のパース（艇番1〜6で始まる行）
+        # 選手データ行のパース
+        # 例: "1 4786佐藤博亮37愛知53A1 6.85 55.40 6.35 47.92 29 30.00104  6.25"
+        # 名前は非ASCII文字で構成、年齢・体重は半角数字
         boat_match = re.match(
-            r"^([1-6])\s+(\d{4})\s*(.+?)\s+(\d{2})\s+(\S+)\s+(\d{2,3})"
-            r"\s+([AB][12])\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)"
-            r"\s+(\d+)\s+([\d.]+)\s+(\d+)\s+([\d.]+)",
+            r"^([1-6])\s(\d{4})"          # 艇番・登録番号
+            r"([^\x00-\x7F]+)"            # 選手名（非ASCII）
+            r"(\d{2,3})"                  # 年齢
+            r"([^\x00-\x7F]{2})"          # 支部（全角2文字）
+            r"(\d{2,3})"                  # 体重
+            r"([AB][12])\s+"              # 級別
+            r"([\d.]+)\s+([\d.]+)\s+"     # 全国勝率・2率
+            r"([\d.]+)\s+([\d.]+)\s+"     # 当地勝率・2率
+            r"(\d+)\s+(\d{1,2}\.\d{2})"  # モーターNO・2率
+            r"(\d+)\s+([\d.]+)",          # ボートNO・2率
             line
         )
         if boat_match and venue_code and race_no:
