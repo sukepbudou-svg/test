@@ -240,6 +240,21 @@ def update_result_row(
             value_input_option="RAW"
         )
 
+        # 行番号を取得して色付け
+        row_no = len(r_sheet.get_all_values())
+        # 競艇場カラー（全列）
+        _apply_venue_color(r_sheet, row_no, venue_name, num_cols=10)
+        # 的中セル（I列）: ○は緑、×は薄赤
+        try:
+            hit_color = (
+                {"red": 0.7, "green": 0.95, "blue": 0.7} if hit == "○"
+                else {"red": 0.98, "green": 0.85, "blue": 0.85}
+            )
+            r_sheet.format(f"I{row_no}", {"backgroundColor": hit_color,
+                                           "textFormat": {"bold": True}})
+        except Exception:
+            pass
+
     print(f"[OK] 成績記録: {venue_name} {race_no}R 結果={actual_combination} 払戻={actual_payout}円")
 
 
