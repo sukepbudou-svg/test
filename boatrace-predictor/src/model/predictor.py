@@ -22,6 +22,9 @@ MIN_EXPECTED_ROI = 1.10  # 110%以上のみ推奨
 # 推奨する最低的中確率（これ未満は大穴すぎて除外）
 MIN_PROB = 0.02  # 2%以上のみ推奨
 
+# リアルタイムオッズ使用時の最大オッズ倍率（これ超えは市場も長射程と判断）
+MAX_LIVE_ODDS = 150.0  # 150倍（15,000円）まで
+
 MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
 PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
 
@@ -152,11 +155,14 @@ def predict_race(
     results = []
     for rank, (combination, b1, b2, b3, prob) in enumerate(combo_probs, start=1):
         if using_live and combination in live_odds:
-            # リアルタイムオッズ使用: オッズは倍率（例: 3.5 → 350円払戻）
             actual_odds = live_odds[combination]
-            avg_payout = int(actual_odds * 100)
-            # 期待回収率 = 的中確率 × オッズ倍率
-            expected_roi = prob * actual_odds
+            # 150倍超は市場が長射程と判断 → 対象外としてROIを0に
+            if actual_odds > MAX_LIVE_ODDS:
+                avg_payout = int(actual_odds * 100)
+                expected_roi = 0.0
+            else:
+                avg_payout = int(actual_odds * 100)
+                expected_roi = prob * actual_odds
         else:
             # 履歴ルックアップ使用
             avg_payout = payout_lookup.get(str(rank), int(300 * (rank ** 0.8)))
