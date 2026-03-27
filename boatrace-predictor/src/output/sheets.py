@@ -52,6 +52,32 @@ _VENUE_BG_COLORS = {
 _DEFAULT_BG = {"red": 0.95, "green": 0.95, "blue": 0.95}  # 不明場所はグレー
 
 
+def _format_header(spreadsheet, sheet, num_cols: int = 9) -> None:
+    """1行目を太字・薄いグレー背景にして行を固定する"""
+    sid = sheet.id
+    try:
+        spreadsheet.batch_update({"requests": [
+            # 太字 + 背景色
+            {"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1,
+                          "startColumnIndex": 0, "endColumnIndex": num_cols},
+                "cell": {"userEnteredFormat": {
+                    "backgroundColor": {"red": 0.82, "green": 0.86, "blue": 0.92},
+                    "textFormat": {"bold": True},
+                    "horizontalAlignment": "CENTER",
+                }},
+                "fields": "userEnteredFormat(backgroundColor,textFormat.bold,horizontalAlignment)",
+            }},
+            # 1行目を固定
+            {"updateSheetProperties": {
+                "properties": {"sheetId": sid, "gridProperties": {"frozenRowCount": 1}},
+                "fields": "gridProperties.frozenRowCount",
+            }},
+        ]})
+    except Exception:
+        pass
+
+
 def _apply_venue_color(sheet, row_no: int, venue_name: str, num_cols: int = 9) -> None:
     """指定行に競艇場カラーの背景色を適用する"""
     color = _VENUE_BG_COLORS.get(venue_name, _DEFAULT_BG)
@@ -118,6 +144,7 @@ def write_predictions(
     # ヘッダー行
     headers = ["日付", "競艇場", "レース", "買い目（3連単）", "的中確率", "オッズ", "期待回収率", "信頼度", "オッズ元"]
     sheet.update("A1", [headers])
+    _format_header(spreadsheet, sheet, num_cols=9)
 
     # データ行
     if not recommendations.empty:
@@ -159,6 +186,7 @@ def append_prediction_row(
         headers = ["日付", "競艇場", "レース", "買い目（3連単）", "的中確率",
                    "オッズ", "期待回収率", "信頼度", "オッズ元"]
         sheet.update("A1", [headers])
+        _format_header(spreadsheet, sheet, num_cols=9)
 
     cols = ["date", "venue_name", "race_no", "combination", "prob",
             "odds", "expected_roi", "confidence", "odds_source"]
@@ -197,6 +225,7 @@ def update_result_row(
         headers = ["日付", "競艇場", "レース", "予想買い目", "的中確率", "期待回収率",
                    "実際の結果", "実際の払戻", "的中", "収支（円）"]
         r_sheet.update("A1", [headers])
+        _format_header(spreadsheet, r_sheet, num_cols=10)
 
     # 日付シートから該当レースの予想行を取得（例: "2026-03-27"）
     pred_rows = []
