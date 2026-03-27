@@ -211,11 +211,8 @@ def get_recommendations(
             live_odds = all_live_odds.get((venue_code, race_no))
 
         predictions = predict_race(model, race_row, payout_lookup, live_odds)
-        # 確率上位の組み合わせを選出（確率2%以上、上位top_n件）
-        # オッズは市場の値をそのまま表示
-        recommended = predictions[
-            predictions["prob"] >= MIN_PROB
-        ].sort_values("prob", ascending=False).head(top_n)
+        # 確率上位top_n件を選出（常にtop_n点表示）
+        recommended = predictions.sort_values("prob", ascending=False).head(top_n)
 
         if recommended.empty:
             all_recommendations.append({
