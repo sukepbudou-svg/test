@@ -61,32 +61,15 @@ def parse_program(txt_path: Path) -> pd.DataFrame:
         race_match = re.match(r"[　\s]*(\d{1,2})R\s", line_hw)
         if race_match:
             race_no = int(race_match.group(1))
-            # 発走時刻を探す（前後15行、複数フォーマット対応）
+            # 発走時刻を探す - レース番号と同じ行の末尾に「電話投票締切予定HH：MM」形式で記載
             scheduled_time = None
-            search_lines = lines[max(0, i-2):min(len(lines), i+16)]
-            for sl in search_lines:
-                sl_hw = sl.translate(fw2hw)
-                # パターン1: HH:MM 形式（例: "10:00"）
-                m = re.search(r"\b(\d{1,2}):(\d{2})\b", sl_hw)
-                if m:
-                    hh, mm = int(m.group(1)), int(m.group(2))
-                    if 6 <= hh <= 22 and 0 <= mm <= 59:
-                        scheduled_time = f"{hh:02d}:{mm:02d}"
-                        break
-                # パターン2: 発走キーワード直後の時刻（例: "発走 1000" or "発走 10 00"）
-                m2 = re.search(r"発走\s*(\d{2})(\d{2})", sl_hw)
-                if m2:
-                    hh, mm = int(m2.group(1)), int(m2.group(2))
-                    if 6 <= hh <= 22 and 0 <= mm <= 59:
-                        scheduled_time = f"{hh:02d}:{mm:02d}"
-                        break
-                # パターン3: 行頭付近のHHMM形式（例: "  1000" 独立行）
-                m3 = re.match(r"^\s{0,5}([01]\d|2[0-2])([0-5]\d)\s*$", sl_hw)
-                if m3:
-                    hh, mm = int(m3.group(1)), int(m3.group(2))
-                    if 6 <= hh <= 22 and 0 <= mm <= 59:
-                        scheduled_time = f"{hh:02d}:{mm:02d}"
-                        break
+            line_hw = lines[i].translate(fw2hw)
+            # 同じ行から時刻を抽出（\b不使用：日本語文字が単語境界に干渉するため）
+            m = re.search(r"(\d{1,2}):(\d{2})\s*$", line_hw)
+            if m:
+                hh, mm = int(m.group(1)), int(m.group(2))
+                if 6 <= hh <= 22 and 0 <= mm <= 59:
+                    scheduled_time = f"{hh:02d}:{mm:02d}"
 
         # 選手データ行のパース
         # 例: "1 4786佐藤博亮37愛知53A1 6.85 55.40 6.35 47.92 29 30.00104  6.25"
