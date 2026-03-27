@@ -22,12 +22,8 @@ MIN_EXPECTED_ROI = 1.10  # 110%以上のみ推奨
 # 推奨する最低的中確率（これ未満は大穴すぎて除外）
 MIN_PROB = 0.02  # 2%以上のみ推奨
 
-# リアルタイムオッズ使用時の最大オッズ倍率（これ超えは市場も長射程と判断）
-MAX_LIVE_ODDS = 80.0  # 80倍まで（これ超えは除外）
-
-# モデル確率と市場確率の最大乖離倍率
-# モデルが「2%」でも市場が「0.7%（=1/144倍）」なら乖離3倍 → 除外
-MAX_MARKET_DIVERGENCE = 2.5  # モデル確率が市場確率の2.5倍以上なら除外
+# 推奨する最低的中確率（これ未満は除外）
+# ※オッズは市場の値をそのまま使用し、倍率によるフィルタリングは行わない
 
 MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
 PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
@@ -159,19 +155,10 @@ def predict_race(
     results = []
     for rank, (combination, b1, b2, b3, prob) in enumerate(combo_probs, start=1):
         if using_live and combination in live_odds:
+            # 市場オッズをそのまま使用（フィルタなし）
             actual_odds = live_odds[combination]
             odds_value = round(actual_odds, 1)
-            # 80倍超 → 除外
-            if actual_odds > MAX_LIVE_ODDS:
-                expected_roi = 0.0
-            else:
-                # 市場乖離チェック: 市場が示す確率(1/odds)とモデル確率を比較
-                market_prob = 1.0 / actual_odds
-                if prob > market_prob * MAX_MARKET_DIVERGENCE:
-                    # モデルが市場の2.5倍以上楽観的 → 信頼できない
-                    expected_roi = 0.0
-                else:
-                    expected_roi = prob * actual_odds
+            expected_roi = prob * actual_odds
             odds_source = "live"
         else:
             # 履歴ルックアップ使用（払戻円 ÷ 100 = 倍率）
@@ -224,11 +211,11 @@ def get_recommendations(
             live_odds = all_live_odds.get((venue_code, race_no))
 
         predictions = predict_race(model, race_row, payout_lookup, live_odds)
-        # 確率2%以上 かつ 期待回収率の条件を両方満たすものだけ推奨
+        # 確率上位の組み合わせを選出（確率2%以上、上位top_n件）
+        # オッズは市場の値をそのまま表示
         recommended = predictions[
-            (predictions["prob"] >= MIN_PROB) &
-            (predictions["expected_roi"] >= min_roi)
-        ].head(top_n)
+            predictions["prob"] >= MIN_PROB
+        ].sort_values("prob", ascending=False).head(top_n)
 
         if recommended.empty:
             all_recommendations.append({
