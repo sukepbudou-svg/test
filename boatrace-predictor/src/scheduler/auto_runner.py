@@ -123,7 +123,8 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
     from src.model.trainer import load_model
     from src.model.predictor import get_recommendations, load_payout_lookup
     from src.output.sheets import (
-        append_prediction_row, update_result_row, update_summary_sheet
+        append_prediction_row, update_result_row, update_summary_sheet,
+        apply_colors_to_results_sheet,
     )
 
     today = datetime.now()
@@ -186,6 +187,7 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
             all_done = all(r["predicted"] and r["result_fetched"] for r in schedule)
             if all_done:
                 print("\n=== 本日の全レース処理完了 ===")
+                apply_colors_to_results_sheet(spreadsheet_id, credentials_path)
                 update_summary_sheet(spreadsheet_id, credentials_path)
                 break
 
@@ -225,6 +227,7 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
 
     except KeyboardInterrupt:
         print("\n\n自動予想を停止しました")
+        apply_colors_to_results_sheet(spreadsheet_id, credentials_path)
         update_summary_sheet(spreadsheet_id, credentials_path)
 
 
