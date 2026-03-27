@@ -14,11 +14,13 @@ import pandas as pd
 from src.features.builder import get_feature_columns, add_course_advantage
 from src.agents.course_strategy import predict_win_probs as course_win_probs
 from src.agents.racer_performance import predict_win_probs as racer_win_probs
+from src.agents.motor_form import predict_win_probs as motor_win_probs
 
 # エージェントの重み（合計1.0）
-WEIGHT_ML     = 0.50  # AIモデルエージェント
-WEIGHT_COURSE = 0.25  # コース戦略エージェント
-WEIGHT_RACER  = 0.25  # 選手成績エージェント
+WEIGHT_ML     = 0.45  # AIモデルエージェント
+WEIGHT_COURSE = 0.20  # コース戦略エージェント
+WEIGHT_RACER  = 0.20  # 選手成績エージェント
+WEIGHT_MOTOR  = 0.15  # モーター状態エージェント
 
 # 3連単の控除率（約75%が払い戻し）
 TRIFECTA_RETURN_RATE = 0.75
@@ -147,8 +149,12 @@ def predict_race(
     # 選手成績エージェントの勝率
     rp_probs = racer_win_probs(race_features)
 
-    # 3エージェントの勝率を重み付け合成
-    win_probs = WEIGHT_ML * ml_probs + WEIGHT_COURSE * cs_probs + WEIGHT_RACER * rp_probs
+    # モーター状態エージェントの勝率
+    mt_probs = motor_win_probs(race_features)
+
+    # 4エージェントの勝率を重み付け合成
+    win_probs = (WEIGHT_ML * ml_probs + WEIGHT_COURSE * cs_probs
+                 + WEIGHT_RACER * rp_probs + WEIGHT_MOTOR * mt_probs)
 
     # 各エージェントの単独トップ5を取得（合議チェック用）
     def _top5(probs: np.ndarray) -> set:
@@ -166,6 +172,7 @@ def predict_race(
     ml_top5 = _top5(ml_probs)
     cs_top5 = _top5(cs_probs)
     rp_top5 = _top5(rp_probs)
+    mt_top5 = _top5(mt_probs)
 
     # 全120通りの確率を計算
     combinations = list(permutations(range(1, 7), 3))
@@ -200,11 +207,12 @@ def predict_race(
             expected_roi = prob * odds_value
             odds_source = "history"
 
-        # エージェント合議数（0〜3）
+        # エージェント合議数（0〜4）
         agreement = sum([
             combination in ml_top5,
             combination in cs_top5,
             combination in rp_top5,
+            combination in mt_top5,
         ])
 
         results.append({
@@ -270,6 +278,7 @@ def get_recommendations(
         else:
             for _, rec in recommended.iterrows():
                 agreement = int(rec.get("agreement", 0))
+                # 4エージェント中: ★★★=3〜4合意, ★★☆=2合意, ★☆☆=1以下
                 confidence = "★★★" if agreement >= 3 else "★★☆" if agreement >= 2 else "★☆☆"
                 src = rec.get("odds_source", "history")
                 odds_display = f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)"

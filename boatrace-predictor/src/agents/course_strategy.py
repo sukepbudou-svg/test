@@ -61,6 +61,27 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
     venue_name = str(race_row.get("venue_name", ""))
     venue_factor = VENUE_COURSE_FACTOR.get(venue_name, 1.0)
 
+    # ── レース内の展示ST平均を計算（相対比較用）──
+    st_vals_in_race = []
+    for b in range(1, 7):
+        v = race_row.get(f"boat{b}_exhibition_st", None)
+        if v is not None:
+            try:
+                fv = float(v)
+                if fv >= 0:
+                    st_vals_in_race.append(fv)
+            except (ValueError, TypeError):
+                pass
+    race_avg_st = float(np.mean(st_vals_in_race)) if st_vals_in_race else EXHST_BASELINE
+
+    # ── レース内の展示タイム平均を計算（相対比較用）──
+    exhtime_vals_in_race = []
+    for b in range(1, 7):
+        v = race_row.get(f"boat{b}_exhibition_time", None)
+        if v and float(v) > 0:
+            exhtime_vals_in_race.append(float(v))
+    race_avg_exhtime = float(np.mean(exhtime_vals_in_race)) if exhtime_vals_in_race else EXHTIME_BASELINE
+
     probs = np.zeros(6)
 
     for boat in range(1, 7):
@@ -74,21 +95,21 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
             # 1コースが弱い会場では外コースの確率が上がる
             base_rate *= (2.0 - venue_factor)
 
-        # ── 展示タイム補正 ──
+        # ── 展示タイム補正（レース内相対比較）──
         exh_time = race_row.get(f"boat{boat}_exhibition_time", None)
         if exh_time and float(exh_time) > 0:
-            # タイムが速いほど（小さいほど）プラス補正
-            diff = EXHTIME_BASELINE - float(exh_time)
+            # レース内平均より速いほどプラス補正
+            diff = race_avg_exhtime - float(exh_time)
             base_rate *= (1.0 + diff * EXHTIME_WEIGHT)
 
-        # ── 展示スタートタイミング補正 ──
+        # ── 展示スタートタイミング補正（レース内相対比較）──
         exh_st = race_row.get(f"boat{boat}_exhibition_st", None)
         if exh_st is not None:
             try:
                 st_val = float(exh_st)
                 if st_val >= 0:  # F(フライング)除外
-                    # STが小さいほど（ギリギリ）プラス補正
-                    diff = EXHST_BASELINE - st_val
+                    # レース内平均より早いSTほどプラス補正
+                    diff = race_avg_st - st_val
                     base_rate *= (1.0 + diff * EXHST_WEIGHT)
             except (ValueError, TypeError):
                 pass
