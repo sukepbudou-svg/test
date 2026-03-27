@@ -18,6 +18,51 @@ RESULT_AFTER_MIN = 8
 LOOP_INTERVAL_SEC = 30
 
 
+def _run_all_at_once(df_program, model, payout_lookup, today, spreadsheet_id, credentials_path):
+    """
+    発走時刻不明時のフォールバック: 全レースをまとめて予想してスプレッドシートに書き込む
+    結果取得は翌日以降の手動バックテストで対応
+    """
+    import pandas as pd
+    from src.collector.beforeinfo import fetch_beforeinfo_for_races
+    from src.collector.odds import fetch_odds_for_races
+    from src.features.builder import build_features
+    from src.model.predictor import get_recommendations
+    from src.output.sheets import write_predictions
+
+    print("=== 全レース一括予想モード ===")
+
+    # 展示タイム取得
+    df_features_tmp = build_features(df_program, pd.DataFrame(), pd.DataFrame())
+    beforeinfo_raw = fetch_beforeinfo_for_races(df_features_tmp, today)
+    records = []
+    for (vc, rn), boats in beforeinfo_raw.items():
+        for bn, info in boats.items():
+            records.append({
+                "date": today.strftime("%Y-%m-%d"), "venue_code": vc,
+                "race_no": rn, "boat_no": bn,
+                "exhibition_time": info.get("exhibition_time"),
+                "exhibition_st": info.get("exhibition_st"),
+            })
+    df_beforeinfo = pd.DataFrame(records) if records else pd.DataFrame()
+
+    df_features = build_features(df_program, pd.DataFrame(), pd.DataFrame(),
+                                 df_beforeinfo if not df_beforeinfo.empty else None)
+
+    # リアルタイムオッズ取得
+    all_live_odds = fetch_odds_for_races(df_features, today)
+
+    # 予想生成
+    recs = get_recommendations(model, df_features, payout_lookup=payout_lookup,
+                               all_live_odds=all_live_odds)
+
+    print("\n【本日の推奨買い目】")
+    print(recs[recs["combination"] != "見送り"].to_string(index=False))
+
+    # スプレッドシートに書き込み
+    write_predictions(spreadsheet_id, recs, credentials_path=credentials_path)
+
+
 def build_race_schedule(df_program) -> list[dict]:
     """
     番組表から全レースのスケジュールを生成する
@@ -110,8 +155,12 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
     # レーススケジュール作成
     schedule = build_race_schedule(df_program)
     if not schedule:
-        print("[WARN] 発走時刻データが取得できません。全レースを時刻不明として処理します")
-        # 時刻不明の場合でも手動実行でカバー
+        print("[WARN] 発走時刻が番組表から取得できませんでした")
+        print("       → 全レースを今すぐ予想します（時刻管理なし）")
+        _run_all_at_once(
+            df_program, model, payout_lookup, today,
+            spreadsheet_id, credentials_path,
+        )
         return
 
     total = len(schedule)

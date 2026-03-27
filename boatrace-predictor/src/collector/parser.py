@@ -61,16 +61,30 @@ def parse_program(txt_path: Path) -> pd.DataFrame:
         race_match = re.match(r"[　\s]*(\d{1,2})R\s", line_hw)
         if race_match:
             race_no = int(race_match.group(1))
-            # 同じ行またはその前後2行以内に発走時刻 HH:MM を探す
+            # 発走時刻を探す（前後15行、複数フォーマット対応）
             scheduled_time = None
-            search_lines = lines[max(0, i-1):i+3]
+            search_lines = lines[max(0, i-2):min(len(lines), i+16)]
             for sl in search_lines:
                 sl_hw = sl.translate(fw2hw)
-                time_match = re.search(r"(\d{1,2}):(\d{2})", sl_hw)
-                if time_match:
-                    hh = int(time_match.group(1))
-                    mm = int(time_match.group(2))
-                    if 0 <= hh <= 23 and 0 <= mm <= 59:
+                # パターン1: HH:MM 形式（例: "10:00"）
+                m = re.search(r"\b(\d{1,2}):(\d{2})\b", sl_hw)
+                if m:
+                    hh, mm = int(m.group(1)), int(m.group(2))
+                    if 6 <= hh <= 22 and 0 <= mm <= 59:
+                        scheduled_time = f"{hh:02d}:{mm:02d}"
+                        break
+                # パターン2: 発走キーワード直後の時刻（例: "発走 1000" or "発走 10 00"）
+                m2 = re.search(r"発走\s*(\d{2})(\d{2})", sl_hw)
+                if m2:
+                    hh, mm = int(m2.group(1)), int(m2.group(2))
+                    if 6 <= hh <= 22 and 0 <= mm <= 59:
+                        scheduled_time = f"{hh:02d}:{mm:02d}"
+                        break
+                # パターン3: 行頭付近のHHMM形式（例: "  1000" 独立行）
+                m3 = re.match(r"^\s{0,5}([01]\d|2[0-2])([0-5]\d)\s*$", sl_hw)
+                if m3:
+                    hh, mm = int(m3.group(1)), int(m3.group(2))
+                    if 6 <= hh <= 22 and 0 <= mm <= 59:
                         scheduled_time = f"{hh:02d}:{mm:02d}"
                         break
 
@@ -116,6 +130,10 @@ def parse_program(txt_path: Path) -> pd.DataFrame:
             })
 
     df = pd.DataFrame(records)
+    has_time = df["scheduled_time"].notna().any() if "scheduled_time" in df.columns else False
+    if not has_time:
+        print(f"[WARN] 発走時刻を取得できませんでした: {txt_path.name}")
+        print("       ※ 自動モードでは発走順に処理できません")
     print(f"[OK] 番組表パース完了: {txt_path.name} - {len(df)}行")
     return df
 
