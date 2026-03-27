@@ -19,6 +19,8 @@ HEADERS = {
     )
 }
 
+_FW2HW = str.maketrans("０１２３４５６７８９", "0123456789")
+
 
 def fetch_race_result(date: datetime, venue_code: str, race_no: int, timeout: int = 10) -> dict:
     """
@@ -35,37 +37,72 @@ def fetch_race_result(date: datetime, venue_code: str, race_no: int, timeout: in
     hd = date.strftime("%Y%m%d")
     params = {"rno": race_no, "jcd": venue_code.zfill(2), "hd": hd}
 
-    try:
-        resp = requests.get(RESULT_URL, params=params, headers=HEADERS, timeout=timeout)
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        return {"available": False, "error": str(e)}
+    for attempt in range(3):
+        try:
+            resp = requests.get(RESULT_URL, params=params, headers=HEADERS, timeout=timeout)
+            resp.raise_for_status()
+            break
+        except requests.RequestException as e:
+            if attempt < 2:
+                time.sleep(2)
+            else:
+                return {"available": False, "error": str(e)}
 
     soup = BeautifulSoup(resp.text, "html.parser")
     return _parse_result(soup)
 
 
 def _parse_result(soup: BeautifulSoup) -> dict:
-    """HTMLから着順・払戻をパースする"""
-    result = {"available": False}
+    """HTMLから着順・払戻をパースする（複数の方法を試みる）"""
+    result = {"available": False, "combination": "", "payout": 0}
 
-    # 1〜3着の艇番を取得
-    # 着順テーブルのパターン: 順位セルに "1", "2", "3" が入っている
+    # ── アプローチ1: 払戻テーブルから3連単の組み合わせと払戻を直接取得 ──
+    # boatrace.jpの払戻テーブルは "3連単" 行に "X-Y-Z" と払戻額が含まれる
+    text = soup.get_text(" ", strip=True).translate(_FW2HW)
+    m = re.search(r"3連単\s*([1-6]-[1-6]-[1-6])\s*([\d,]+)", text)
+    if m:
+        result["combination"] = m.group(1)
+        try:
+            result["payout"] = int(m.group(2).replace(",", ""))
+        except ValueError:
+            result["payout"] = 0
+        result["available"] = True
+        return result
+
+    # ── アプローチ2: テーブルセルを直接スキャン ──
+    # 払戻テーブルの行から "3連単" セルを探す
+    for row in soup.find_all("tr"):
+        cells = [td.get_text(" ", strip=True).translate(_FW2HW) for td in row.find_all("td")]
+        if not cells:
+            continue
+        row_text = " ".join(cells)
+        if "3連単" in row_text:
+            # 同じ行またはセル内に X-Y-Z パターンを探す
+            combo_m = re.search(r"([1-6]-[1-6]-[1-6])", row_text)
+            pay_m = re.search(r"([\d,]{3,})", row_text)
+            if combo_m:
+                result["combination"] = combo_m.group(1)
+                result["available"] = True
+            if pay_m:
+                try:
+                    result["payout"] = int(pay_m.group(1).replace(",", ""))
+                except ValueError:
+                    pass
+            if result["available"]:
+                return result
+
+    # ── アプローチ3: 着順テーブルから1〜3着艇番を収集 ──
+    # 全角・半角両対応で順位セルを探す
     top3 = []
-    tables = soup.find_all("table")
-
-    for table in tables:
-        rows = table.find_all("tr")
-        for row in rows:
+    for table in soup.find_all("table"):
+        for row in table.find_all("tr"):
             cells = row.find_all("td")
             if not cells:
                 continue
-            # 順位が1〜3の行を探す
-            rank_text = cells[0].get_text(strip=True) if cells else ""
+            rank_text = cells[0].get_text(strip=True).translate(_FW2HW)
             if rank_text in ("1", "2", "3"):
-                # 艇番は2列目以降にある
-                for cell in cells[1:4]:
-                    boat_text = cell.get_text(strip=True)
+                for cell in cells[1:5]:
+                    boat_text = cell.get_text(strip=True).translate(_FW2HW)
                     if re.match(r"^[1-6]$", boat_text):
                         top3.append(int(boat_text))
                         break
@@ -73,19 +110,12 @@ def _parse_result(soup: BeautifulSoup) -> dict:
     if len(top3) >= 3:
         result["combination"] = f"{top3[0]}-{top3[1]}-{top3[2]}"
         result["available"] = True
-
-    # 3連単払戻を取得
-    # 払戻テーブルに "3連単" または "３連単" が含まれる行
-    text = soup.get_text()
-    payout_match = re.search(
-        r"[3３]連単[^\d]*([\d,]+)", text
-    )
-    if payout_match:
-        try:
-            result["payout"] = int(payout_match.group(1).replace(",", ""))
-        except ValueError:
-            result["payout"] = 0
-    else:
-        result["payout"] = 0
+        # 払戻額をテキストから取得
+        pay_m = re.search(r"3連単[^\d]*([\d,]+)", text)
+        if pay_m:
+            try:
+                result["payout"] = int(pay_m.group(1).replace(",", ""))
+            except ValueError:
+                pass
 
     return result
