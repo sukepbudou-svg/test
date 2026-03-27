@@ -48,8 +48,8 @@ def parse_program(txt_path: Path) -> pd.DataFrame:
     venue_code = None
     race_no = None
     scheduled_time = None
-    # 全角数字→半角変換テーブル
-    fw2hw = str.maketrans("０１２３４５６７８９Ｒ", "0123456789R")
+    # 全角数字・全角コロン→半角変換テーブル
+    fw2hw = str.maketrans("０１２３４５６７８９Ｒ：", "0123456789R:")
 
     for i, line in enumerate(lines):
         # 場コード取得
