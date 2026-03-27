@@ -10,15 +10,16 @@ import requests
 from bs4 import BeautifulSoup
 
 # 3連単の全120組み合わせを boatrace.jp の表示順で生成
+# ページ構造: 5セクション(b2順) × 4行(b3順) × 6列(b1=1〜6)
+# 各列のb1は固定、各セクションでb2が1つ進む
+# 検証済: pos0=1-2-3, pos1=2-1-3, pos2=3-1-2, pos6=1-2-4, pos8=3-1-4
 def _generate_trifecta_order() -> list[str]:
     combos = []
-    for b1 in range(1, 7):
-        for b2 in range(1, 7):
-            if b2 == b1:
-                continue
-            for b3 in range(1, 7):
-                if b3 == b1 or b3 == b2:
-                    continue
+    for s in range(5):      # b2のセクション順（各b1の0〜4番目のb2）
+        for r in range(4):  # b3の行順（各(b1,b2)の0〜3番目のb3）
+            for b1 in range(1, 7):  # 列（b1=1〜6）
+                b2 = sorted([x for x in range(1, 7) if x != b1])[s]
+                b3 = sorted([x for x in range(1, 7) if x != b1 and x != b2])[r]
                 combos.append(f"{b1}-{b2}-{b3}")
     return combos
 
