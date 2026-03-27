@@ -150,6 +150,23 @@ def predict_race(
     # 3エージェントの勝率を重み付け合成
     win_probs = WEIGHT_ML * ml_probs + WEIGHT_COURSE * cs_probs + WEIGHT_RACER * rp_probs
 
+    # 各エージェントの単独トップ5を取得（合議チェック用）
+    def _top5(probs: np.ndarray) -> set:
+        """勝率配列からHarville公式でトップ5の3連単組み合わせを返す"""
+        top = {}
+        for b1, b2, b3 in permutations(range(1, 7), 3):
+            p1 = probs[b1-1]
+            r1 = np.array([probs[i] for i in range(6) if i != b1-1])
+            p2 = probs[b2-1] / r1.sum() if r1.sum() > 0 else 0
+            r2 = np.array([probs[i] for i in range(6) if i not in (b1-1, b2-1)])
+            p3 = probs[b3-1] / r2.sum() if r2.sum() > 0 else 0
+            top[f"{b1}-{b2}-{b3}"] = p1 * p2 * p3
+        return set(sorted(top, key=top.get, reverse=True)[:5])
+
+    ml_top5 = _top5(ml_probs)
+    cs_top5 = _top5(cs_probs)
+    rp_top5 = _top5(rp_probs)
+
     # 全120通りの確率を計算
     combinations = list(permutations(range(1, 7), 3))
     combo_probs = []
@@ -183,6 +200,13 @@ def predict_race(
             expected_roi = prob * odds_value
             odds_source = "history"
 
+        # エージェント合議数（0〜3）
+        agreement = sum([
+            combination in ml_top5,
+            combination in cs_top5,
+            combination in rp_top5,
+        ])
+
         results.append({
             "combination": combination,
             "boat1": b1, "boat2": b2, "boat3": b3,
@@ -191,6 +215,7 @@ def predict_race(
             "odds_value": odds_value,
             "expected_roi": round(expected_roi, 4),
             "odds_source": odds_source,
+            "agreement": agreement,
         })
 
     df = pd.DataFrame(results).sort_values("expected_roi", ascending=False).reset_index(drop=True)
@@ -244,8 +269,8 @@ def get_recommendations(
             })
         else:
             for _, rec in recommended.iterrows():
-                roi = rec["expected_roi"]
-                confidence = "★★★" if roi >= 1.3 else "★★☆" if roi >= 1.2 else "★☆☆"
+                agreement = int(rec.get("agreement", 0))
+                confidence = "★★★" if agreement >= 3 else "★★☆" if agreement >= 2 else "★☆☆"
                 src = rec.get("odds_source", "history")
                 odds_display = f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)"
                 all_recommendations.append({
