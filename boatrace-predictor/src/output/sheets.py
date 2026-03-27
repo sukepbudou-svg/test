@@ -16,6 +16,54 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
+# 競艇場ごとの背景色（地域別に色分け）
+# RGB値は0〜1の範囲
+_VENUE_BG_COLORS = {
+    # 関東 - 水色系
+    "桐生":   {"red": 0.82, "green": 0.91, "blue": 0.98},
+    "戸田":   {"red": 0.79, "green": 0.89, "blue": 0.98},
+    "江戸川": {"red": 0.76, "green": 0.88, "blue": 0.97},
+    "平和島": {"red": 0.74, "green": 0.86, "blue": 0.97},
+    "多摩川": {"red": 0.72, "green": 0.85, "blue": 0.96},
+    # 中部 - 緑系
+    "浜名湖": {"red": 0.82, "green": 0.96, "blue": 0.82},
+    "蒲郡":   {"red": 0.80, "green": 0.94, "blue": 0.80},
+    "常滑":   {"red": 0.78, "green": 0.93, "blue": 0.78},
+    "津":     {"red": 0.76, "green": 0.92, "blue": 0.76},
+    "三国":   {"red": 0.74, "green": 0.91, "blue": 0.74},
+    # 近畿 - 紫系
+    "びわこ": {"red": 0.91, "green": 0.82, "blue": 0.98},
+    "住之江": {"red": 0.89, "green": 0.80, "blue": 0.97},
+    "尼崎":   {"red": 0.87, "green": 0.78, "blue": 0.96},
+    # 中国・四国 - 黄色系
+    "鳴門":   {"red": 1.00, "green": 0.97, "blue": 0.77},
+    "丸亀":   {"red": 1.00, "green": 0.95, "blue": 0.74},
+    "児島":   {"red": 1.00, "green": 0.93, "blue": 0.71},
+    "宮島":   {"red": 1.00, "green": 0.91, "blue": 0.68},
+    # 九州 - オレンジ・ピンク系
+    "徳山":   {"red": 1.00, "green": 0.88, "blue": 0.80},
+    "下関":   {"red": 1.00, "green": 0.86, "blue": 0.78},
+    "若松":   {"red": 1.00, "green": 0.84, "blue": 0.76},
+    "芦屋":   {"red": 1.00, "green": 0.82, "blue": 0.74},
+    "福岡":   {"red": 1.00, "green": 0.80, "blue": 0.72},
+    "唐津":   {"red": 1.00, "green": 0.78, "blue": 0.70},
+    "大村":   {"red": 1.00, "green": 0.76, "blue": 0.68},
+}
+_DEFAULT_BG = {"red": 0.95, "green": 0.95, "blue": 0.95}  # 不明場所はグレー
+
+
+def _apply_venue_color(sheet, row_no: int, venue_name: str, num_cols: int = 9) -> None:
+    """指定行に競艇場カラーの背景色を適用する"""
+    color = _VENUE_BG_COLORS.get(venue_name, _DEFAULT_BG)
+    last_col = chr(ord("A") + num_cols - 1)
+    try:
+        sheet.format(
+            f"A{row_no}:{last_col}{row_no}",
+            {"backgroundColor": color},
+        )
+    except Exception:
+        pass  # 色付けに失敗しても予想データは書き込み済みのためスルー
+
 
 def get_client(credentials_path: str = None) -> gspread.Client:
     """
@@ -112,6 +160,10 @@ def append_prediction_row(
             "avg_payout", "expected_roi", "confidence", "odds_source"]
     values = [row.get(c, "-") for c in cols]
     sheet.append_row(values, value_input_option="RAW")
+
+    # 競艇場ごとに背景色を適用
+    last_row = len(sheet.get_all_values())
+    _apply_venue_color(sheet, last_row, str(row.get("venue_name", "")))
 
 
 def update_result_row(
