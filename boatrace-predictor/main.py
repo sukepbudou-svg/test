@@ -70,7 +70,8 @@ def cmd_train():
     import pandas as pd
     from src.collector.parser import parse_all_programs, parse_all_results
     from src.features.builder import build_features
-    from src.model.trainer import train_model
+    from src.model.trainer import train_model, load_model
+    from src.model.predictor import build_payout_lookup
 
     print("=== データ読み込み中 ===")
     df_program = parse_all_programs(RAW_DIR / "B")
@@ -88,6 +89,14 @@ def cmd_train():
 
     print("=== モデル学習中 ===")
     train_model(df_features)
+
+    print("=== 払戻ルックアップ生成中 ===")
+    model = load_model()
+    if model:
+        build_payout_lookup(df_payout, model, df_features)
+    else:
+        print("[WARN] モデル読み込みに失敗したため払戻ルックアップをスキップしました")
+
     print("=== 学習完了 ===")
 
 

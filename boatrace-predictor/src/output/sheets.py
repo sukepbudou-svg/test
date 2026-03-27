@@ -68,14 +68,17 @@ def write_predictions(
         sheet = spreadsheet.add_worksheet(title=sheet_name, rows=200, cols=10)
 
     # ヘッダー行
-    headers = ["日付", "競艇場", "レース", "買い目（3連単）", "的中確率", "期待回収率", "信頼度"]
+    headers = ["日付", "競艇場", "レース", "買い目（3連単）", "的中確率", "平均払戻", "期待回収率", "信頼度"]
     sheet.update("A1", [headers])
 
     # データ行
     if not recommendations.empty:
-        rows = recommendations[
-            ["date", "venue_name", "race_no", "combination", "prob", "expected_roi", "confidence"]
-        ].values.tolist()
+        cols = ["date", "venue_name", "race_no", "combination", "prob", "avg_payout", "expected_roi", "confidence"]
+        # avg_payout列がない場合（見送り行など）は"-"で埋める
+        for col in cols:
+            if col not in recommendations.columns:
+                recommendations[col] = "-"
+        rows = recommendations[cols].values.tolist()
         sheet.update("A2", rows)
 
     print(f"[OK] スプレッドシートに書き込み完了: シート「{sheet_name}」 {len(recommendations)}行")

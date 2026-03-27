@@ -3,7 +3,9 @@
 学習済みモデルを使って3連単の買い目と期待回収率を予測する
 """
 
+import json
 from itertools import permutations
+from pathlib import Path
 
 import lightgbm as lgb
 import numpy as np
@@ -11,62 +13,142 @@ import pandas as pd
 
 from src.features.builder import get_feature_columns, add_course_advantage
 
-# 3連単の平均的な控除率（約75%が払い戻し）
+# 3連単の控除率（約75%が払い戻し）
 TRIFECTA_RETURN_RATE = 0.75
 
 # 推奨する最低期待回収率
 MIN_EXPECTED_ROI = 1.10  # 110%以上のみ推奨
 
+MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
+PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
 
-def predict_race(model: lgb.Booster, race_features: pd.Series) -> pd.DataFrame:
+
+def build_payout_lookup(df_payout: pd.DataFrame, model: lgb.Booster, df_features: pd.DataFrame) -> dict:
+    """
+    過去データから人気順位ごとの平均払戻金を計算してJSONに保存する
+
+    人気順位 = モデルが予測した確率で120通りをソートした時の順位
+    """
+    df_features = add_course_advantage(df_features)
+    feature_cols = get_feature_columns() + [f"boat{bn}_course_advantage" for bn in range(1, 7)]
+    trifecta_payout = df_payout[df_payout["bet_type"] == "３連単"].copy()
+
+    rank_payouts = {i: [] for i in range(1, 121)}
+
+    for _, race_row in df_features.iterrows():
+        # この日・場・レースの払戻を取得
+        match = trifecta_payout[
+            (trifecta_payout["date"] == race_row.get("date", "")) &
+            (trifecta_payout["venue_code"] == race_row.get("venue_code", "")) &
+            (trifecta_payout["race_no"] == race_row.get("race_no", 0))
+        ]
+        if match.empty:
+            continue
+
+        actual_payout = match.iloc[0]["payout"]
+        actual_combination = match.iloc[0]["combination"]
+
+        # モデルで各組み合わせの確率を計算
+        X = race_row[feature_cols].fillna(0).values.reshape(1, -1)
+        win_probs = model.predict(X)[0]
+
+        combos = list(permutations(range(1, 7), 3))
+        probs = []
+        for b1, b2, b3 in combos:
+            p1 = win_probs[b1 - 1]
+            rem1 = np.array([win_probs[i] for i in range(6) if i != b1 - 1])
+            p2 = win_probs[b2 - 1] / rem1.sum() if rem1.sum() > 0 else 0
+            rem2 = np.array([win_probs[i] for i in range(6) if i not in (b1 - 1, b2 - 1)])
+            p3 = win_probs[b3 - 1] / rem2.sum() if rem2.sum() > 0 else 0
+            probs.append((f"{b1}-{b2}-{b3}", p1 * p2 * p3))
+
+        # 確率の高い順にソート（=人気順）
+        probs.sort(key=lambda x: x[1], reverse=True)
+        combo_to_rank = {c: i + 1 for i, (c, _) in enumerate(probs)}
+
+        if actual_combination in combo_to_rank:
+            rank = combo_to_rank[actual_combination]
+            rank_payouts[rank].append(actual_payout)
+
+    # 各ランクの平均払戻を計算
+    lookup = {}
+    for rank, payouts in rank_payouts.items():
+        if payouts:
+            lookup[str(rank)] = int(np.mean(payouts))
+        else:
+            # データなしの場合は前後の値から補間
+            lookup[str(rank)] = int(300 * (rank ** 0.8))
+
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    with open(PAYOUT_LOOKUP_PATH, "w") as f:
+        json.dump(lookup, f)
+
+    print(f"[OK] 払戻ルックアップ保存: {PAYOUT_LOOKUP_PATH}")
+    print(f"     人気1位平均: {lookup.get('1', 'N/A')}円 / 人気10位平均: {lookup.get('10', 'N/A')}円 / 人気50位平均: {lookup.get('50', 'N/A')}円")
+    return lookup
+
+
+def load_payout_lookup() -> dict:
+    """払戻ルックアップを読み込む"""
+    if PAYOUT_LOOKUP_PATH.exists():
+        with open(PAYOUT_LOOKUP_PATH) as f:
+            return json.load(f)
+    # フォールバック: 経験則による推定値
+    return {str(i): int(300 * (i ** 0.8)) for i in range(1, 121)}
+
+
+def predict_race(model: lgb.Booster, race_features: pd.Series, payout_lookup: dict = None) -> pd.DataFrame:
     """
     1レース分の3連単予想を生成する
 
     Args:
         model: 学習済みLightGBMモデル
-        race_features: 1レース分の特徴量（build_features出力の1行）
+        race_features: 1レース分の特徴量
+        payout_lookup: 人気順位→平均払戻のルックアップ
 
     Returns:
         DataFrame: 3連単の全組み合わせと期待回収率
-          columns: combination, prob, expected_roi, rank
     """
+    if payout_lookup is None:
+        payout_lookup = load_payout_lookup()
+
     feature_cols = get_feature_columns() + [f"boat{bn}_course_advantage" for bn in range(1, 7)]
-
     X = race_features[feature_cols].fillna(0).values.reshape(1, -1)
-    win_probs = model.predict(X)[0]  # 各艇の1着確率（6次元）
+    win_probs = model.predict(X)[0]
 
-    # 3連単の全120通りの確率と期待回収率を計算
+    # 全120通りの確率を計算
     combinations = list(permutations(range(1, 7), 3))
-    results = []
+    combo_probs = []
 
-    for combo in combinations:
-        b1, b2, b3 = combo
-        # 簡易確率計算（条件付き確率の近似）
+    for b1, b2, b3 in combinations:
         p1 = win_probs[b1 - 1]
-        # 2着: 残り5艇中での相対確率
-        remaining_probs = np.array([win_probs[i] for i in range(6) if i != b1 - 1])
-        p2_given_p1 = win_probs[b2 - 1] / remaining_probs.sum() if remaining_probs.sum() > 0 else 0
-        # 3着: 残り4艇中での相対確率
-        remaining_probs2 = np.array([
-            win_probs[i] for i in range(6) if i not in (b1 - 1, b2 - 1)
-        ])
-        p3_given_p12 = win_probs[b3 - 1] / remaining_probs2.sum() if remaining_probs2.sum() > 0 else 0
+        rem1 = np.array([win_probs[i] for i in range(6) if i != b1 - 1])
+        p2 = win_probs[b2 - 1] / rem1.sum() if rem1.sum() > 0 else 0
+        rem2 = np.array([win_probs[i] for i in range(6) if i not in (b1 - 1, b2 - 1)])
+        p3 = win_probs[b3 - 1] / rem2.sum() if rem2.sum() > 0 else 0
+        prob = p1 * p2 * p3
+        combo_probs.append((f"{b1}-{b2}-{b3}", b1, b2, b3, prob))
 
-        prob = p1 * p2_given_p1 * p3_given_p12
+    # 確率の高い順に並べて人気順位を付与
+    combo_probs.sort(key=lambda x: x[4], reverse=True)
 
-        # 期待回収率 = モデル予測確率 / 市場確率（均等配分） × 控除率
-        # 市場が均等と仮定した場合の確率 = 1/120（3連単全120通り）
-        market_prob = 1 / 120
-        expected_roi = (prob / market_prob) * TRIFECTA_RETURN_RATE if prob > 0 else 0
+    results = []
+    for rank, (combination, b1, b2, b3, prob) in enumerate(combo_probs, start=1):
+        # 人気順位に対応する平均払戻を取得
+        avg_payout = payout_lookup.get(str(rank), int(300 * (rank ** 0.8)))
+        # 期待回収率 = 的中確率 × 平均払戻 / 100円
+        expected_roi = prob * (avg_payout / 100)
 
         results.append({
-            "combination": f"{b1}-{b2}-{b3}",
+            "combination": combination,
             "boat1": b1, "boat2": b2, "boat3": b3,
             "prob": round(prob, 6),
+            "popularity_rank": rank,
+            "avg_payout": avg_payout,
             "expected_roi": round(expected_roi, 4),
         })
 
-    df = pd.DataFrame(results).sort_values("prob", ascending=False).reset_index(drop=True)
+    df = pd.DataFrame(results).sort_values("expected_roi", ascending=False).reset_index(drop=True)
     df["rank"] = df.index + 1
     return df
 
@@ -75,38 +157,29 @@ def get_recommendations(
     model: lgb.Booster,
     df_today: pd.DataFrame,
     top_n: int = 5,
-    min_roi: float = MIN_EXPECTED_ROI
+    min_roi: float = MIN_EXPECTED_ROI,
+    payout_lookup: dict = None,
 ) -> pd.DataFrame:
-    """
-    本日の全レースから推奨買い目を選出する
+    """本日の全レースから推奨買い目を選出する"""
+    if payout_lookup is None:
+        payout_lookup = load_payout_lookup()
 
-    Args:
-        model: 学習済みモデル
-        df_today: 本日の番組表特徴量DataFrame
-        top_n: 各レースで推奨する買い目数
-        min_roi: 最低期待回収率（この値以上のみ推奨）
-
-    Returns:
-        推奨買い目DataFrame
-    """
     df_today = add_course_advantage(df_today)
     all_recommendations = []
 
     for _, race_row in df_today.iterrows():
-        predictions = predict_race(model, race_row)
-
-        # 期待回収率が閾値以上の買い目を抽出
+        predictions = predict_race(model, race_row, payout_lookup)
         recommended = predictions[predictions["expected_roi"] >= min_roi].head(top_n)
 
         if recommended.empty:
-            # 閾値を満たすものがない場合は「見送り」
             all_recommendations.append({
                 "date": race_row.get("date", ""),
                 "venue_name": race_row.get("venue_name", ""),
                 "race_no": race_row.get("race_no", ""),
                 "combination": "見送り",
-                "prob": 0,
-                "expected_roi": 0,
+                "prob": "0%",
+                "avg_payout": "-",
+                "expected_roi": "0%",
                 "confidence": "見送り",
             })
         else:
@@ -119,6 +192,7 @@ def get_recommendations(
                     "race_no": race_row.get("race_no", ""),
                     "combination": rec["combination"],
                     "prob": f"{rec['prob']*100:.2f}%",
+                    "avg_payout": f"{rec['avg_payout']:,}円",
                     "expected_roi": f"{rec['expected_roi']*100:.0f}%",
                     "confidence": confidence,
                 })
@@ -127,12 +201,7 @@ def get_recommendations(
 
 
 def calculate_roi_history(df_result: pd.DataFrame, df_payout: pd.DataFrame, recommendations: pd.DataFrame) -> dict:
-    """
-    過去の推奨買い目の実際の回収率を計算する（バックテスト用）
-
-    Returns:
-        {"total_bet": 総購入額, "total_return": 総払戻額, "roi": 実際の回収率}
-    """
+    """過去の推奨買い目の実際の回収率を計算する（バックテスト用）"""
     total_bet = 0
     total_return = 0
 
@@ -140,9 +209,8 @@ def calculate_roi_history(df_result: pd.DataFrame, df_payout: pd.DataFrame, reco
         if rec["combination"] == "見送り":
             continue
 
-        total_bet += 100  # 1点100円として計算
+        total_bet += 100
 
-        # 実際の払戻を検索
         match = df_payout[
             (df_payout["date"] == rec["date"]) &
             (df_payout["venue_name"] == rec["venue_name"]) &
