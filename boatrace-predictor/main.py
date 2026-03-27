@@ -262,6 +262,23 @@ def cmd_predict(venue: str = None, race_no: int = None):
         print("      Google連携を設定する場合は .env ファイルを編集してください")
 
 
+def cmd_auto():
+    """自動予想モード（発走10分前に自動予想・結果記録）"""
+    from src.scheduler.auto_runner import run_auto
+
+    spreadsheet_id = os.environ.get("SPREADSHEET_ID", "")
+    credentials_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "")
+
+    if not spreadsheet_id or spreadsheet_id == "your_spreadsheet_id_here":
+        print("[ERROR] SPREADSHEET_ID が設定されていません（.env ファイルを確認してください）")
+        return
+    if not Path(credentials_path).exists():
+        print("[ERROR] Google認証ファイルが見つかりません（GOOGLE_CREDENTIALS_PATH を確認してください）")
+        return
+
+    run_auto(spreadsheet_id, credentials_path)
+
+
 def cmd_backtest():
     """バックテスト（過去データで回収率検証）"""
     import pandas as pd
@@ -297,7 +314,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="競艇3連単予想ツール")
     parser.add_argument(
         "--mode",
-        choices=["download", "download_history", "train", "predict", "backtest"],
+        choices=["download", "download_history", "train", "predict", "backtest", "auto"],
         required=True,
         help="実行モード"
     )
@@ -317,3 +334,5 @@ if __name__ == "__main__":
         cmd_predict(venue=args.venue, race_no=args.race)
     elif args.mode == "backtest":
         cmd_backtest()
+    elif args.mode == "auto":
+        cmd_auto()
