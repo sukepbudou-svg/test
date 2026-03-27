@@ -100,6 +100,46 @@ def cmd_train():
     print("=== 学習完了 ===")
 
 
+def _filter_upcoming_races(df_program: "pd.DataFrame", df_features: "pd.DataFrame", now: datetime) -> "pd.DataFrame":
+    """
+    発走時刻が現在時刻より後のレースのみを残す。
+    発走時刻が取得できないレースは除外しない（全件残す）。
+    """
+    import pandas as pd
+
+    now_str = now.strftime("%H:%M")
+
+    if "scheduled_time" not in df_program.columns:
+        return df_features
+
+    # venue_code + race_no → scheduled_time のマッピング
+    time_map = (
+        df_program[["venue_code", "race_no", "scheduled_time"]]
+        .dropna(subset=["scheduled_time"])
+        .drop_duplicates(subset=["venue_code", "race_no"])
+        .set_index(["venue_code", "race_no"])["scheduled_time"]
+        .to_dict()
+    )
+
+    if not time_map:
+        print("[INFO] 発走時刻データなし: 全レースを対象とします")
+        return df_features
+
+    def is_upcoming(row):
+        key = (str(row["venue_code"]).zfill(2), int(row["race_no"]))
+        t = time_map.get(key)
+        if t is None:
+            return True  # 時刻不明なレースは残す
+        return t > now_str
+
+    mask = df_features.apply(is_upcoming, axis=1)
+    filtered = df_features[mask]
+
+    skipped = len(df_features) - len(filtered)
+    print(f"[INFO] 現在時刻: {now_str} / 発走済み除外: {skipped}レース / 残り: {len(filtered)}レース")
+    return filtered
+
+
 def cmd_predict():
     """本日の予想生成"""
     from src.collector.downloader import download_file, extract_lzh
@@ -132,6 +172,9 @@ def cmd_predict():
     # 特徴量生成（番組表のみ・予測モード）
     import pandas as pd
     df_features = build_features(df_program, pd.DataFrame(), pd.DataFrame())
+
+    # 未発走レースのみに絞り込む
+    df_features = _filter_upcoming_races(df_program, df_features, today)
 
     # モデル読み込み
     model = load_model()

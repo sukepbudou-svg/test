@@ -47,6 +47,7 @@ def parse_program(txt_path: Path) -> pd.DataFrame:
 
     venue_code = None
     race_no = None
+    scheduled_time = None
     # 全角数字→半角変換テーブル
     fw2hw = str.maketrans("０１２３４５６７８９Ｒ", "0123456789R")
 
@@ -60,6 +61,18 @@ def parse_program(txt_path: Path) -> pd.DataFrame:
         race_match = re.match(r"[　\s]*(\d{1,2})R\s", line_hw)
         if race_match:
             race_no = int(race_match.group(1))
+            # 同じ行またはその前後2行以内に発走時刻 HH:MM を探す
+            scheduled_time = None
+            search_lines = lines[max(0, i-1):i+3]
+            for sl in search_lines:
+                sl_hw = sl.translate(fw2hw)
+                time_match = re.search(r"(\d{1,2}):(\d{2})", sl_hw)
+                if time_match:
+                    hh = int(time_match.group(1))
+                    mm = int(time_match.group(2))
+                    if 0 <= hh <= 23 and 0 <= mm <= 59:
+                        scheduled_time = f"{hh:02d}:{mm:02d}"
+                        break
 
         # 選手データ行のパース
         # 例: "1 4786佐藤博亮37愛知53A1 6.85 55.40 6.35 47.92 29 30.00104  6.25"
@@ -99,6 +112,7 @@ def parse_program(txt_path: Path) -> pd.DataFrame:
                 "motor_2rate": float(g[12]),
                 "boat_no_equip": int(g[13]),
                 "boat_2rate": float(g[14]),
+                "scheduled_time": scheduled_time,
             })
 
     df = pd.DataFrame(records)
