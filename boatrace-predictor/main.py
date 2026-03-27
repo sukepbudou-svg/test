@@ -284,7 +284,7 @@ def cmd_results(date_str: str = None):
     import time
     from src.collector.parser import VENUE_CODES
     from src.collector.result_scraper import fetch_race_result
-    from src.output.sheets import update_result_row, update_summary_sheet
+    from src.output.sheets import update_result_row, update_summary_sheet, apply_colors_to_results_sheet
 
     spreadsheet_id = os.environ.get("SPREADSHEET_ID", "")
     credentials_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "")
@@ -379,6 +379,7 @@ def cmd_results(date_str: str = None):
     print(f"\n=== 照合完了 ===")
     if total > 0:
         print(f"  予想数: {total}点 / 的中: {hit}点 / 的中率: {hit/total*100:.1f}%")
+    apply_colors_to_results_sheet(spreadsheet_id, credentials_path)
     update_summary_sheet(spreadsheet_id, credentials_path)
     print(f"  → スプレッドシートの「成績」「サマリー」シートを更新しました")
 

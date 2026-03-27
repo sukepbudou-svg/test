@@ -240,22 +240,76 @@ def update_result_row(
             value_input_option="RAW"
         )
 
-        # 行番号を取得して色付け
-        row_no = len(r_sheet.get_all_values())
-        # 競艇場カラー（全列）
-        _apply_venue_color(r_sheet, row_no, venue_name, num_cols=10)
-        # 的中セル（I列）: ○は緑、×は薄赤
-        try:
-            hit_color = (
+    print(f"[OK] 成績記録: {venue_name} {race_no}R 結果={actual_combination} 払戻={actual_payout}円")
+
+
+def apply_colors_to_results_sheet(
+    spreadsheet_id: str,
+    credentials_path: str = None,
+) -> None:
+    """成績シートの全行に競艇場カラーと的中色を一括適用する"""
+    client = get_client(credentials_path)
+    spreadsheet = client.open_by_key(spreadsheet_id)
+
+    try:
+        r_sheet = spreadsheet.worksheet("成績")
+    except gspread.WorksheetNotFound:
+        return
+
+    all_rows = r_sheet.get_all_values()
+    if len(all_rows) <= 1:
+        return
+
+    fmt_requests = []
+    sheet_id = r_sheet.id
+
+    for i, row in enumerate(all_rows[1:], start=2):  # 2行目からデータ行
+        venue_name = row[1] if len(row) > 1 else ""
+        hit = row[8] if len(row) > 8 else ""
+
+        bg = _VENUE_BG_COLORS.get(venue_name, _DEFAULT_BG)
+
+        # 行全体に競艇場カラー
+        fmt_requests.append({
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": i - 1,
+                    "endRowIndex": i,
+                    "startColumnIndex": 0,
+                    "endColumnIndex": 10,
+                },
+                "cell": {"userEnteredFormat": {"backgroundColor": bg}},
+                "fields": "userEnteredFormat.backgroundColor",
+            }
+        })
+
+        # 的中セル（I列=index8）: ○は緑、×は薄赤
+        if hit in ("○", "×"):
+            hit_bg = (
                 {"red": 0.7, "green": 0.95, "blue": 0.7} if hit == "○"
                 else {"red": 0.98, "green": 0.85, "blue": 0.85}
             )
-            r_sheet.format(f"I{row_no}", {"backgroundColor": hit_color,
-                                           "textFormat": {"bold": True}})
-        except Exception:
-            pass
+            fmt_requests.append({
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": i - 1,
+                        "endRowIndex": i,
+                        "startColumnIndex": 8,
+                        "endColumnIndex": 9,
+                    },
+                    "cell": {"userEnteredFormat": {
+                        "backgroundColor": hit_bg,
+                        "textFormat": {"bold": True},
+                    }},
+                    "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
+                }
+            })
 
-    print(f"[OK] 成績記録: {venue_name} {race_no}R 結果={actual_combination} 払戻={actual_payout}円")
+    if fmt_requests:
+        spreadsheet.batch_update({"requests": fmt_requests})
+        print(f"[OK] 成績シート色付け完了: {len(all_rows)-1}行")
 
 
 def update_summary_sheet(
