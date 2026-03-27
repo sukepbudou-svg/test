@@ -52,12 +52,17 @@ def fetch_odds(date: datetime, venue_code: str, race_no: int, timeout: int = 10)
     hd = date.strftime("%Y%m%d")
     params = {"rno": race_no, "jcd": venue_code.zfill(2), "hd": hd}
 
-    try:
-        resp = requests.get(ODDS_URL, params=params, headers=HEADERS, timeout=timeout)
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        print(f"[WARN] オッズ取得失敗 {venue_code}-R{race_no}: {e}")
-        return {}
+    for attempt in range(3):  # 最大3回リトライ
+        try:
+            resp = requests.get(ODDS_URL, params=params, headers=HEADERS, timeout=timeout)
+            resp.raise_for_status()
+            break
+        except requests.RequestException as e:
+            if attempt < 2:
+                time.sleep(3)
+            else:
+                print(f"[WARN] オッズ取得失敗 {venue_code}-R{race_no}: {e}")
+                return {}
 
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -75,6 +80,9 @@ def fetch_odds(date: datetime, venue_code: str, race_no: int, timeout: int = 10)
 
     if len(points) != 120:
         print(f"[WARN] オッズ数が不正 {venue_code}-R{race_no}: {len(points)}件（期待値120）")
+        if points:
+            sample = [td.get_text(strip=True) for td in points[:5]]
+            print(f"       先頭5件サンプル: {sample}")
         return {}
 
     odds_dict: dict[str, float] = {}

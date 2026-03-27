@@ -19,6 +19,9 @@ TRIFECTA_RETURN_RATE = 0.75
 # 推奨する最低期待回収率
 MIN_EXPECTED_ROI = 1.10  # 110%以上のみ推奨
 
+# 推奨する最低的中確率（これ未満は大穴すぎて除外）
+MIN_PROB = 0.02  # 2%以上のみ推奨
+
 MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
 PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
 
@@ -203,7 +206,11 @@ def get_recommendations(
             live_odds = all_live_odds.get((venue_code, race_no))
 
         predictions = predict_race(model, race_row, payout_lookup, live_odds)
-        recommended = predictions[predictions["expected_roi"] >= min_roi].head(top_n)
+        # 確率2%以上 かつ 期待回収率の条件を両方満たすものだけ推奨
+        recommended = predictions[
+            (predictions["prob"] >= MIN_PROB) &
+            (predictions["expected_roi"] >= min_roi)
+        ].head(top_n)
 
         if recommended.empty:
             all_recommendations.append({
