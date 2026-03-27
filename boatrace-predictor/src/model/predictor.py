@@ -12,6 +12,11 @@ import numpy as np
 import pandas as pd
 
 from src.features.builder import get_feature_columns, add_course_advantage
+from src.agents.course_strategy import predict_win_probs as course_win_probs
+
+# エージェントの重み（合計1.0）
+WEIGHT_ML     = 0.65  # AIモデルエージェント
+WEIGHT_COURSE = 0.35  # コース戦略エージェント
 
 # 3連単の控除率（約75%が払い戻し）
 TRIFECTA_RETURN_RATE = 0.75
@@ -126,13 +131,19 @@ def predict_race(
 
     feature_cols = get_feature_columns() + [f"boat{bn}_course_advantage" for bn in range(1, 7)]
     X = race_features.reindex(feature_cols, fill_value=0).fillna(0).values.reshape(1, -1)
-    win_probs = model.predict(X)[0]
+    ml_probs = model.predict(X)[0]
 
     # 温度スケーリングで確率の過信を補正（T=2.5: 高いほど保守的）
     TEMPERATURE = 2.5
-    logits = np.log(np.clip(win_probs, 1e-10, 1.0))
+    logits = np.log(np.clip(ml_probs, 1e-10, 1.0))
     scaled = np.exp(logits / TEMPERATURE)
-    win_probs = scaled / scaled.sum()
+    ml_probs = scaled / scaled.sum()
+
+    # コース戦略エージェントの勝率
+    cs_probs = course_win_probs(race_features)
+
+    # 2エージェントの勝率を重み付け合成
+    win_probs = WEIGHT_ML * ml_probs + WEIGHT_COURSE * cs_probs
 
     # 全120通りの確率を計算
     combinations = list(permutations(range(1, 7), 3))
