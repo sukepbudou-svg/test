@@ -104,6 +104,7 @@ def cmd_predict():
     """本日の予想生成"""
     from src.collector.downloader import download_file, extract_lzh
     from src.collector.parser import parse_program
+    from src.collector.odds import fetch_odds_for_races
     from src.features.builder import build_features, add_course_advantage, get_feature_columns
     from src.model.trainer import load_model
     from src.model.predictor import get_recommendations
@@ -138,9 +139,13 @@ def cmd_predict():
         print("[ERROR] モデルが見つかりません。先に python main.py --mode train を実行してください")
         return
 
+    # リアルタイムオッズ取得
+    print("=== リアルタイムオッズ取得中 ===")
+    all_live_odds = fetch_odds_for_races(df_features, today)
+
     # 予想生成
     print("=== 予想生成中 ===")
-    recommendations = get_recommendations(model, df_features)
+    recommendations = get_recommendations(model, df_features, all_live_odds=all_live_odds)
 
     # 結果表示
     print("\n【本日の推奨買い目】")

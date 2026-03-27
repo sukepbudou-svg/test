@@ -97,14 +97,20 @@ def load_payout_lookup() -> dict:
     return {str(i): int(300 * (i ** 0.8)) for i in range(1, 121)}
 
 
-def predict_race(model: lgb.Booster, race_features: pd.Series, payout_lookup: dict = None) -> pd.DataFrame:
+def predict_race(
+    model: lgb.Booster,
+    race_features: pd.Series,
+    payout_lookup: dict = None,
+    live_odds: dict = None,
+) -> pd.DataFrame:
     """
     1レース分の3連単予想を生成する
 
     Args:
         model: 学習済みLightGBMモデル
         race_features: 1レース分の特徴量
-        payout_lookup: 人気順位→平均払戻のルックアップ
+        payout_lookup: 人気順位→平均払戻のルックアップ（live_odds未指定時に使用）
+        live_odds: リアルタイムオッズ {"1-2-3": 3.5, ...}（指定時はこちらを優先）
 
     Returns:
         DataFrame: 3連単の全組み合わせと期待回収率
@@ -132,12 +138,20 @@ def predict_race(model: lgb.Booster, race_features: pd.Series, payout_lookup: di
     # 確率の高い順に並べて人気順位を付与
     combo_probs.sort(key=lambda x: x[4], reverse=True)
 
+    using_live = bool(live_odds)
+
     results = []
     for rank, (combination, b1, b2, b3, prob) in enumerate(combo_probs, start=1):
-        # 人気順位に対応する平均払戻を取得
-        avg_payout = payout_lookup.get(str(rank), int(300 * (rank ** 0.8)))
-        # 期待回収率 = 的中確率 × 平均払戻 / 100円
-        expected_roi = prob * (avg_payout / 100)
+        if using_live and combination in live_odds:
+            # リアルタイムオッズ使用: オッズは倍率（例: 3.5 → 350円払戻）
+            actual_odds = live_odds[combination]
+            avg_payout = int(actual_odds * 100)
+            # 期待回収率 = 的中確率 × オッズ倍率
+            expected_roi = prob * actual_odds
+        else:
+            # 履歴ルックアップ使用
+            avg_payout = payout_lookup.get(str(rank), int(300 * (rank ** 0.8)))
+            expected_roi = prob * (avg_payout / 100)
 
         results.append({
             "combination": combination,
@@ -146,6 +160,7 @@ def predict_race(model: lgb.Booster, race_features: pd.Series, payout_lookup: di
             "popularity_rank": rank,
             "avg_payout": avg_payout,
             "expected_roi": round(expected_roi, 4),
+            "odds_source": "live" if (using_live and combination in live_odds) else "history",
         })
 
     df = pd.DataFrame(results).sort_values("expected_roi", ascending=False).reset_index(drop=True)
@@ -159,8 +174,14 @@ def get_recommendations(
     top_n: int = 5,
     min_roi: float = MIN_EXPECTED_ROI,
     payout_lookup: dict = None,
+    all_live_odds: dict = None,
 ) -> pd.DataFrame:
-    """本日の全レースから推奨買い目を選出する"""
+    """
+    本日の全レースから推奨買い目を選出する
+
+    Args:
+        all_live_odds: {(venue_code, race_no): {"1-2-3": 3.5, ...}} のdict（省略可）
+    """
     if payout_lookup is None:
         payout_lookup = load_payout_lookup()
 
@@ -168,7 +189,14 @@ def get_recommendations(
     all_recommendations = []
 
     for _, race_row in df_today.iterrows():
-        predictions = predict_race(model, race_row, payout_lookup)
+        # このレースのリアルタイムオッズを取得（あれば）
+        live_odds = None
+        if all_live_odds:
+            venue_code = str(race_row.get("venue_code", "")).zfill(2)
+            race_no = int(race_row.get("race_no", 0))
+            live_odds = all_live_odds.get((venue_code, race_no))
+
+        predictions = predict_race(model, race_row, payout_lookup, live_odds)
         recommended = predictions[predictions["expected_roi"] >= min_roi].head(top_n)
 
         if recommended.empty:
@@ -181,11 +209,13 @@ def get_recommendations(
                 "avg_payout": "-",
                 "expected_roi": "0%",
                 "confidence": "見送り",
+                "odds_source": "-",
             })
         else:
             for _, rec in recommended.iterrows():
                 roi = rec["expected_roi"]
                 confidence = "★★★" if roi >= 1.3 else "★★☆" if roi >= 1.2 else "★☆☆"
+                src = rec.get("odds_source", "history")
                 all_recommendations.append({
                     "date": race_row.get("date", ""),
                     "venue_name": race_row.get("venue_name", ""),
@@ -195,6 +225,7 @@ def get_recommendations(
                     "avg_payout": f"{rec['avg_payout']:,}円",
                     "expected_roi": f"{rec['expected_roi']*100:.0f}%",
                     "confidence": confidence,
+                    "odds_source": "リアルタイム" if src == "live" else "履歴平均",
                 })
 
     return pd.DataFrame(all_recommendations)
