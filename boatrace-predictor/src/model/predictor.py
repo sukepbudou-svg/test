@@ -119,7 +119,7 @@ def predict_race(
         payout_lookup = load_payout_lookup()
 
     feature_cols = get_feature_columns() + [f"boat{bn}_course_advantage" for bn in range(1, 7)]
-    X = race_features[feature_cols].fillna(0).values.reshape(1, -1)
+    X = race_features.reindex(feature_cols, fill_value=0).fillna(0).values.reshape(1, -1)
     win_probs = model.predict(X)[0]
 
     # 全120通りの確率を計算
