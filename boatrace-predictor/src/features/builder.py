@@ -7,7 +7,12 @@ import pandas as pd
 import numpy as np
 
 
-def build_features(df_program: pd.DataFrame, df_rank: pd.DataFrame, df_payout: pd.DataFrame) -> pd.DataFrame:
+def build_features(
+    df_program: pd.DataFrame,
+    df_rank: pd.DataFrame,
+    df_payout: pd.DataFrame,
+    df_beforeinfo: pd.DataFrame = None,
+) -> pd.DataFrame:
     """
     番組表・成績データを結合して特徴量DataFrameを生成する
 
@@ -24,6 +29,18 @@ def build_features(df_program: pd.DataFrame, df_rank: pd.DataFrame, df_payout: p
 
     # レースごとに6艇分の特徴量をピボット（予測モードでは成績なしで動作）
     predict_only = df_rank.empty
+
+    # 展示タイムDataFrameを準備（過去成績から or 直前情報スクレイピングから）
+    if df_beforeinfo is not None and not df_beforeinfo.empty:
+        # 直前情報スクレイピング結果（予測時）
+        exh_df = df_beforeinfo
+    elif not predict_only and "exhibition_time" in df_rank.columns:
+        # 過去競走成績から（学習時）
+        exh_df = df_rank[["date", "venue_code", "race_no", "boat_no", "exhibition_time", "start_timing"]].copy()
+        exh_df = exh_df.rename(columns={"start_timing": "exhibition_st_raw"})
+        exh_df["exhibition_st"] = exh_df["exhibition_st_raw"].apply(_parse_st)
+    else:
+        exh_df = None
 
     # 3連単の払戻を結合用に整形
     if not predict_only and not df_payout.empty and "bet_type" in df_payout.columns:
@@ -53,6 +70,18 @@ def build_features(df_program: pd.DataFrame, df_rank: pd.DataFrame, df_payout: p
 
     # レースごとに6艇分の特徴量をピボット
     program_pivot = _pivot_program(df_program)
+
+    # 展示タイムをピボットして結合
+    if exh_df is not None and not exh_df.empty:
+        exh_pivot = _pivot_exhibition(exh_df)
+        program_pivot = program_pivot.merge(
+            exh_pivot, on=["date", "venue_code", "race_no"], how="left"
+        )
+    else:
+        # 展示タイムなし → NaN で埋める
+        for bn in range(1, 7):
+            program_pivot[f"boat{bn}_exhibition_time"] = np.nan
+            program_pivot[f"boat{bn}_exhibition_st"] = np.nan
 
     # 結合
     if predict_only:
@@ -104,6 +133,32 @@ def _pivot_program(df_program: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _parse_st(st_raw) -> float | None:
+    """スタートタイミング文字列を数値に変換"""
+    if st_raw is None or (isinstance(st_raw, float) and np.isnan(st_raw)):
+        return None
+    s = str(st_raw).strip()
+    if s in ("F", "L", "K", ""):
+        return None  # フライング・出遅れ等はNaN
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _pivot_exhibition(exh_df: pd.DataFrame) -> pd.DataFrame:
+    """展示タイム・STデータを1レース1行形式に変換"""
+    rows = []
+    for (date, venue_code, race_no), group in exh_df.groupby(["date", "venue_code", "race_no"]):
+        row = {"date": date, "venue_code": venue_code, "race_no": race_no}
+        for _, r in group.iterrows():
+            bn = int(r["boat_no"])
+            row[f"boat{bn}_exhibition_time"] = r.get("exhibition_time")
+            row[f"boat{bn}_exhibition_st"] = r.get("exhibition_st")
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def get_feature_columns() -> list[str]:
     """モデルに使用する特徴量カラム名リストを返す"""
     base_cols = [
@@ -111,6 +166,7 @@ def get_feature_columns() -> list[str]:
         "local_win_rate", "local_2rate",
         "motor_2rate", "boat_2rate",
         "age", "weight", "grade_num",
+        "exhibition_time", "exhibition_st",
     ]
     cols = []
     for bn in range(1, 7):

@@ -100,6 +100,28 @@ def cmd_train():
     print("=== 学習完了 ===")
 
 
+def _convert_beforeinfo(raw: dict) -> "pd.DataFrame":
+    """
+    fetch_beforeinfo_for_races の出力を DataFrame に変換する
+    raw: {(venue_code, race_no): {1: {"exhibition_time": 6.82, "exhibition_st": 0.12}, ...}}
+    """
+    import pandas as pd
+    from datetime import datetime
+    records = []
+    today = datetime.now().strftime("%Y-%m-%d")
+    for (venue_code, race_no), boats in raw.items():
+        for boat_no, info in boats.items():
+            records.append({
+                "date": today,
+                "venue_code": venue_code,
+                "race_no": race_no,
+                "boat_no": boat_no,
+                "exhibition_time": info.get("exhibition_time"),
+                "exhibition_st": info.get("exhibition_st"),
+            })
+    return pd.DataFrame(records) if records else pd.DataFrame()
+
+
 def _filter_upcoming_races(df_program: "pd.DataFrame", df_features: "pd.DataFrame", now: datetime) -> "pd.DataFrame":
     """
     発走時刻が現在時刻より後のレースのみを残す。
@@ -145,6 +167,7 @@ def cmd_predict(venue: str = None, race_no: int = None):
     from src.collector.downloader import download_file, extract_lzh
     from src.collector.parser import parse_program
     from src.collector.odds import fetch_odds_for_races
+    from src.collector.beforeinfo import fetch_beforeinfo_for_races
     from src.features.builder import build_features, add_course_advantage, get_feature_columns
     from src.model.trainer import load_model
     from src.model.predictor import get_recommendations
@@ -169,9 +192,18 @@ def cmd_predict(venue: str = None, race_no: int = None):
         print("[ERROR] 番組表のパースに失敗しました")
         return
 
-    # 特徴量生成（番組表のみ・予測モード）
+    # 直前情報（展示タイム）取得 - レース直前のみ利用可能
     import pandas as pd
-    df_features = build_features(df_program, pd.DataFrame(), pd.DataFrame())
+    print("=== 直前情報（展示タイム）取得中 ===")
+    # まず番組表のみで仮の特徴量を生成してレース一覧を取得
+    df_features_tmp = build_features(df_program, pd.DataFrame(), pd.DataFrame())
+    df_beforeinfo_raw = fetch_beforeinfo_for_races(df_features_tmp, today)
+
+    # 直前情報をDataFrame形式に変換
+    df_beforeinfo = _convert_beforeinfo(df_beforeinfo_raw)
+
+    # 特徴量生成（展示タイム込み）
+    df_features = build_features(df_program, pd.DataFrame(), pd.DataFrame(), df_beforeinfo)
 
     # 未発走レースのみに絞り込む（競艇場・レース番号の指定がない場合）
     if venue is None and race_no is None:
