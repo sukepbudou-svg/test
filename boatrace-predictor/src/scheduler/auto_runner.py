@@ -249,7 +249,8 @@ def _predict_one_race(
     ]) if beforeinfo_raw else pd.DataFrame()
 
     # 特徴量生成
-    df_features = build_features(df_prog_race, pd.DataFrame(), pd.DataFrame(), df_beforeinfo or None)
+    df_features = build_features(df_prog_race, pd.DataFrame(), pd.DataFrame(),
+                                 df_beforeinfo if not df_beforeinfo.empty else None)
     if df_features.empty:
         print(f"  [WARN] 特徴量生成失敗: {venue_name} {race_no}R")
         return
