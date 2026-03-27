@@ -73,8 +73,8 @@ def parse_program(txt_path: Path) -> pd.DataFrame:
             r"([AB][12])\s+"              # 級別
             r"([\d.]+)\s+([\d.]+)\s+"     # 全国勝率・2率
             r"([\d.]+)\s+([\d.]+)\s+"     # 当地勝率・2率
-            r"(\d+)\s+(\d{1,2}\.\d{2})"  # モーターNO・2率
-            r"(\d+)\s+([\d.]+)",          # ボートNO・2率
+            r"(\d+)\s+(\d{1,3}\.\d{2})\s*"  # モーターNO・2率（空白0以上）
+            r"(\d+)\s+([\d.]+)",           # ボートNO・2率
             line
         )
         if boat_match and venue_code and race_no:
