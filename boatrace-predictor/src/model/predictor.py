@@ -158,24 +158,27 @@ def predict_race(
             actual_odds = live_odds[combination]
             # 150倍超は市場が長射程と判断 → 対象外としてROIを0に
             if actual_odds > MAX_LIVE_ODDS:
-                avg_payout = int(actual_odds * 100)
+                odds_value = round(actual_odds, 1)
                 expected_roi = 0.0
             else:
-                avg_payout = int(actual_odds * 100)
+                odds_value = round(actual_odds, 1)
                 expected_roi = prob * actual_odds
+            odds_source = "live"
         else:
-            # 履歴ルックアップ使用
-            avg_payout = payout_lookup.get(str(rank), int(300 * (rank ** 0.8)))
-            expected_roi = prob * (avg_payout / 100)
+            # 履歴ルックアップ使用（払戻円 ÷ 100 = 倍率）
+            hist_payout = payout_lookup.get(str(rank), int(300 * (rank ** 0.8)))
+            odds_value = round(hist_payout / 100, 1)
+            expected_roi = prob * odds_value
+            odds_source = "history"
 
         results.append({
             "combination": combination,
             "boat1": b1, "boat2": b2, "boat3": b3,
             "prob": round(prob, 6),
             "popularity_rank": rank,
-            "avg_payout": avg_payout,
+            "odds_value": odds_value,
             "expected_roi": round(expected_roi, 4),
-            "odds_source": "live" if (using_live and combination in live_odds) else "history",
+            "odds_source": odds_source,
         })
 
     df = pd.DataFrame(results).sort_values("expected_roi", ascending=False).reset_index(drop=True)
@@ -225,7 +228,7 @@ def get_recommendations(
                 "race_no": race_row.get("race_no", ""),
                 "combination": "見送り",
                 "prob": "0%",
-                "avg_payout": "-",
+                "odds": "-",
                 "expected_roi": "0%",
                 "confidence": "見送り",
                 "odds_source": "-",
@@ -235,13 +238,14 @@ def get_recommendations(
                 roi = rec["expected_roi"]
                 confidence = "★★★" if roi >= 1.3 else "★★☆" if roi >= 1.2 else "★☆☆"
                 src = rec.get("odds_source", "history")
+                odds_display = f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)"
                 all_recommendations.append({
                     "date": race_row.get("date", ""),
                     "venue_name": race_row.get("venue_name", ""),
                     "race_no": race_row.get("race_no", ""),
                     "combination": rec["combination"],
                     "prob": f"{rec['prob']*100:.2f}%",
-                    "avg_payout": f"{rec['avg_payout']:,}円",
+                    "odds": odds_display,
                     "expected_roi": f"{rec['expected_roi']*100:.0f}%",
                     "confidence": confidence,
                     "odds_source": "リアルタイム" if src == "live" else "履歴平均",

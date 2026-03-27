@@ -116,12 +116,12 @@ def write_predictions(
         sheet = spreadsheet.add_worksheet(title=sheet_name, rows=200, cols=10)
 
     # ヘッダー行
-    headers = ["日付", "競艇場", "レース", "買い目（3連単）", "的中確率", "平均払戻", "期待回収率", "信頼度", "オッズ元"]
+    headers = ["日付", "競艇場", "レース", "買い目（3連単）", "的中確率", "オッズ", "期待回収率", "信頼度", "オッズ元"]
     sheet.update("A1", [headers])
 
     # データ行
     if not recommendations.empty:
-        cols = ["date", "venue_name", "race_no", "combination", "prob", "avg_payout", "expected_roi", "confidence", "odds_source"]
+        cols = ["date", "venue_name", "race_no", "combination", "prob", "odds", "expected_roi", "confidence", "odds_source"]
         # 列がない場合（見送り行など）は"-"で埋める
         for col in cols:
             if col not in recommendations.columns:
@@ -157,11 +157,11 @@ def append_prediction_row(
     except gspread.WorksheetNotFound:
         sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=12)
         headers = ["日付", "競艇場", "レース", "買い目（3連単）", "的中確率",
-                   "平均払戻", "期待回収率", "信頼度", "オッズ元"]
+                   "オッズ", "期待回収率", "信頼度", "オッズ元"]
         sheet.update("A1", [headers])
 
     cols = ["date", "venue_name", "race_no", "combination", "prob",
-            "avg_payout", "expected_roi", "confidence", "odds_source"]
+            "odds", "expected_roi", "confidence", "odds_source"]
     values = [row.get(c, "-") for c in cols]
     sheet.append_row(values, value_input_option="RAW")
 
