@@ -111,7 +111,7 @@ def append_prediction_row(
     cols = ["date", "venue_name", "race_no", "combination", "prob",
             "avg_payout", "expected_roi", "confidence", "odds_source"]
     values = [row.get(c, "-") for c in cols]
-    sheet.append_row(values, value_input_option="USER_ENTERED")
+    sheet.append_row(values, value_input_option="RAW")
 
 
 def update_result_row(
@@ -164,7 +164,7 @@ def update_result_row(
         r_sheet.append_row(
             [date, venue_name, race_no, "（予想なし）", "-", "-",
              actual_combination, actual_payout, "-", 0],
-            value_input_option="USER_ENTERED"
+            value_input_option="RAW"
         )
         return
 
@@ -178,7 +178,7 @@ def update_result_row(
             [date, venue_name, race_no, combination,
              pred.get("的中確率", "-"), pred.get("期待回収率", "-"),
              actual_combination, actual_payout, hit, profit],
-            value_input_option="USER_ENTERED"
+            value_input_option="RAW"
         )
 
     print(f"[OK] 成績記録: {venue_name} {race_no}R 結果={actual_combination} 払戻={actual_payout}円")
