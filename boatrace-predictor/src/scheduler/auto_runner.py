@@ -163,10 +163,21 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
         )
         return
 
+    # 起動時点で既に発走済みのレースはスキップ
+    now_start = datetime.now()
+    for race in schedule:
+        if race["scheduled_dt"] <= now_start:
+            race["predicted"] = True
+            race["result_fetched"] = True
+
+    upcoming = [r for r in schedule if not r["predicted"]]
     total = len(schedule)
-    print(f"本日のレース数: {total}レース")
-    for r in schedule:
-        print(f"  {r['venue_name']} {r['race_no']}R - {r['scheduled_time_str']}")
+    print(f"本日のレース数: {total}レース（残り{len(upcoming)}レース）")
+    for r in upcoming:
+        predict_at = r["scheduled_dt"] - timedelta(minutes=PREDICT_BEFORE_MIN)
+        print(f"  {r['venue_name']} {r['race_no']}R - 発走:{r['scheduled_time_str']} / 予想:{predict_at.strftime('%H:%M')}")
+    if not upcoming:
+        print("  本日の残りレースはありません")
     print()
 
     try:
@@ -195,13 +206,13 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                 # ── 結果取得タイミング: 発走8分後 ──
                 result_at = scheduled_dt + timedelta(minutes=RESULT_AFTER_MIN)
                 if race["predicted"] and not race["result_fetched"] and now >= result_at:
-                    _fetch_and_record_result(
+                    success = _fetch_and_record_result(
                         race, today, spreadsheet_id, credentials_path,
                         fetch_race_result, update_result_row,
                     )
-                    race["result_fetched"] = True
-                    # サマリーを随時更新
-                    update_summary_sheet(spreadsheet_id, credentials_path)
+                    if success:
+                        race["result_fetched"] = True
+                        update_summary_sheet(spreadsheet_id, credentials_path)
 
             # 次の予想・結果取得までの待機時間を表示
             next_action = _next_action_time(schedule, now)
@@ -278,8 +289,8 @@ def _predict_one_race(
 def _fetch_and_record_result(
     race: dict, today, spreadsheet_id, credentials_path,
     fetch_race_result, update_result_row,
-) -> None:
-    """レース結果を取得して成績シートに記録する"""
+) -> bool:
+    """レース結果を取得して成績シートに記録する。成功したらTrueを返す。"""
     venue_code = race["venue_code"]
     race_no = race["race_no"]
     venue_name = race["venue_name"]
@@ -287,9 +298,8 @@ def _fetch_and_record_result(
 
     result = fetch_race_result(today, venue_code, race_no)
     if not result.get("available"):
-        print(f"  [WARN] 結果未確定またはスクレイピング失敗")
-        race["result_fetched"] = False  # 次のループで再試行
-        return
+        print(f"  [WARN] 結果未確定 → 2分後に再試行します")
+        return False
 
     update_result_row(
         spreadsheet_id,
@@ -300,6 +310,7 @@ def _fetch_and_record_result(
         actual_payout=result["payout"],
         credentials_path=credentials_path,
     )
+    return True
 
 
 def _next_action_time(schedule: list, now: datetime):
