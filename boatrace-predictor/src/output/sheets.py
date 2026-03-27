@@ -76,25 +76,7 @@ def write_predictions(
         rows = recommendations[
             ["date", "venue_name", "race_no", "combination", "prob", "expected_roi", "confidence"]
         ].values.tolist()
-        sheet.update(f"A2", rows)
-
-    # ヘッダーの書式設定（太字・背景色）
-    sheet.format("A1:G1", {
-        "textFormat": {"bold": True},
-        "backgroundColor": {"red": 0.2, "green": 0.4, "blue": 0.8},
-        "horizontalAlignment": "CENTER",
-    })
-
-    # 見送り行をグレーに
-    for i, row in enumerate(recommendations.itertuples(), start=2):
-        if row.combination == "見送り":
-            sheet.format(f"A{i}:G{i}", {
-                "backgroundColor": {"red": 0.9, "green": 0.9, "blue": 0.9}
-            })
-        elif "★★★" in str(row.confidence):
-            sheet.format(f"A{i}:G{i}", {
-                "backgroundColor": {"red": 1.0, "green": 0.95, "blue": 0.8}
-            })
+        sheet.update("A2", rows)
 
     print(f"[OK] スプレッドシートに書き込み完了: シート「{sheet_name}」 {len(recommendations)}行")
 
