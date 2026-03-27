@@ -13,10 +13,12 @@ import pandas as pd
 
 from src.features.builder import get_feature_columns, add_course_advantage
 from src.agents.course_strategy import predict_win_probs as course_win_probs
+from src.agents.racer_performance import predict_win_probs as racer_win_probs
 
 # エージェントの重み（合計1.0）
-WEIGHT_ML     = 0.65  # AIモデルエージェント
-WEIGHT_COURSE = 0.35  # コース戦略エージェント
+WEIGHT_ML     = 0.50  # AIモデルエージェント
+WEIGHT_COURSE = 0.25  # コース戦略エージェント
+WEIGHT_RACER  = 0.25  # 選手成績エージェント
 
 # 3連単の控除率（約75%が払い戻し）
 TRIFECTA_RETURN_RATE = 0.75
@@ -142,8 +144,11 @@ def predict_race(
     # コース戦略エージェントの勝率
     cs_probs = course_win_probs(race_features)
 
-    # 2エージェントの勝率を重み付け合成
-    win_probs = WEIGHT_ML * ml_probs + WEIGHT_COURSE * cs_probs
+    # 選手成績エージェントの勝率
+    rp_probs = racer_win_probs(race_features)
+
+    # 3エージェントの勝率を重み付け合成
+    win_probs = WEIGHT_ML * ml_probs + WEIGHT_COURSE * cs_probs + WEIGHT_RACER * rp_probs
 
     # 全120通りの確率を計算
     combinations = list(permutations(range(1, 7), 3))
