@@ -198,13 +198,16 @@ def update_result_row(
                    "実際の結果", "実際の払戻", "的中", "収支（円）"]
         r_sheet.update("A1", [headers])
 
-    # 「予想」シートから該当レースの予想行を取得
-    pred_sheet_name = "予想"
-    try:
-        p_sheet = spreadsheet.worksheet(pred_sheet_name)
-        pred_rows = p_sheet.get_all_records()
-    except Exception:
-        pred_rows = []
+    # 日付シートから該当レースの予想行を取得（例: "2026-03-27"）
+    pred_rows = []
+    for sheet_title in [date, "予想"]:
+        try:
+            p_sheet = spreadsheet.worksheet(sheet_title)
+            pred_rows = p_sheet.get_all_records()
+            if pred_rows:
+                break
+        except Exception:
+            continue
 
     # 該当レースの予想行を抽出
     race_preds = [
@@ -285,16 +288,26 @@ def update_summary_sheet(
     except gspread.WorksheetNotFound:
         s_sheet = spreadsheet.add_worksheet(title="サマリー", rows=20, cols=3)
 
+    total_races = total_bets // 100
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     rows = [
+        ["【予想成績サマリー】", ""],
         ["集計日時", now],
-        ["総購入額（円）", total_bets],
-        ["総払戻額（円）", total_return],
+        ["", ""],
+        ["■ 購入実績", ""],
+        ["総購入レース数", total_races],
+        ["総購入額（100円/点）", f"¥{total_bets:,}"],
+        ["", ""],
+        ["■ 的中実績", ""],
         ["的中数", total_hits],
         ["的中率", hit_rate],
+        ["", ""],
+        ["■ 収支", ""],
+        ["総払戻額", f"¥{total_return:,}"],
         ["回収率", roi],
-        ["収支（円）", total_return - total_bets],
+        ["収支（損益）", f"¥{total_return - total_bets:,}"],
     ]
+    s_sheet.clear()
     s_sheet.update("A1", rows)
     print(f"[OK] サマリー更新: 的中率={hit_rate} 回収率={roi} 収支=¥{total_return - total_bets:,}")
 

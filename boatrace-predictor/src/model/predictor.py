@@ -122,6 +122,12 @@ def predict_race(
     X = race_features.reindex(feature_cols, fill_value=0).fillna(0).values.reshape(1, -1)
     win_probs = model.predict(X)[0]
 
+    # 温度スケーリングで確率の過信を補正（T=2.5: 高いほど保守的）
+    TEMPERATURE = 2.5
+    logits = np.log(np.clip(win_probs, 1e-10, 1.0))
+    scaled = np.exp(logits / TEMPERATURE)
+    win_probs = scaled / scaled.sum()
+
     # 全120通りの確率を計算
     combinations = list(permutations(range(1, 7), 3))
     combo_probs = []
