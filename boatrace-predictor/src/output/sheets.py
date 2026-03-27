@@ -135,7 +135,7 @@ def write_predictions(
 def append_prediction_row(
     spreadsheet_id: str,
     row: dict,
-    sheet_name: str = "予想",
+    sheet_name: str = None,
     credentials_path: str = None,
 ) -> None:
     """
@@ -145,6 +145,10 @@ def append_prediction_row(
         row: {date, venue_name, race_no, combination, prob, avg_payout,
                expected_roi, confidence, odds_source}
     """
+    # シート名未指定の場合は今日の日付を使用（例: "2026-03-27"）
+    if sheet_name is None:
+        sheet_name = datetime.now().strftime("%Y-%m-%d")
+
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
 
