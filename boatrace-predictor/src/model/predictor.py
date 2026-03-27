@@ -23,7 +23,11 @@ MIN_EXPECTED_ROI = 1.10  # 110%以上のみ推奨
 MIN_PROB = 0.02  # 2%以上のみ推奨
 
 # リアルタイムオッズ使用時の最大オッズ倍率（これ超えは市場も長射程と判断）
-MAX_LIVE_ODDS = 150.0  # 150倍（15,000円）まで
+MAX_LIVE_ODDS = 80.0  # 80倍まで（これ超えは除外）
+
+# モデル確率と市場確率の最大乖離倍率
+# モデルが「2%」でも市場が「0.7%（=1/144倍）」なら乖離3倍 → 除外
+MAX_MARKET_DIVERGENCE = 2.5  # モデル確率が市場確率の2.5倍以上なら除外
 
 MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
 PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
@@ -156,13 +160,18 @@ def predict_race(
     for rank, (combination, b1, b2, b3, prob) in enumerate(combo_probs, start=1):
         if using_live and combination in live_odds:
             actual_odds = live_odds[combination]
-            # 150倍超は市場が長射程と判断 → 対象外としてROIを0に
+            odds_value = round(actual_odds, 1)
+            # 80倍超 → 除外
             if actual_odds > MAX_LIVE_ODDS:
-                odds_value = round(actual_odds, 1)
                 expected_roi = 0.0
             else:
-                odds_value = round(actual_odds, 1)
-                expected_roi = prob * actual_odds
+                # 市場乖離チェック: 市場が示す確率(1/odds)とモデル確率を比較
+                market_prob = 1.0 / actual_odds
+                if prob > market_prob * MAX_MARKET_DIVERGENCE:
+                    # モデルが市場の2.5倍以上楽観的 → 信頼できない
+                    expected_roi = 0.0
+                else:
+                    expected_roi = prob * actual_odds
             odds_source = "live"
         else:
             # 履歴ルックアップ使用（払戻円 ÷ 100 = 倍率）
