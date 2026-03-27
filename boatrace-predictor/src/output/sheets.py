@@ -113,6 +113,16 @@ def get_client(credentials_path: str = None) -> gspread.Client:
     return gspread.authorize(creds)
 
 
+def _ensure_spreadsheet_title(spreadsheet) -> None:
+    """スプレッドシートのタイトルが 'BOAT LAB' でなければ変更する"""
+    try:
+        if not spreadsheet.title.startswith("BOAT LAB"):
+            spreadsheet.update_title("BOAT LAB")
+            print("[OK] スプレッドシートのタイトルを「BOAT LAB」に設定しました")
+    except Exception:
+        pass
+
+
 def write_predictions(
     spreadsheet_id: str,
     recommendations: pd.DataFrame,
@@ -130,6 +140,7 @@ def write_predictions(
     """
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
+    _ensure_spreadsheet_title(spreadsheet)
 
     today = datetime.now().strftime("%Y-%m-%d")
     sheet_name = sheet_name or today
@@ -178,6 +189,7 @@ def append_prediction_row(
 
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
+    _ensure_spreadsheet_title(spreadsheet)
 
     try:
         sheet = spreadsheet.worksheet(sheet_name)
