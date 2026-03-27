@@ -140,7 +140,7 @@ def _filter_upcoming_races(df_program: "pd.DataFrame", df_features: "pd.DataFram
     return filtered
 
 
-def cmd_predict():
+def cmd_predict(venue: str = None, race_no: int = None):
     """本日の予想生成"""
     from src.collector.downloader import download_file, extract_lzh
     from src.collector.parser import parse_program
@@ -173,8 +173,34 @@ def cmd_predict():
     import pandas as pd
     df_features = build_features(df_program, pd.DataFrame(), pd.DataFrame())
 
-    # 未発走レースのみに絞り込む
-    df_features = _filter_upcoming_races(df_program, df_features, today)
+    # 未発走レースのみに絞り込む（競艇場・レース番号の指定がない場合）
+    if venue is None and race_no is None:
+        df_features = _filter_upcoming_races(df_program, df_features, today)
+
+    # 競艇場・レース番号で絞り込む
+    if venue is not None or race_no is not None:
+        # 場名または場コードで検索
+        from src.collector.parser import VENUE_CODES
+        target_codes = []
+        if venue is not None:
+            # 場名（例: "福岡"）または場コード（例: "22"）で検索
+            for code, name in VENUE_CODES.items():
+                if venue in (code, name):
+                    target_codes.append(code)
+            if not target_codes:
+                print(f"[ERROR] 競艇場が見つかりません: '{venue}'")
+                print(f"  使用可能: {', '.join(VENUE_CODES.values())}")
+                return
+            mask = df_features["venue_code"].isin(target_codes)
+            df_features = df_features[mask]
+
+        if race_no is not None:
+            df_features = df_features[df_features["race_no"] == race_no]
+
+        if df_features.empty:
+            print(f"[ERROR] 指定のレースが見つかりません（競艇場: {venue or '全場'} / レース: {race_no or '全レース'}R）")
+            return
+        print(f"[INFO] 絞り込み: {venue or '全場'} {race_no or '全'}R → {len(df_features)}行")
 
     # モデル読み込み
     model = load_model()
@@ -245,6 +271,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("--months", type=int, default=3, help="過去データ取得月数（download_historyモード用）")
     parser.add_argument("--days-back", type=int, default=0, help="何日前のデータを取得するか（downloadモード用）")
+    parser.add_argument("--venue", type=str, default=None, help="競艇場名または場コード（例: 福岡 または 22）")
+    parser.add_argument("--race", type=int, default=None, help="レース番号（例: 6）")
     args = parser.parse_args()
 
     if args.mode == "download":
@@ -254,6 +282,6 @@ if __name__ == "__main__":
     elif args.mode == "train":
         cmd_train()
     elif args.mode == "predict":
-        cmd_predict()
+        cmd_predict(venue=args.venue, race_no=args.race)
     elif args.mode == "backtest":
         cmd_backtest()
