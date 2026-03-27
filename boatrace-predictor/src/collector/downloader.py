@@ -111,13 +111,17 @@ def extract_lzh(lzh_path: Path) -> Path | None:
             if result.returncode != 0:
                 print(f"[ERROR] 解凍失敗: {result.stderr}")
                 return None
-            extracted = list(Path(tmpdir).iterdir())
+            extracted = sorted(Path(tmpdir).iterdir())
             if not extracted:
                 print(f"[ERROR] 解凍結果が空: {lzh_path}")
                 return None
+            # 複数ファイルをすべて結合して1つのテキストファイルに
             txt_path = lzh_path.with_suffix(".txt")
-            txt_path.write_bytes(extracted[0].read_bytes())
-        print(f"[OK] 解凍完了: {txt_path.name}")
+            combined = b""
+            for f in extracted:
+                combined += f.read_bytes()
+            txt_path.write_bytes(combined)
+        print(f"[OK] 解凍完了: {txt_path.name} ({len(extracted)}場分)")
         return txt_path
     except Exception as e:
         print(f"[ERROR] 解凍失敗: {lzh_path} - {e}")
