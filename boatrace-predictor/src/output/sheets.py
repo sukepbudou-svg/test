@@ -267,49 +267,76 @@ def update_summary_sheet(
     total_bets = 0
     total_hits = 0
     total_return = 0
+    # 日付別集計
+    daily: dict = {}
 
     for rec in records:
         combination = rec.get("予想買い目", "")
         if combination in ("", "（予想なし）", "見送り", "-"):
             continue
-        total_bets += 100  # 100円賭け基準
+        d = str(rec.get("日付", ""))
+        if d not in daily:
+            daily[d] = {"bets": 0, "hits": 0, "ret": 0}
+        total_bets += 100
+        daily[d]["bets"] += 100
         if rec.get("的中", "") == "○":
             total_hits += 1
+            daily[d]["hits"] += 1
             try:
-                total_return += int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+                v = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+                total_return += v
+                daily[d]["ret"] += v
             except (ValueError, TypeError):
                 pass
 
-    hit_rate = f"{total_hits / (total_bets // 100) * 100:.1f}%" if total_bets > 0 else "0%"
-    roi = f"{total_return / total_bets * 100:.1f}%" if total_bets > 0 else "0%"
+    total_races = total_bets // 100
+    hit_rate = f"{total_hits / total_races * 100:.1f}%" if total_races > 0 else "0.0%"
+    roi = f"{total_return / total_bets * 100:.1f}%" if total_bets > 0 else "0.0%"
+    profit = total_return - total_bets
 
     try:
         s_sheet = spreadsheet.worksheet("サマリー")
     except gspread.WorksheetNotFound:
-        s_sheet = spreadsheet.add_worksheet(title="サマリー", rows=20, cols=3)
+        s_sheet = spreadsheet.add_worksheet(title="サマリー", rows=100, cols=6)
 
-    total_races = total_bets // 100
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     rows = [
-        ["【予想成績サマリー】", ""],
-        ["集計日時", now],
-        ["", ""],
-        ["■ 購入実績", ""],
-        ["総購入レース数", total_races],
-        ["総購入額（100円/点）", f"¥{total_bets:,}"],
-        ["", ""],
-        ["■ 的中実績", ""],
-        ["的中数", total_hits],
-        ["的中率", hit_rate],
-        ["", ""],
-        ["■ 収支", ""],
-        ["総払戻額", f"¥{total_return:,}"],
-        ["回収率", roi],
-        ["収支（損益）", f"¥{total_return - total_bets:,}"],
+        ["【予想成績サマリー】", "", "", "", "", ""],
+        ["集計日時", now, "", "", "", ""],
+        ["", "", "", "", "", ""],
+        ["■ 全期間合計", "", "", "", "", ""],
+        ["予想点数", "的中数", "的中率", "総払戻", "回収率", "収支"],
+        [total_races, total_hits, hit_rate, f"¥{total_return:,}", roi, f"¥{profit:,}"],
+        ["", "", "", "", "", ""],
+        ["■ 日付別内訳", "", "", "", "", ""],
+        ["日付", "予想点数", "的中数", "的中率", "払戻合計", "収支"],
     ]
+
+    for d in sorted(daily.keys()):
+        dd = daily[d]
+        n = dd["bets"] // 100
+        h = dd["hits"]
+        r = dd["ret"]
+        dr = f"{h/n*100:.1f}%" if n > 0 else "0.0%"
+        dp = r - dd["bets"]
+        rows.append([d, n, h, dr, f"¥{r:,}", f"¥{dp:,}"])
+
     s_sheet.clear()
     s_sheet.update("A1", rows)
-    print(f"[OK] サマリー更新: 的中率={hit_rate} 回収率={roi} 収支=¥{total_return - total_bets:,}")
+
+    # 全期間合計行に色付け（黒背景・白文字）
+    try:
+        s_sheet.format("A5:F5", {"backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
+                                  "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True}})
+        s_sheet.format("A9:F9", {"backgroundColor": {"red": 0.85, "green": 0.85, "blue": 0.85},
+                                  "textFormat": {"bold": True}})
+        # 収支がプラスなら緑、マイナスなら赤
+        profit_color = {"red": 0.8, "green": 0.95, "blue": 0.8} if profit >= 0 else {"red": 0.95, "green": 0.8, "blue": 0.8}
+        s_sheet.format("F6", {"backgroundColor": profit_color, "textFormat": {"bold": True}})
+    except Exception:
+        pass
+
+    print(f"[OK] サマリー更新: 的中率={hit_rate} 回収率={roi} 収支=¥{profit:,}")
 
 
 def write_backtest_summary(

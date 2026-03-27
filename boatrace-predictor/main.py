@@ -279,6 +279,110 @@ def cmd_auto():
     run_auto(spreadsheet_id, credentials_path)
 
 
+def cmd_results(date_str: str = None):
+    """今日の予想と実際の結果を照合して成績シートに書き込む"""
+    import time
+    from src.collector.parser import VENUE_CODES
+    from src.collector.result_scraper import fetch_race_result
+    from src.output.sheets import update_result_row, update_summary_sheet
+
+    spreadsheet_id = os.environ.get("SPREADSHEET_ID", "")
+    credentials_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "")
+    if not spreadsheet_id or spreadsheet_id == "your_spreadsheet_id_here":
+        print("[ERROR] SPREADSHEET_ID が設定されていません")
+        return
+    if not Path(credentials_path).exists():
+        print("[ERROR] Google認証ファイルが見つかりません")
+        return
+
+    import gspread
+    from google.oauth2.service_account import Credentials
+    SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+    creds = Credentials.from_service_account_file(credentials_path, scopes=SCOPES)
+    client = gspread.authorize(creds)
+    spreadsheet = client.open_by_key(spreadsheet_id)
+
+    today = datetime.now()
+    target_date = date_str or today.strftime("%Y-%m-%d")
+
+    # 予想シートを読み込む
+    try:
+        sheet = spreadsheet.worksheet(target_date)
+        rows = sheet.get_all_records()
+    except Exception:
+        print(f"[ERROR] 予想シート「{target_date}」が見つかりません")
+        return
+
+    # venue_name → venue_code の逆引きマップ
+    name_to_code = {v: k for k, v in VENUE_CODES.items()}
+
+    # 有効な予想行（見送り・ヘッダー以外）を抽出してレース単位でまとめる
+    races = {}
+    for row in rows:
+        combo = str(row.get("買い目（3連単）", ""))
+        venue_name = str(row.get("競艇場", ""))
+        race_no_raw = row.get("レース", "")
+        if combo in ("", "見送り", "-", "買い目（3連単）"):
+            continue
+        try:
+            race_no = int(race_no_raw)
+        except (ValueError, TypeError):
+            continue
+        key = (venue_name, race_no)
+        races[key] = venue_name  # 重複排除用（結果取得は1回）
+
+    if not races:
+        print(f"[INFO] {target_date} の予想データが見つかりません")
+        return
+
+    print(f"=== 結果照合開始: {target_date} / {len(races)}レース ===")
+    hit = 0
+    total = 0
+
+    for (venue_name, race_no), _ in sorted(races.items(), key=lambda x: x[0][1]):
+        venue_code = name_to_code.get(venue_name)
+        if not venue_code:
+            print(f"  [SKIP] 場コード不明: {venue_name}")
+            continue
+
+        result = fetch_race_result(today, venue_code, race_no)
+        if not result.get("available"):
+            print(f"  [--] {venue_name} {race_no}R: 結果未確定（レース未終了の可能性）")
+            continue
+
+        combination = result["combination"]
+        payout = result["payout"]
+        print(f"  [OK] {venue_name} {race_no}R: 結果={combination} 払戻={payout:,}円")
+
+        update_result_row(
+            spreadsheet_id,
+            date=target_date,
+            venue_name=venue_name,
+            race_no=race_no,
+            actual_combination=combination,
+            actual_payout=payout,
+            credentials_path=credentials_path,
+        )
+
+        # 的中チェック（このレースの予想と照合）
+        race_preds = [r for r in rows
+                      if str(r.get("競艇場", "")) == venue_name
+                      and str(r.get("レース", "")) == str(race_no)
+                      and str(r.get("買い目（3連単）", "")) not in ("", "見送り", "-")]
+        for pred in race_preds:
+            total += 1
+            if pred.get("買い目（3連単）") == combination:
+                hit += 1
+
+        time.sleep(1.0)
+
+    print(f"\n=== 照合完了 ===")
+    if total > 0:
+        print(f"  予想数: {total}点 / 的中: {hit}点 / 的中率: {hit/total*100:.1f}%")
+    update_summary_sheet(spreadsheet_id, credentials_path)
+    print(f"  → スプレッドシートの「成績」「サマリー」シートを更新しました")
+
+
 def cmd_backtest():
     """バックテスト（過去データで回収率検証）"""
     import pandas as pd
@@ -314,7 +418,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="競艇3連単予想ツール")
     parser.add_argument(
         "--mode",
-        choices=["download", "download_history", "train", "predict", "backtest", "auto"],
+        choices=["download", "download_history", "train", "predict", "backtest", "auto", "results"],
         required=True,
         help="実行モード"
     )
@@ -336,3 +440,5 @@ if __name__ == "__main__":
         cmd_backtest()
     elif args.mode == "auto":
         cmd_auto()
+    elif args.mode == "results":
+        cmd_results()
