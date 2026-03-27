@@ -53,93 +53,37 @@ def fetch_race_result(date: datetime, venue_code: str, race_no: int, timeout: in
 
 
 def _parse_result(soup: BeautifulSoup) -> dict:
-    """HTMLから着順・払戻をパースする"""
+    """HTMLから3連単の着順・払戻をパースする"""
     result = {"available": False, "combination": "", "payout": 0}
 
-    # ── アプローチ1: テーブルセル構造から「3連単」行を探す ──
-    # boatrace.jpの払戻テーブルは各行に [舟券種類][組み合わせ][払戻額] の構造
-    for row in soup.find_all("tr"):
-        cells = [td.get_text(strip=True).translate(_FW2HW) for td in row.find_all("td")]
-        if not cells:
+    # 「3連単」テキストを持つ <td> を探し、同じ行から組み合わせと払戻を取得
+    # HTML構造: <td>3連単</td> <td>[numberSet1スパン]</td> <td><span class="is-payout1">¥6,990</span></td>
+    for td in soup.find_all("td"):
+        if td.get_text(strip=True).translate(_FW2HW) != "3連単":
             continue
 
-        # いずれかのセルに "3連単" が含まれる行を探す
-        row_joined = "".join(cells)
-        if "3連単" not in row_joined:
-            continue
+        row = td.parent
 
-        # 組み合わせ (X-Y-Z) を探す
-        combo = None
-        payout = 0
-        for cell in cells:
-            if re.match(r"^[1-6]-[1-6]-[1-6]$", cell):
-                combo = cell
-            # 払戻額は最低100円（3桁以上の数字）、カンマ区切りも対応
-            elif re.match(r"^[\d,]{3,}$", cell) and not combo is None:
-                try:
-                    v = int(cell.replace(",", ""))
-                    if v >= 100:  # 最低払戻は100円
-                        payout = v
-                except ValueError:
-                    pass
-
-        # 組み合わせとセル分離した払戻が取れた場合
-        if combo:
-            result["combination"] = combo
+        # 組み合わせ: numberSet1_number クラスのスパンから艇番を取得
+        numbers = [
+            sp.get_text(strip=True).translate(_FW2HW)
+            for sp in row.find_all("span")
+            if sp.get("class") and any("numberSet1_number" in c for c in sp.get("class", []))
+        ]
+        if len(numbers) >= 3:
+            result["combination"] = f"{numbers[0]}-{numbers[1]}-{numbers[2]}"
             result["available"] = True
-            if payout:
-                result["payout"] = payout
-            # 払戻が同一行に見つからない場合は次のセルや行から取得を試みる
-            if not payout:
-                for cell in cells:
-                    m = re.match(r"^[\d,]{3,}$", cell)
-                    if m:
-                        try:
-                            v = int(cell.replace(",", ""))
-                            if v >= 100:
-                                result["payout"] = v
-                                break
-                        except ValueError:
-                            pass
-            return result
 
-    # ── アプローチ2: ページ全文テキストから3連単行を探す ──
-    # セルが結合されている場合のフォールバック
-    text = soup.get_text(" ", strip=True).translate(_FW2HW)
-    # 3連単の後ろに X-Y-Z パターン、さらに後ろに3桁以上の数字
-    m = re.search(r"3連単\D{0,20}([1-6]-[1-6]-[1-6])\D{0,30}?([\d]{3,}[\d,]*)", text)
-    if m:
-        result["combination"] = m.group(1)
-        result["available"] = True
-        try:
-            result["payout"] = int(m.group(2).replace(",", ""))
-        except ValueError:
-            pass
-        return result
-
-    # ── アプローチ3: 着順テーブルから1〜3着艇番を収集 ──
-    top3 = []
-    for table in soup.find_all("table"):
-        for row in table.find_all("tr"):
-            cells = row.find_all("td")
-            if not cells:
-                continue
-            rank_text = cells[0].get_text(strip=True).translate(_FW2HW)
-            if rank_text in ("1", "2", "3"):
-                for cell in cells[1:5]:
-                    boat_text = cell.get_text(strip=True).translate(_FW2HW)
-                    if re.match(r"^[1-6]$", boat_text):
-                        top3.append(int(boat_text))
-                        break
-
-    if len(top3) >= 3:
-        result["combination"] = f"{top3[0]}-{top3[1]}-{top3[2]}"
-        result["available"] = True
-        pay_m = re.search(r"3連単\D{0,30}([\d,]{4,})", text)
-        if pay_m:
+        # 払戻額: is-payout1 クラスのスパンから取得（¥6,990 → 6990）
+        payout_span = row.find("span", class_="is-payout1")
+        if payout_span:
+            pay_text = re.sub(r"[^\d]", "", payout_span.get_text(strip=True))
             try:
-                result["payout"] = int(pay_m.group(1).replace(",", ""))
+                result["payout"] = int(pay_text)
             except ValueError:
                 pass
+
+        if result["available"]:
+            return result
 
     return result
