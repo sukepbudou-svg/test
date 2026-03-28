@@ -285,6 +285,7 @@ def update_result_row(
             continue
 
     # 該当レースの予想行を抽出
+    # 「買い目（3連単）」列の名前が異なる場合も考慮
     race_preds = [
         r for r in pred_rows
         if str(r.get("日付", "")) == date
@@ -292,6 +293,31 @@ def update_result_row(
         and str(r.get("レース", "")) == str(race_no)
         and r.get("買い目（3連単）", "") not in ("", "見送り", "-")
     ]
+
+    # 列名がずれている場合のフォールバック（旧フォーマット対応）
+    if not race_preds:
+        race_preds = [
+            r for r in pred_rows
+            if str(r.get("日付", "")) == date
+            and str(r.get("競艇場", "")) == venue_name
+            and str(r.get("レース", "")) == str(race_no)
+        ]
+        # 「見送り」「-」「空」以外のものを買い目として扱う
+        race_preds = [
+            r for r in race_preds
+            if any(
+                str(v) not in ("", "見送り", "-", "（予想なし）")
+                and "-" in str(v)  # "1-2-3" 形式の買い目を探す
+                for v in r.values()
+            )
+        ]
+        # 買い目列を特定して正規化
+        for r in race_preds:
+            if "買い目（3連単）" not in r or r["買い目（3連単）"] in ("", "-"):
+                for k, v in r.items():
+                    if str(v).count("-") == 2 and all(c.isdigit() or c == "-" for c in str(v)):
+                        r["買い目（3連単）"] = str(v)
+                        break
 
     if not race_preds:
         # 予想なしの場合でも結果だけ記録
