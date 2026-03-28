@@ -210,6 +210,40 @@ def append_prediction_row(
     _apply_venue_color(sheet, last_row, str(row.get("venue_name", "")))
 
 
+def _color_result_row(spreadsheet, sheet, row_no: int, venue_name: str, hit: str) -> None:
+    """成績シートの1行に会場色＋的中色をリアルタイムで適用する"""
+    try:
+        sid = sheet.id
+        bg = _VENUE_BG_COLORS.get(venue_name, _DEFAULT_BG)
+        requests = [
+            # 行全体に会場カラー
+            {"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": row_no - 1, "endRowIndex": row_no,
+                          "startColumnIndex": 0, "endColumnIndex": 10},
+                "cell": {"userEnteredFormat": {"backgroundColor": bg}},
+                "fields": "userEnteredFormat.backgroundColor",
+            }}
+        ]
+        # 的中セル（I列=index8）に色付け
+        if hit in ("○", "×"):
+            hit_bg = (
+                {"red": 0.7, "green": 0.95, "blue": 0.7} if hit == "○"
+                else {"red": 0.98, "green": 0.85, "blue": 0.85}
+            )
+            requests.append({"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": row_no - 1, "endRowIndex": row_no,
+                          "startColumnIndex": 8, "endColumnIndex": 9},
+                "cell": {"userEnteredFormat": {
+                    "backgroundColor": hit_bg,
+                    "textFormat": {"bold": True},
+                }},
+                "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
+            }})
+        spreadsheet.batch_update({"requests": requests})
+    except Exception:
+        pass  # 色付け失敗は無視（データは書き込み済み）
+
+
 def update_result_row(
     spreadsheet_id: str,
     date: str,
@@ -266,6 +300,7 @@ def update_result_row(
              actual_combination, actual_payout, "-", 0],
             value_input_option="RAW"
         )
+        _color_result_row(spreadsheet, r_sheet, len(r_sheet.get_all_values()), venue_name, "-")
         return
 
     for pred in race_preds:
@@ -280,6 +315,7 @@ def update_result_row(
              actual_combination, actual_payout, hit, profit],
             value_input_option="RAW"
         )
+        _color_result_row(spreadsheet, r_sheet, len(r_sheet.get_all_values()), venue_name, hit)
 
     print(f"[OK] 成績記録: {venue_name} {race_no}R 結果={actual_combination} 払戻={actual_payout}円")
 
