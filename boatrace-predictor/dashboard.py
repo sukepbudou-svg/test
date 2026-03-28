@@ -252,47 +252,23 @@ with tab1:
     else:
         # フィルター適用
         df_show = df_pred.copy()
-        if not show_all_confidence:
-            df_show = df_show[df_show.get("信頼度", "★☆☆") != "★☆☆"]
-        if min_prob > 0 and "的中確率" in df_show.columns:
-            df_show = df_show[
-                df_show["的中確率"].apply(
-                    lambda x: float(str(x).replace("%", "")) >= min_prob
-                    if str(x).replace("%", "").replace(".", "").isdigit() else True
-                )
-            ]
+        if not show_all_confidence and "信頼度" in df_show.columns:
+            df_show = df_show[df_show["信頼度"] != "★☆☆"]
 
-        # 会場・レースごとにグループ化
-        if "競艇場" in df_show.columns and "レース" in df_show.columns:
-            groups = df_show.groupby(["競艇場", "レース"], sort=False)
-            cols = st.columns(2)
-            col_idx = 0
-            for (venue, race_no), group in groups:
-                with cols[col_idx % 2]:
-                    rows_html = ""
-                    for _, row in group.iterrows():
-                        combo = row.get("買い目（3連単）", "-")
-                        prob  = row.get("的中確率", "-")
-                        odds  = row.get("オッズ", "-")
-                        conf  = row.get("信頼度", "★☆☆")
-                        star_class = "star-3" if conf == "★★★" else "star-2" if conf == "★★☆" else "star-1"
-                        rows_html += f"""
-                        <div class="combo-row">
-                            <span class="{star_class}">{conf}</span>
-                            <span class="combo">{combo}</span>
-                            <span class="prob-badge">確率 {prob}</span>
-                            <span class="odds-badge">{odds}</span>
-                        </div>
-                        """
-                    st.markdown(f"""
-                    <div class="race-card">
-                        <div class="race-title">🏁 {venue} {race_no}R</div>
-                        {rows_html}
-                    </div>
-                    """, unsafe_allow_html=True)
-                col_idx += 1
-        else:
-            st.dataframe(df_show, use_container_width=True)
+        # 表示列を絞る
+        disp_cols = [c for c in ["競艇場", "レース", "買い目（3連単）", "信頼度", "的中確率", "オッズ"] if c in df_show.columns]
+        df_show = df_show[disp_cols].reset_index(drop=True)
+
+        # 信頼度で行に色をつける
+        def style_confidence(val):
+            if val == "★★★":
+                return "background-color: #fff8e1; color: #e67e22; font-weight: bold;"
+            elif val == "★★☆":
+                return "background-color: #f8f9fa; color: #555;"
+            return "color: #bbb;"
+
+        styled = df_show.style.applymap(style_confidence, subset=["信頼度"]) if "信頼度" in df_show.columns else df_show.style
+        st.dataframe(styled, use_container_width=True, height=600)
 
 
 # ════════════════════════════════
