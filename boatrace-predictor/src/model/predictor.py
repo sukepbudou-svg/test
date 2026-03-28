@@ -308,7 +308,7 @@ def get_recommendations(
                     "expected_roi": f"{rec['expected_roi']*100:.0f}%",
                     "confidence": confidence,
                     "odds_source": "リアルタイム" if src == "live" else "履歴平均",
-                    "tier": rec.get("tier", "本命"),
+                    "tier": rec.get("tier", "本命"),  # 狙い列の値
                 })
 
     return pd.DataFrame(all_recommendations)
