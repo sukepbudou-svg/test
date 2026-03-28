@@ -260,8 +260,23 @@ def get_recommendations(
             live_odds = all_live_odds.get((venue_code, race_no))
 
         predictions = predict_race(model, race_row, payout_lookup, live_odds)
-        # 確率上位top_n件を選出（常にtop_n点表示）
-        recommended = predictions.sort_values("prob", ascending=False).head(top_n)
+        by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
+
+        # ── 本命3点: 確率上位3点 ──
+        honmei = by_prob.head(3).copy()
+        honmei["tier"] = "本命"
+
+        # ── 中穴2点: 確率4位以下でROIが最も高い2点 ──
+        rest = by_prob.iloc[3:].copy()
+        # オッズが15倍以上を中穴候補に（なければ10倍以上、それもなければ上位から）
+        for min_odds in [15.0, 10.0, 0.0]:
+            anakouho = rest[rest["odds_value"] >= min_odds] if min_odds > 0 else rest
+            if len(anakouho) >= 2:
+                break
+        chuana = anakouho.sort_values("expected_roi", ascending=False).head(2).copy()
+        chuana["tier"] = "中穴"
+
+        recommended = pd.concat([honmei, chuana]).reset_index(drop=True)
 
         if recommended.empty:
             all_recommendations.append({
@@ -274,6 +289,7 @@ def get_recommendations(
                 "expected_roi": "0%",
                 "confidence": "見送り",
                 "odds_source": "-",
+                "tier": "-",
             })
         else:
             for _, rec in recommended.iterrows():
@@ -292,6 +308,7 @@ def get_recommendations(
                     "expected_roi": f"{rec['expected_roi']*100:.0f}%",
                     "confidence": confidence,
                     "odds_source": "リアルタイム" if src == "live" else "履歴平均",
+                    "tier": rec.get("tier", "本命"),
                 })
 
     return pd.DataFrame(all_recommendations)

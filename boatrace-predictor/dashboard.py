@@ -287,15 +287,24 @@ with tab1:
         if not show_all_confidence and "信頼度" in df_show.columns:
             df_show = df_show[df_show["信頼度"] != "★☆☆"]
 
-        disp_cols = [c for c in ["競艇場", "レース", "買い目（3連単）", "信頼度", "的中確率", "オッズ"] if c in df_show.columns]
+        disp_cols = [c for c in ["競艇場", "レース", "区分", "買い目（3連単）", "信頼度", "的中確率", "オッズ"] if c in df_show.columns]
         df_show = df_show[disp_cols].reset_index(drop=True)
 
         def style_pred_row(row):
             bg = _VENUE_COLORS.get(str(row.get("競艇場", "")), _DEFAULT_BG)
             conf = str(row.get("信頼度", ""))
+            tier = str(row.get("区分", ""))
             if conf == "★★★":
                 bg = "#fffbeb"
             styles = [f"background-color: {bg};" for _ in row]
+            # 区分列: 本命=青、中穴=オレンジ
+            if "区分" in row.index:
+                idx = list(row.index).index("区分")
+                if tier == "本命":
+                    styles[idx] = "background-color: #dbeafe; color: #1d4ed8; font-weight: bold;"
+                elif tier == "中穴":
+                    styles[idx] = "background-color: #ffedd5; color: #c2410c; font-weight: bold;"
+            # 信頼度列
             if "信頼度" in row.index:
                 idx = list(row.index).index("信頼度")
                 if conf == "★★★":
