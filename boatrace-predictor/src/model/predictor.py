@@ -266,13 +266,18 @@ def get_recommendations(
         honmei = by_prob.head(3).copy()
         honmei["tier"] = "本命"
 
-        # ── 中穴2点: 確率4位以下でROIが最も高い2点 ──
+        # ── 中穴2点: 確率4位以下・オッズ15〜150倍の範囲でROIが最も高い2点 ──
         rest = by_prob.iloc[3:].copy()
-        # オッズが15倍以上を中穴候補に（なければ10倍以上、それもなければ上位から）
+        # オッズ上限150倍・下限15倍（なければ下限10倍、それもなければ上限のみ適用）
         for min_odds in [15.0, 10.0, 0.0]:
-            anakouho = rest[rest["odds_value"] >= min_odds] if min_odds > 0 else rest
+            anakouho = rest[
+                (rest["odds_value"] >= min_odds) & (rest["odds_value"] <= 150.0)
+            ] if min_odds > 0 else rest[rest["odds_value"] <= 150.0]
             if len(anakouho) >= 2:
                 break
+        # それでも足りなければ上限なしで取得
+        if len(anakouho) < 2:
+            anakouho = rest
         chuana = anakouho.sort_values("expected_roi", ascending=False).head(2).copy()
         chuana["tier"] = "中穴"
 
