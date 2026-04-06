@@ -300,8 +300,8 @@ with tab1:
             # 区分列: 本命=青、中穴=オレンジ
             if "狙い" in row.index:
                 idx = list(row.index).index("狙い")
-                if tier == "本命":
-                    styles[idx] = "background-color: #dbeafe; color: #1d4ed8; font-weight: bold;"
+                if tier == "狙い撃ち":
+                    styles[idx] = "background-color: #fef9c3; color: #854d0e; font-weight: bold;"
                 elif tier == "中穴":
                     styles[idx] = "background-color: #ffedd5; color: #c2410c; font-weight: bold;"
             # 信頼度列
