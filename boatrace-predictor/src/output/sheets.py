@@ -1,4 +1,7 @@
-"""\nGoogle スプレッドシート出力モジュール\n予想結果をスプレッドシートに書き込む\n"""
+"""
+Google スプレッドシート出力モジュール
+予想結果をスプレッドシートに書き込む
+"""
 
 import os
 from datetime import datetime
@@ -47,6 +50,9 @@ _VENUE_BG_COLORS = {
     "大村":   {"red": 1.00, "green": 0.76, "blue": 0.68},
 }
 _DEFAULT_BG = {"red": 0.95, "green": 0.95, "blue": 0.95}  # 不明場所はグレー
+
+# 高配当判定閾値（100倍 = 100円賭けで10,000円以上）
+_HIGH_PAYOUT_THRESHOLD = 10000
 
 
 def _format_header(spreadsheet, sheet, num_cols: int = 9) -> None:
@@ -418,7 +424,7 @@ def update_summary_sheet(
 ) -> None:
     """
     「成績」シートを集計して「サマリー」シートを更新する
-    的中率・回収率を自動計算する
+    的中率・回収率・会場別高配当出現率を自動計算する
     """
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
@@ -435,10 +441,11 @@ def update_summary_sheet(
 
     total_bets = 0
     total_return = 0
-    total_pred_races: set = set()  # 予想レース数（重複なし）
-    total_hit_races: set = set()   # 的中レース数（重複なし）
-    # 日付別集計
+    total_pred_races: set = set()
+    total_hit_races: set = set()
     daily: dict = {}
+    venues: dict = {}
+    race_payouts: dict = {}  # race_key -> 実際の払戻金額（高配当判定用）
 
     for rec in records:
         combination = rec.get("予想買い目", "")
@@ -451,25 +458,47 @@ def update_summary_sheet(
 
         if d not in daily:
             daily[d] = {"bets": 0, "ret": 0, "pred_races": set(), "hit_races": set()}
+        if venue not in venues:
+            venues[venue] = {"bets": 0, "ret": 0, "pred_races": set(), "hit_races": set()}
 
         total_bets += 100
         daily[d]["bets"] += 100
+        venues[venue]["bets"] += 100
         total_pred_races.add(race_key)
         daily[d]["pred_races"].add(race_key)
+        venues[venue]["pred_races"].add(race_key)
+
+        # 実際の払戻を記録（高配当判定用）
+        try:
+            ap = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+            if ap > 0:
+                race_payouts[race_key] = ap
+        except (ValueError, TypeError):
+            pass
 
         if rec.get("的中", "") == "○":
             total_hit_races.add(race_key)
             daily[d]["hit_races"].add(race_key)
+            venues[venue]["hit_races"].add(race_key)
             try:
                 v = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
                 total_return += v
                 daily[d]["ret"] += v
+                venues[venue]["ret"] += v
             except (ValueError, TypeError):
                 pass
 
-    total_points = total_bets // 100          # 予想点数（買い目数）
-    pred_race_count = len(total_pred_races)   # 予想レース数
-    hit_race_count = len(total_hit_races)     # 的中数（レース単位）
+    # 会場別の高配当レース（払戻10,000円以上＝100倍以上）を集計
+    venue_high_payout: dict = {v: set() for v in venues}
+    for race_key, payout in race_payouts.items():
+        if payout >= _HIGH_PAYOUT_THRESHOLD:
+            v = race_key[1]
+            if v in venue_high_payout:
+                venue_high_payout[v].add(race_key)
+
+    total_points = total_bets // 100
+    pred_race_count = len(total_pred_races)
+    hit_race_count = len(total_hit_races)
     hit_rate = f"{hit_race_count / pred_race_count * 100:.1f}%" if pred_race_count > 0 else "0.0%"
     roi = f"{total_return / total_bets * 100:.1f}%" if total_bets > 0 else "0.0%"
     profit = total_return - total_bets
@@ -477,43 +506,83 @@ def update_summary_sheet(
     try:
         s_sheet = spreadsheet.worksheet("サマリー")
     except gspread.WorksheetNotFound:
-        s_sheet = spreadsheet.add_worksheet(title="サマリー", rows=100, cols=7)
+        s_sheet = spreadsheet.add_worksheet(title="サマリー", rows=200, cols=9)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     rows = [
-        ["【予想成績サマリー】", "", "", "", "", "", ""],
-        ["集計日時", now, "", "", "", "", ""],
-        ["", "", "", "", "", "", ""],
-        ["■ 全期間合計", "", "", "", "", "", ""],
-        ["予想点数", "予想レース数", "的中数", "的中率", "総払戻", "回収率", "収支"],
-        [total_points, pred_race_count, hit_race_count, hit_rate, f"¥{total_return:,}", roi, f"¥{profit:,}"],
-        ["", "", "", "", "", "", ""],
-        ["■ 日付別内訳", "", "", "", "", "", ""],
-        ["日付", "予想点数", "予想レース数", "的中数", "的中率", "払戻合計", "収支"],
+        ["【予想成績サマリー】", "", "", "", "", "", "", "", ""],
+        ["集計日時", now, "", "", "", "", "", "", ""],
+        ["", "", "", "", "", "", "", "", ""],
+        ["■ 全期間合計", "", "", "", "", "", "", "", ""],
+        ["予想点数", "予想レース数", "的中数", "的中率", "総払戻", "回収率", "収支", "", ""],
+        [total_points, pred_race_count, hit_race_count, hit_rate,
+         f"¥{total_return:,}", roi, f"¥{profit:,}", "", ""],
+        ["", "", "", "", "", "", "", "", ""],
+        ["■ 日付別内訳", "", "", "", "", "", "", "", ""],
+        ["日付", "予想点数", "予想レース数", "的中数", "的中率", "払戻合計", "収支", "", ""],
     ]
 
     for d in sorted(daily.keys()):
         dd = daily[d]
-        n = dd["bets"] // 100               # 予想点数
-        pred_n = len(dd["pred_races"])       # 予想レース数
-        hit_n = len(dd["hit_races"])         # 的中数（レース単位）
+        n = dd["bets"] // 100
+        pred_n = len(dd["pred_races"])
+        hit_n = len(dd["hit_races"])
         r = dd["ret"]
         dr = f"{hit_n / pred_n * 100:.1f}%" if pred_n > 0 else "0.0%"
         dp = r - dd["bets"]
-        rows.append([d, n, pred_n, hit_n, dr, f"¥{r:,}", f"¥{dp:,}"])
+        rows.append([d, n, pred_n, hit_n, dr, f"¥{r:,}", f"¥{dp:,}", "", ""])
+
+    # 会場別成績セクション（高配当出現率の高い順にソート）
+    rows.append(["", "", "", "", "", "", "", "", ""])
+    rows.append(["■ 会場別成績", "", "", "", "", "", "", "", ""])
+    venue_header_row = len(rows) + 1  # 1-indexed のシート行番号
+    rows.append(["会場", "予想点数", "予想レース数", "的中数", "的中率",
+                 "高配当数(100倍以上)", "高配当出現率", "払戻合計", "回収率"])
+
+    sorted_venues = sorted(
+        venues.keys(),
+        key=lambda v: len(venue_high_payout.get(v, set())) / max(len(venues[v]["pred_races"]), 1),
+        reverse=True,
+    )
+
+    for v in sorted_venues:
+        vd = venues[v]
+        vn = vd["bets"] // 100
+        vpred_n = len(vd["pred_races"])
+        vhit_n = len(vd["hit_races"])
+        vr = vd["ret"]
+        vhp = len(venue_high_payout.get(v, set()))
+        vhit_rate = f"{vhit_n / vpred_n * 100:.1f}%" if vpred_n > 0 else "0.0%"
+        vhp_rate = f"{vhp / vpred_n * 100:.1f}%" if vpred_n > 0 else "0.0%"
+        vroi = f"{vr / vd['bets'] * 100:.1f}%" if vd["bets"] > 0 else "0.0%"
+        rows.append([v, vn, vpred_n, vhit_n, vhit_rate, vhp, vhp_rate, f"¥{vr:,}", vroi])
 
     s_sheet.clear()
     s_sheet.update("A1", rows)
 
-    # 全期間合計行に色付け（黒背景・白文字）
+    # フォーマット適用
     try:
-        s_sheet.format("A5:G5", {"backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
-                                  "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True}})
-        s_sheet.format("A9:G9", {"backgroundColor": {"red": 0.85, "green": 0.85, "blue": 0.85},
-                                  "textFormat": {"bold": True}})
-        # 収支がプラスなら緑、マイナスなら赤（収支はG列に移動）
-        profit_color = {"red": 0.8, "green": 0.95, "blue": 0.8} if profit >= 0 else {"red": 0.95, "green": 0.8, "blue": 0.8}
+        # 全期間合計ヘッダー行（row 5）
+        s_sheet.format("A5:G5", {
+            "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
+            "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True},
+        })
+        # 日付別内訳ヘッダー行（row 9）
+        s_sheet.format("A9:G9", {
+            "backgroundColor": {"red": 0.85, "green": 0.85, "blue": 0.85},
+            "textFormat": {"bold": True},
+        })
+        # 収支セル色（G6）
+        profit_color = (
+            {"red": 0.8, "green": 0.95, "blue": 0.8} if profit >= 0
+            else {"red": 0.95, "green": 0.8, "blue": 0.8}
+        )
         s_sheet.format("G6", {"backgroundColor": profit_color, "textFormat": {"bold": True}})
+        # 会場別成績ヘッダー行
+        s_sheet.format(f"A{venue_header_row}:I{venue_header_row}", {
+            "backgroundColor": {"red": 0.85, "green": 0.85, "blue": 0.85},
+            "textFormat": {"bold": True},
+        })
     except Exception:
         pass
 
