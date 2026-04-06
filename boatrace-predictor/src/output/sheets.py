@@ -1,7 +1,4 @@
-"""
-Google スプレッドシート出力モジュール
-予想結果をスプレッドシートに書き込む
-"""
+"""\nGoogle スプレッドシート出力モジュール\n予想結果をスプレッドシートに書き込む\n"""
 
 import os
 from datetime import datetime
@@ -437,8 +434,9 @@ def update_summary_sheet(
         return
 
     total_bets = 0
-    total_hits = 0
     total_return = 0
+    total_pred_races: set = set()  # 予想レース数（重複なし）
+    total_hit_races: set = set()   # 的中レース数（重複なし）
     # 日付別集計
     daily: dict = {}
 
@@ -447,13 +445,21 @@ def update_summary_sheet(
         if combination in ("", "（予想なし）", "見送り", "-"):
             continue
         d = str(rec.get("日付", ""))
+        venue = str(rec.get("競艇場", ""))
+        race_no = str(rec.get("レース", ""))
+        race_key = (d, venue, race_no)
+
         if d not in daily:
-            daily[d] = {"bets": 0, "hits": 0, "ret": 0}
+            daily[d] = {"bets": 0, "ret": 0, "pred_races": set(), "hit_races": set()}
+
         total_bets += 100
         daily[d]["bets"] += 100
+        total_pred_races.add(race_key)
+        daily[d]["pred_races"].add(race_key)
+
         if rec.get("的中", "") == "○":
-            total_hits += 1
-            daily[d]["hits"] += 1
+            total_hit_races.add(race_key)
+            daily[d]["hit_races"].add(race_key)
             try:
                 v = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
                 total_return += v
@@ -461,50 +467,53 @@ def update_summary_sheet(
             except (ValueError, TypeError):
                 pass
 
-    total_races = total_bets // 100
-    hit_rate = f"{total_hits / total_races * 100:.1f}%" if total_races > 0 else "0.0%"
+    total_points = total_bets // 100          # 予想点数（買い目数）
+    pred_race_count = len(total_pred_races)   # 予想レース数
+    hit_race_count = len(total_hit_races)     # 的中数（レース単位）
+    hit_rate = f"{hit_race_count / pred_race_count * 100:.1f}%" if pred_race_count > 0 else "0.0%"
     roi = f"{total_return / total_bets * 100:.1f}%" if total_bets > 0 else "0.0%"
     profit = total_return - total_bets
 
     try:
         s_sheet = spreadsheet.worksheet("サマリー")
     except gspread.WorksheetNotFound:
-        s_sheet = spreadsheet.add_worksheet(title="サマリー", rows=100, cols=6)
+        s_sheet = spreadsheet.add_worksheet(title="サマリー", rows=100, cols=7)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     rows = [
-        ["【予想成績サマリー】", "", "", "", "", ""],
-        ["集計日時", now, "", "", "", ""],
-        ["", "", "", "", "", ""],
-        ["■ 全期間合計", "", "", "", "", ""],
-        ["予想点数", "的中数", "的中率", "総払戻", "回収率", "収支"],
-        [total_races, total_hits, hit_rate, f"¥{total_return:,}", roi, f"¥{profit:,}"],
-        ["", "", "", "", "", ""],
-        ["■ 日付別内訳", "", "", "", "", ""],
-        ["日付", "予想点数", "的中数", "的中率", "払戻合計", "収支"],
+        ["【予想成績サマリー】", "", "", "", "", "", ""],
+        ["集計日時", now, "", "", "", "", ""],
+        ["", "", "", "", "", "", ""],
+        ["■ 全期間合計", "", "", "", "", "", ""],
+        ["予想点数", "予想レース数", "的中数", "的中率", "総払戻", "回収率", "収支"],
+        [total_points, pred_race_count, hit_race_count, hit_rate, f"¥{total_return:,}", roi, f"¥{profit:,}"],
+        ["", "", "", "", "", "", ""],
+        ["■ 日付別内訳", "", "", "", "", "", ""],
+        ["日付", "予想点数", "予想レース数", "的中数", "的中率", "払戻合計", "収支"],
     ]
 
     for d in sorted(daily.keys()):
         dd = daily[d]
-        n = dd["bets"] // 100
-        h = dd["hits"]
+        n = dd["bets"] // 100               # 予想点数
+        pred_n = len(dd["pred_races"])       # 予想レース数
+        hit_n = len(dd["hit_races"])         # 的中数（レース単位）
         r = dd["ret"]
-        dr = f"{h/n*100:.1f}%" if n > 0 else "0.0%"
+        dr = f"{hit_n / pred_n * 100:.1f}%" if pred_n > 0 else "0.0%"
         dp = r - dd["bets"]
-        rows.append([d, n, h, dr, f"¥{r:,}", f"¥{dp:,}"])
+        rows.append([d, n, pred_n, hit_n, dr, f"¥{r:,}", f"¥{dp:,}"])
 
     s_sheet.clear()
     s_sheet.update("A1", rows)
 
     # 全期間合計行に色付け（黒背景・白文字）
     try:
-        s_sheet.format("A5:F5", {"backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
+        s_sheet.format("A5:G5", {"backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
                                   "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True}})
-        s_sheet.format("A9:F9", {"backgroundColor": {"red": 0.85, "green": 0.85, "blue": 0.85},
+        s_sheet.format("A9:G9", {"backgroundColor": {"red": 0.85, "green": 0.85, "blue": 0.85},
                                   "textFormat": {"bold": True}})
-        # 収支がプラスなら緑、マイナスなら赤
+        # 収支がプラスなら緑、マイナスなら赤（収支はG列に移動）
         profit_color = {"red": 0.8, "green": 0.95, "blue": 0.8} if profit >= 0 else {"red": 0.95, "green": 0.8, "blue": 0.8}
-        s_sheet.format("F6", {"backgroundColor": profit_color, "textFormat": {"bold": True}})
+        s_sheet.format("G6", {"backgroundColor": profit_color, "textFormat": {"bold": True}})
     except Exception:
         pass
 
