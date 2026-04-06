@@ -301,9 +301,13 @@ with tab1:
             if "狙い" in row.index:
                 idx = list(row.index).index("狙い")
                 if tier == "狙い撃ち":
-                    styles[idx] = "background-color: #fef9c3; color: #854d0e; font-weight: bold;"
+                    styles[idx] = "background-color: #dbeafe; color: #1d4ed8; font-weight: bold;"
                 elif tier == "中穴":
+                    styles[idx] = "background-color: #fef9c3; color: #854d0e; font-weight: bold;"
+                elif tier == "大穴":
                     styles[idx] = "background-color: #ffedd5; color: #c2410c; font-weight: bold;"
+                elif tier == "超大穴":
+                    styles[idx] = "background-color: #fce7f3; color: #9d174d; font-weight: bold;"
             # 信頼度列
             if "信頼度" in row.index:
                 idx = list(row.index).index("信頼度")

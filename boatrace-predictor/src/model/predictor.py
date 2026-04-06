@@ -262,51 +262,48 @@ def get_recommendations(
         predictions = predict_race(model, race_row, payout_lookup, live_odds)
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
 
-        # ── 狙い撃ち3点: オッズ50〜100倍の範囲で4エージェント合議＋ROI重視 ──
-        tier1_pool = by_prob[
-            (by_prob["odds_value"] >= 50.0) & (by_prob["odds_value"] < 100.0)
-        ].copy()
-        # 合議数が高い順→ROI順でソート
-        tier1_pool = tier1_pool.sort_values(
-            ["agreement", "expected_roi"], ascending=[False, False]
-        )
-        tier1 = tier1_pool.head(3).copy()
-        tier1["tier"] = "狙い撃ち"
-
-        # 足りない場合は範囲を広げて補完
-        if len(tier1) < 3:
-            extra = by_prob[
-                (by_prob["odds_value"] >= 40.0) & (by_prob["odds_value"] < 120.0)
+        def pick_tier(pool, exclude_combos, min_odds, max_odds, n, tier_name, fallback_min=None, fallback_max=None):
+            """指定オッズ範囲からエージェント合議＋ROIで上位n点を選出"""
+            candidates = pool[
+                (pool["odds_value"] >= min_odds) & (pool["odds_value"] <= max_odds)
             ].copy()
-            extra = extra[~extra["combination"].isin(tier1["combination"])]
-            extra = extra.sort_values(["agreement", "expected_roi"], ascending=[False, False])
-            need = 3 - len(tier1)
-            extra_pick = extra.head(need).copy()
-            extra_pick["tier"] = "狙い撃ち"
-            tier1 = pd.concat([tier1, extra_pick]).reset_index(drop=True)
+            candidates = candidates[~candidates["combination"].isin(exclude_combos)]
+            candidates = candidates.sort_values(["agreement", "expected_roi"], ascending=[False, False])
+            result = candidates.head(n).copy()
 
-        # ── 中穴2点: オッズ100〜150倍の範囲でROI重視 ──
-        tier2_pool = by_prob[
-            (by_prob["odds_value"] >= 100.0) & (by_prob["odds_value"] < 150.0)
-        ].copy()
-        tier2_pool = tier2_pool[~tier2_pool["combination"].isin(tier1["combination"])]
-        tier2 = tier2_pool.sort_values("expected_roi", ascending=False).head(2).copy()
-        tier2["tier"] = "中穴"
+            # 足りない場合はフォールバック範囲で補完
+            if len(result) < n and fallback_min is not None:
+                fb = pool[
+                    (pool["odds_value"] >= fallback_min) & (pool["odds_value"] <= fallback_max)
+                ].copy()
+                fb = fb[~fb["combination"].isin(exclude_combos)]
+                fb = fb[~fb["combination"].isin(result["combination"])]
+                fb = fb.sort_values(["agreement", "expected_roi"], ascending=[False, False])
+                extra = fb.head(n - len(result)).copy()
+                result = pd.concat([result, extra]).reset_index(drop=True)
 
-        # 足りない場合は範囲を広げて補完
-        if len(tier2) < 2:
-            extra2 = by_prob[
-                (by_prob["odds_value"] >= 80.0) & (by_prob["odds_value"] < 200.0)
-            ].copy()
-            extra2 = extra2[~extra2["combination"].isin(tier1["combination"])]
-            extra2 = extra2[~extra2["combination"].isin(tier2["combination"])]
-            extra2 = extra2.sort_values("expected_roi", ascending=False)
-            need2 = 2 - len(tier2)
-            extra2_pick = extra2.head(need2).copy()
-            extra2_pick["tier"] = "中穴"
-            tier2 = pd.concat([tier2, extra2_pick]).reset_index(drop=True)
+            result["tier"] = tier_name
+            return result
 
-        recommended = pd.concat([tier1, tier2]).reset_index(drop=True)
+        used = set()
+
+        # ── 狙い撃ち3点: 100〜150倍 ──
+        t1 = pick_tier(by_prob, used, 100.0, 150.0, 3, "狙い撃ち", 80.0, 180.0)
+        used.update(t1["combination"].tolist())
+
+        # ── 中穴3点: 151〜250倍 ──
+        t2 = pick_tier(by_prob, used, 151.0, 250.0, 3, "中穴", 130.0, 300.0)
+        used.update(t2["combination"].tolist())
+
+        # ── 大穴2点: 251〜500倍 ──
+        t3 = pick_tier(by_prob, used, 251.0, 500.0, 2, "大穴", 200.0, 600.0)
+        used.update(t3["combination"].tolist())
+
+        # ── 超大穴2点: 501倍以上 ──
+        t4 = pick_tier(by_prob, used, 501.0, 99999.0, 2, "超大穴", 400.0, 99999.0)
+        used.update(t4["combination"].tolist())
+
+        recommended = pd.concat([t1, t2, t3, t4]).reset_index(drop=True)
 
         if recommended.empty:
             all_recommendations.append({
