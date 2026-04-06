@@ -285,9 +285,9 @@ def get_recommendations(
             extra_pick["tier"] = "狙い撃ち"
             tier1 = pd.concat([tier1, extra_pick]).reset_index(drop=True)
 
-        # ── 中穴2点: オッズ15〜50倍の範囲でROI重視 ──
+        # ── 中穴2点: オッズ100〜150倍の範囲でROI重視 ──
         tier2_pool = by_prob[
-            (by_prob["odds_value"] >= 15.0) & (by_prob["odds_value"] < 50.0)
+            (by_prob["odds_value"] >= 100.0) & (by_prob["odds_value"] < 150.0)
         ].copy()
         tier2_pool = tier2_pool[~tier2_pool["combination"].isin(tier1["combination"])]
         tier2 = tier2_pool.sort_values("expected_roi", ascending=False).head(2).copy()
@@ -295,7 +295,10 @@ def get_recommendations(
 
         # 足りない場合は範囲を広げて補完
         if len(tier2) < 2:
-            extra2 = by_prob[~by_prob["combination"].isin(tier1["combination"])]
+            extra2 = by_prob[
+                (by_prob["odds_value"] >= 80.0) & (by_prob["odds_value"] < 200.0)
+            ].copy()
+            extra2 = extra2[~extra2["combination"].isin(tier1["combination"])]
             extra2 = extra2[~extra2["combination"].isin(tier2["combination"])]
             extra2 = extra2.sort_values("expected_roi", ascending=False)
             need2 = 2 - len(tier2)
