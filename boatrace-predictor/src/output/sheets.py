@@ -4,6 +4,7 @@ Google スプレッドシート出力モジュール
 """
 
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -17,30 +18,24 @@ SCOPES = [
 ]
 
 # 競艇場ごとの背景色（地域別に色分け）
-# RGB値は0〜1の範囲
 _VENUE_BG_COLORS = {
-    # 関東 - 水色系
     "桐生":   {"red": 0.82, "green": 0.91, "blue": 0.98},
     "戸田":   {"red": 0.79, "green": 0.89, "blue": 0.98},
     "江戸川": {"red": 0.76, "green": 0.88, "blue": 0.97},
     "平和島": {"red": 0.74, "green": 0.86, "blue": 0.97},
     "多摩川": {"red": 0.72, "green": 0.85, "blue": 0.96},
-    # 中部 - 緑系
     "浜名湖": {"red": 0.82, "green": 0.96, "blue": 0.82},
     "蒲郡":   {"red": 0.80, "green": 0.94, "blue": 0.80},
     "常滑":   {"red": 0.78, "green": 0.93, "blue": 0.78},
     "津":     {"red": 0.76, "green": 0.92, "blue": 0.76},
     "三国":   {"red": 0.74, "green": 0.91, "blue": 0.74},
-    # 近畿 - 紫系
     "びわこ": {"red": 0.91, "green": 0.82, "blue": 0.98},
     "住之江": {"red": 0.89, "green": 0.80, "blue": 0.97},
     "尼崎":   {"red": 0.87, "green": 0.78, "blue": 0.96},
-    # 中国・四国 - 黄色系
     "鳴門":   {"red": 1.00, "green": 0.97, "blue": 0.77},
     "丸亀":   {"red": 1.00, "green": 0.95, "blue": 0.74},
     "児島":   {"red": 1.00, "green": 0.93, "blue": 0.71},
     "宮島":   {"red": 1.00, "green": 0.91, "blue": 0.68},
-    # 九州 - オレンジ・ピンク系
     "徳山":   {"red": 1.00, "green": 0.88, "blue": 0.80},
     "下関":   {"red": 1.00, "green": 0.86, "blue": 0.78},
     "若松":   {"red": 1.00, "green": 0.84, "blue": 0.76},
@@ -49,18 +44,27 @@ _VENUE_BG_COLORS = {
     "唐津":   {"red": 1.00, "green": 0.78, "blue": 0.70},
     "大村":   {"red": 1.00, "green": 0.76, "blue": 0.68},
 }
-_DEFAULT_BG = {"red": 0.95, "green": 0.95, "blue": 0.95}  # 不明場所はグレー
-
-# 高配当判定閾値（100倍 = 100円賭けで10,000円以上）
+_DEFAULT_BG = {"red": 0.95, "green": 0.95, "blue": 0.95}
 _HIGH_PAYOUT_THRESHOLD = 10000
 
 
+def _retry_get_records(sheet, max_attempts: int = 3) -> list:
+    """get_all_records() を最大 max_attempts 回リトライする"""
+    for attempt in range(max_attempts):
+        try:
+            return sheet.get_all_records()
+        except Exception as e:
+            if attempt < max_attempts - 1:
+                time.sleep(2 ** attempt)  # 1s, 2s
+            else:
+                raise e
+    return []
+
+
 def _format_header(spreadsheet, sheet, num_cols: int = 9) -> None:
-    """1行目を太字・薄いグレー背景にして行を固定する"""
     sid = sheet.id
     try:
         spreadsheet.batch_update({"requests": [
-            # 太字 + 背景色
             {"repeatCell": {
                 "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1,
                           "startColumnIndex": 0, "endColumnIndex": num_cols},
@@ -71,7 +75,6 @@ def _format_header(spreadsheet, sheet, num_cols: int = 9) -> None:
                 }},
                 "fields": "userEnteredFormat(backgroundColor,textFormat.bold,horizontalAlignment)",
             }},
-            # 1行目を固定
             {"updateSheetProperties": {
                 "properties": {"sheetId": sid, "gridProperties": {"frozenRowCount": 1}},
                 "fields": "gridProperties.frozenRowCount",
@@ -82,42 +85,26 @@ def _format_header(spreadsheet, sheet, num_cols: int = 9) -> None:
 
 
 def _apply_venue_color(sheet, row_no: int, venue_name: str, num_cols: int = 9) -> None:
-    """指定行に競艇場カラーの背景色を適用する"""
     color = _VENUE_BG_COLORS.get(venue_name, _DEFAULT_BG)
     last_col = chr(ord("A") + num_cols - 1)
     try:
-        sheet.format(
-            f"A{row_no}:{last_col}{row_no}",
-            {"backgroundColor": color},
-        )
+        sheet.format(f"A{row_no}:{last_col}{row_no}", {"backgroundColor": color})
     except Exception:
-        pass  # 色付けに失敗しても予想データは書き込み済みのためスルー
+        pass
 
 
 def get_client(credentials_path: str = None) -> gspread.Client:
-    """
-    Google Sheets APIクライアントを取得する
-
-    Args:
-        credentials_path: サービスアカウントJSONファイルのパス
-                         未指定の場合は環境変数 GOOGLE_CREDENTIALS_PATH を参照
-
-    Returns:
-        gspread.Client
-    """
     cred_path = credentials_path or os.environ.get("GOOGLE_CREDENTIALS_PATH")
     if not cred_path or not Path(cred_path).exists():
         raise FileNotFoundError(
             "Google認証ファイルが見つかりません。\n"
             "環境変数 GOOGLE_CREDENTIALS_PATH にサービスアカウントJSONのパスを設定してください。"
         )
-
     creds = Credentials.from_service_account_file(cred_path, scopes=SCOPES)
     return gspread.authorize(creds)
 
 
 def _ensure_spreadsheet_title(spreadsheet) -> None:
-    """スプレッドシートのタイトルが 'BOAT LAB' でなければ変更する"""
     try:
         if not spreadsheet.title.startswith("BOAT LAB"):
             spreadsheet.update_title("BOAT LAB")
@@ -132,15 +119,6 @@ def write_predictions(
     sheet_name: str = None,
     credentials_path: str = None,
 ) -> None:
-    """
-    予想結果をスプレッドシートに書き込む
-
-    Args:
-        spreadsheet_id: スプレッドシートのID（URLから取得）
-        recommendations: get_recommendations()の出力DataFrame
-        sheet_name: シート名（未指定の場合は今日の日付）
-        credentials_path: 認証ファイルパス
-    """
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
     _ensure_spreadsheet_title(spreadsheet)
@@ -148,22 +126,18 @@ def write_predictions(
     today = datetime.now().strftime("%Y-%m-%d")
     sheet_name = sheet_name or today
 
-    # シートを取得または作成
     try:
         sheet = spreadsheet.worksheet(sheet_name)
         sheet.clear()
     except gspread.WorksheetNotFound:
         sheet = spreadsheet.add_worksheet(title=sheet_name, rows=200, cols=10)
 
-    # ヘッダー行
     headers = ["日付", "競艇場", "レース", "狙い", "買い目（3連単）", "的中確率", "オッズ", "期待回収率", "信頼度", "オッズ元"]
     sheet.update("A1", [headers])
     _format_header(spreadsheet, sheet, num_cols=10)
 
-    # データ行
     if not recommendations.empty:
         cols = ["date", "venue_name", "race_no", "tier", "combination", "prob", "odds", "expected_roi", "confidence", "odds_source"]
-        # 列がない場合（見送り行など）は"-"で埋める
         for col in cols:
             if col not in recommendations.columns:
                 recommendations[col] = "-"
@@ -179,14 +153,6 @@ def append_prediction_row(
     sheet_name: str = None,
     credentials_path: str = None,
 ) -> None:
-    """
-    1レース分の予想行を「予想」シートに追記する（自動モード用）
-
-    Args:
-        row: {date, venue_name, race_no, combination, prob, avg_payout,
-               expected_roi, confidence, odds_source}
-    """
-    # シート名未指定の場合は今日の日付を使用（例: "2026-03-27"）
     if sheet_name is None:
         sheet_name = datetime.now().strftime("%Y-%m-%d")
 
@@ -208,18 +174,15 @@ def append_prediction_row(
     values = [row.get(c, "-") for c in cols]
     sheet.append_row(values, value_input_option="RAW")
 
-    # 競艇場ごとに背景色を適用
     last_row = len(sheet.get_all_values())
     _apply_venue_color(sheet, last_row, str(row.get("venue_name", "")))
 
 
 def _color_result_row(spreadsheet, sheet, row_no: int, venue_name: str, hit: str) -> None:
-    """成績シートの1行に会場色＋的中色をリアルタイムで適用する"""
     try:
         sid = sheet.id
         bg = _VENUE_BG_COLORS.get(venue_name, _DEFAULT_BG)
         requests = [
-            # 行全体に会場カラー
             {"repeatCell": {
                 "range": {"sheetId": sid, "startRowIndex": row_no - 1, "endRowIndex": row_no,
                           "startColumnIndex": 0, "endColumnIndex": 10},
@@ -227,7 +190,6 @@ def _color_result_row(spreadsheet, sheet, row_no: int, venue_name: str, hit: str
                 "fields": "userEnteredFormat.backgroundColor",
             }}
         ]
-        # 的中セル（I列=index8）に色付け
         if hit in ("○", "×"):
             hit_bg = (
                 {"red": 0.7, "green": 0.95, "blue": 0.7} if hit == "○"
@@ -244,7 +206,7 @@ def _color_result_row(spreadsheet, sheet, row_no: int, venue_name: str, hit: str
             }})
         spreadsheet.batch_update({"requests": requests})
     except Exception:
-        pass  # 色付け失敗は無視（データは書き込み済み）
+        pass
 
 
 def update_result_row(
@@ -258,10 +220,6 @@ def update_result_row(
 ) -> None:
     """
     「成績」シートに1レース分の結果を記録・的中判定を更新する
-
-    成績シートの列構成:
-    日付 | 競艇場 | レース | 予想買い目 | 的中確率 | 期待回収率 |
-    実際の結果 | 実際の払戻 | 的中 | 収支
     """
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
@@ -276,19 +234,22 @@ def update_result_row(
         r_sheet.update("A1", [headers])
         _format_header(spreadsheet, r_sheet, num_cols=10)
 
-    # 日付シートから該当レースの予想行を取得（例: "2026-03-27"）
+    # 予想シートから該当レースの予想行を取得（503エラーに対しリトライ）
     pred_rows = []
     for sheet_title in [date, "予想"]:
-        try:
-            p_sheet = spreadsheet.worksheet(sheet_title)
-            pred_rows = p_sheet.get_all_records()
-            if pred_rows:
+        for attempt in range(3):
+            try:
+                p_sheet = spreadsheet.worksheet(sheet_title)
+                pred_rows = _retry_get_records(p_sheet)
                 break
-        except Exception:
-            continue
+            except gspread.WorksheetNotFound:
+                break  # 次のシート名へ
+            except Exception:
+                if attempt < 2:
+                    time.sleep(2 ** attempt)
+        if pred_rows:
+            break
 
-    # 該当レースの予想行を抽出
-    # 「買い目（3連単）」列の名前が異なる場合も考慮
     race_preds = [
         r for r in pred_rows
         if str(r.get("日付", "")) == date
@@ -297,7 +258,6 @@ def update_result_row(
         and r.get("買い目（3連単）", "") not in ("", "見送り", "-")
     ]
 
-    # 列名がずれている場合のフォールバック（旧フォーマット対応）
     if not race_preds:
         race_preds = [
             r for r in pred_rows
@@ -305,16 +265,14 @@ def update_result_row(
             and str(r.get("競艇場", "")) == venue_name
             and str(r.get("レース", "")) == str(race_no)
         ]
-        # 「見送り」「-」「空」以外のものを買い目として扱う
         race_preds = [
             r for r in race_preds
             if any(
                 str(v) not in ("", "見送り", "-", "（予想なし）")
-                and "-" in str(v)  # "1-2-3" 形式の買い目を探す
+                and "-" in str(v)
                 for v in r.values()
             )
         ]
-        # 買い目列を特定して正規化
         for r in race_preds:
             if "買い目（3連単）" not in r or r["買い目（3連単）"] in ("", "-"):
                 for k, v in r.items():
@@ -323,7 +281,6 @@ def update_result_row(
                         break
 
     if not race_preds:
-        # 予想なしの場合でも結果だけ記録
         r_sheet.append_row(
             [date, venue_name, race_no, "（予想なし）", "-", "-",
              actual_combination, actual_payout, "-", 0],
@@ -336,7 +293,7 @@ def update_result_row(
         combination = pred.get("買い目（3連単）", "")
         hit = "○" if combination == actual_combination else "×"
         payout = actual_payout if hit == "○" else 0
-        profit = payout - 100  # 100円賭け基準
+        profit = payout - 100
 
         r_sheet.append_row(
             [date, venue_name, race_no, combination,
@@ -353,7 +310,6 @@ def apply_colors_to_results_sheet(
     spreadsheet_id: str,
     credentials_path: str = None,
 ) -> None:
-    """成績シートの全行に競艇場カラーと的中色を一括適用する"""
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
 
@@ -369,28 +325,20 @@ def apply_colors_to_results_sheet(
     fmt_requests = []
     sheet_id = r_sheet.id
 
-    for i, row in enumerate(all_rows[1:], start=2):  # 2行目からデータ行
+    for i, row in enumerate(all_rows[1:], start=2):
         venue_name = row[1] if len(row) > 1 else ""
         hit = row[8] if len(row) > 8 else ""
-
         bg = _VENUE_BG_COLORS.get(venue_name, _DEFAULT_BG)
 
-        # 行全体に競艇場カラー
         fmt_requests.append({
             "repeatCell": {
-                "range": {
-                    "sheetId": sheet_id,
-                    "startRowIndex": i - 1,
-                    "endRowIndex": i,
-                    "startColumnIndex": 0,
-                    "endColumnIndex": 10,
-                },
+                "range": {"sheetId": sheet_id, "startRowIndex": i - 1, "endRowIndex": i,
+                          "startColumnIndex": 0, "endColumnIndex": 10},
                 "cell": {"userEnteredFormat": {"backgroundColor": bg}},
                 "fields": "userEnteredFormat.backgroundColor",
             }
         })
 
-        # 的中セル（I列=index8）: ○は緑、×は薄赤
         if hit in ("○", "×"):
             hit_bg = (
                 {"red": 0.7, "green": 0.95, "blue": 0.7} if hit == "○"
@@ -398,13 +346,8 @@ def apply_colors_to_results_sheet(
             )
             fmt_requests.append({
                 "repeatCell": {
-                    "range": {
-                        "sheetId": sheet_id,
-                        "startRowIndex": i - 1,
-                        "endRowIndex": i,
-                        "startColumnIndex": 8,
-                        "endColumnIndex": 9,
-                    },
+                    "range": {"sheetId": sheet_id, "startRowIndex": i - 1, "endRowIndex": i,
+                              "startColumnIndex": 8, "endColumnIndex": 9},
                     "cell": {"userEnteredFormat": {
                         "backgroundColor": hit_bg,
                         "textFormat": {"bold": True},
@@ -424,17 +367,26 @@ def update_summary_sheet(
 ) -> None:
     """
     「成績」シートを集計して「サマリー」シートを更新する
-    的中率・回収率・会場別高配当出現率を自動計算する
     """
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
 
-    try:
-        r_sheet = spreadsheet.worksheet("成績")
-        records = r_sheet.get_all_records()
-    except Exception:
-        print("[WARN] 成績シートが見つかりません")
-        return
+    # 成績シートをリトライ付きで読み込む
+    records = []
+    for attempt in range(3):
+        try:
+            r_sheet = spreadsheet.worksheet("成績")
+            records = _retry_get_records(r_sheet)
+            break
+        except gspread.WorksheetNotFound:
+            print("[WARN] 成績シートがまだ作成されていません")
+            return
+        except Exception:
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+            else:
+                print("[WARN] 成績シートの読み込みに失敗しました（APIエラー）")
+                return
 
     if not records:
         return
@@ -445,7 +397,7 @@ def update_summary_sheet(
     total_hit_races: set = set()
     daily: dict = {}
     venues: dict = {}
-    race_payouts: dict = {}  # race_key -> 実際の払戻金額（高配当判定用）
+    race_payouts: dict = {}
 
     for rec in records:
         combination = rec.get("予想買い目", "")
@@ -468,7 +420,6 @@ def update_summary_sheet(
         daily[d]["pred_races"].add(race_key)
         venues[venue]["pred_races"].add(race_key)
 
-        # 実際の払戻を記録（高配当判定用）
         try:
             ap = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
             if ap > 0:
@@ -488,7 +439,6 @@ def update_summary_sheet(
             except (ValueError, TypeError):
                 pass
 
-    # 会場別の高配当レース（払戻10,000円以上＝100倍以上）を集計
     venue_high_payout: dict = {v: set() for v in venues}
     for race_key, payout in race_payouts.items():
         if payout >= _HIGH_PAYOUT_THRESHOLD:
@@ -532,10 +482,9 @@ def update_summary_sheet(
         dp = r - dd["bets"]
         rows.append([d, n, pred_n, hit_n, dr, f"¥{r:,}", f"¥{dp:,}", "", ""])
 
-    # 会場別成績セクション（高配当出現率の高い順にソート）
     rows.append(["", "", "", "", "", "", "", "", ""])
     rows.append(["■ 会場別成績", "", "", "", "", "", "", "", ""])
-    venue_header_row = len(rows) + 1  # 1-indexed のシート行番号
+    venue_header_row = len(rows) + 1
     rows.append(["会場", "予想点数", "予想レース数", "的中数", "的中率",
                  "高配当数(100倍以上)", "高配当出現率", "払戻合計", "回収率"])
 
@@ -560,25 +509,20 @@ def update_summary_sheet(
     s_sheet.clear()
     s_sheet.update("A1", rows)
 
-    # フォーマット適用
     try:
-        # 全期間合計ヘッダー行（row 5）
         s_sheet.format("A5:G5", {
             "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
             "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True},
         })
-        # 日付別内訳ヘッダー行（row 9）
         s_sheet.format("A9:G9", {
             "backgroundColor": {"red": 0.85, "green": 0.85, "blue": 0.85},
             "textFormat": {"bold": True},
         })
-        # 収支セル色（G6）
         profit_color = (
             {"red": 0.8, "green": 0.95, "blue": 0.8} if profit >= 0
             else {"red": 0.95, "green": 0.8, "blue": 0.8}
         )
         s_sheet.format("G6", {"backgroundColor": profit_color, "textFormat": {"bold": True}})
-        # 会場別成績ヘッダー行
         s_sheet.format(f"A{venue_header_row}:I{venue_header_row}", {
             "backgroundColor": {"red": 0.85, "green": 0.85, "blue": 0.85},
             "textFormat": {"bold": True},
@@ -594,14 +538,6 @@ def write_backtest_summary(
     roi_history: dict,
     credentials_path: str = None,
 ) -> None:
-    """
-    バックテスト結果（回収率サマリー）をスプレッドシートに書き込む
-
-    Args:
-        spreadsheet_id: スプレッドシートのID
-        roi_history: calculate_roi_history()の出力dict
-        credentials_path: 認証ファイルパス
-    """
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
 
