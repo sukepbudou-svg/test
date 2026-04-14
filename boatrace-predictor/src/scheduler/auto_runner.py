@@ -197,12 +197,13 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                 # ── 予想タイミング: 発走10分前 ──
                 predict_at = scheduled_dt - timedelta(minutes=PREDICT_BEFORE_MIN)
                 if not race["predicted"] and now >= predict_at:
-                    _predict_one_race(
+                    pred_rows = _predict_one_race(
                         race, df_program, model, payout_lookup,
                         today, spreadsheet_id, credentials_path,
                         fetch_beforeinfo_for_races, fetch_odds_for_races,
                         build_features, get_recommendations, append_prediction_row,
                     )
+                    race["pred_rows"] = pred_rows or []
                     race["predicted"] = True
 
                 # ── 結果取得タイミング: 発走8分後 ──
@@ -211,6 +212,7 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                     success = _fetch_and_record_result(
                         race, today, spreadsheet_id, credentials_path,
                         fetch_race_result, update_result_row,
+                        pred_rows_override=race.get("pred_rows", []),
                     )
                     if success:
                         race["result_fetched"] = True
@@ -236,8 +238,8 @@ def _predict_one_race(
     today, spreadsheet_id, credentials_path,
     fetch_beforeinfo_for_races, fetch_odds_for_races,
     build_features, get_recommendations, append_prediction_row,
-) -> None:
-    """1レース分の予想を実行してスプレッドシートに書き込む"""
+) -> list:
+    """1レース分の予想を実行してスプレッドシートに書き込む。予想行リストを返す（メモリキャッシュ用）"""
     import pandas as pd
 
     venue_code = race["venue_code"]
@@ -278,22 +280,37 @@ def _predict_one_race(
     recs = get_recommendations(model, df_features, payout_lookup=payout_lookup,
                                all_live_odds=all_live_odds)
 
-    # スプレッドシートに書き込む
+    # スプレッドシートに書き込む＆メモリキャッシュ用にリストを作成
+    pred_rows = []
+    date_str = today.strftime("%Y-%m-%d")
     for _, rec in recs.iterrows():
         if rec.get("combination") in ("見送り", "", "-"):
             continue
-        append_prediction_row(spreadsheet_id, rec.to_dict(), credentials_path=credentials_path)
+        row_dict = rec.to_dict()
+        append_prediction_row(spreadsheet_id, row_dict, credentials_path=credentials_path)
         print(f"  → {rec['combination']} 確率:{rec['prob']} 期待回収率:{rec['expected_roi']}")
+        # 成績2シートの列名に合わせてキャッシュ用dictを作成
+        pred_rows.append({
+            "日付": date_str,
+            "競艇場": venue_name,
+            "レース": str(race_no),
+            "買い目（3連単）": rec.get("combination", ""),
+            "的中確率": rec.get("prob", "-"),
+            "期待回収率": rec.get("expected_roi", "-"),
+        })
 
     if recs[recs["combination"] != "見送り"].empty:
         print(f"  → 見送り（期待回収率が基準未満）")
+
+    return pred_rows
 
 
 def _fetch_and_record_result(
     race: dict, today, spreadsheet_id, credentials_path,
     fetch_race_result, update_result_row,
+    pred_rows_override: list = None,
 ) -> bool:
-    """レース結果を取得して成績シートに記録する。成功したらTrueを返す。"""
+    """レース結果を取得して成績2シートに記録する。成功したらTrueを返す。"""
     venue_code = race["venue_code"]
     race_no = race["race_no"]
     venue_name = race["venue_name"]
@@ -312,6 +329,7 @@ def _fetch_and_record_result(
         actual_combination=result["combination"],
         actual_payout=result["payout"],
         credentials_path=credentials_path,
+        pred_rows_override=pred_rows_override,
     )
     return True
 
