@@ -282,13 +282,17 @@ def update_result_row(
     spreadsheet = client.open_by_key(spreadsheet_id)
 
     RESULT_SHEET = "成績2"
+    RESULT_HEADERS = ["日付", "競艇場", "レース", "予想買い目", "的中確率", "期待回収率",
+                      "実際の結果", "実際の払戻", "的中", "収支（円）"]
     try:
         r_sheet = spreadsheet.worksheet(RESULT_SHEET)
+        # クリア後など空の場合はヘッダーを再作成
+        if not r_sheet.get_all_values():
+            r_sheet.update("A1", [RESULT_HEADERS])
+            _format_header(spreadsheet, r_sheet, num_cols=10)
     except gspread.WorksheetNotFound:
         r_sheet = spreadsheet.add_worksheet(title=RESULT_SHEET, rows=2000, cols=12)
-        headers = ["日付", "競艇場", "レース", "予想買い目", "的中確率", "期待回収率",
-                   "実際の結果", "実際の払戻", "的中", "収支（円）"]
-        r_sheet.update("A1", [headers])
+        r_sheet.update("A1", [RESULT_HEADERS])
         _format_header(spreadsheet, r_sheet, num_cols=10)
 
     # メモリキャッシュ（auto_runner から渡された場合）を優先使用
