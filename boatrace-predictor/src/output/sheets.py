@@ -482,12 +482,9 @@ def update_summary_sheet(
     total_bets = 0
     total_hits = 0
     total_return = 0
-    # 予想レース数カウント（重複排除）
     predicted_race_keys: set = set()
     hit_race_keys: set = set()
-    # 日付別集計
     daily: dict = {}
-    # 会場別集計（高配当出現率用）
     venue_stats: dict = {}
 
     for rec in records:
@@ -504,16 +501,25 @@ def update_summary_sheet(
         if d not in daily:
             daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
         if v not in venue_stats:
-            venue_stats[v] = {"race_keys": set(), "high_payout_keys": set()}
+            venue_stats[v] = {
+                "race_keys": set(),
+                "high_payout_keys": set(),
+                "hit_race_keys": set(),
+                "bets": 0,
+                "ret": 0,
+                "race_payouts": {},   # race_key → actual_payout
+            }
 
         total_bets += 100
         daily[d]["bets"] += 100
         daily[d]["race_keys"].add(race_key)
         venue_stats[v]["race_keys"].add(race_key)
+        venue_stats[v]["bets"] += 100
 
-        # 実際の払戻で高配当チェック（的中有無問わず）
+        # 実際の払戻を記録（倍率帯・高配当集計に使用）
         try:
             actual_payout = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+            venue_stats[v]["race_payouts"][race_key] = actual_payout
             if actual_payout >= _HIGH_PAYOUT_THRESHOLD:
                 venue_stats[v]["high_payout_keys"].add(race_key)
         except (ValueError, TypeError):
@@ -523,10 +529,12 @@ def update_summary_sheet(
             total_hits += 1
             hit_race_keys.add(race_key)
             daily[d]["hit_race_keys"].add(race_key)
+            venue_stats[v]["hit_race_keys"].add(race_key)
             try:
                 payout_val = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
                 total_return += payout_val
                 daily[d]["ret"] += payout_val
+                venue_stats[v]["ret"] += payout_val
             except (ValueError, TypeError):
                 pass
 
@@ -540,7 +548,16 @@ def update_summary_sheet(
     try:
         s_sheet = spreadsheet.worksheet("サマリー3")
     except gspread.WorksheetNotFound:
-        s_sheet = spreadsheet.add_worksheet(title="サマリー3", rows=200, cols=7)
+        s_sheet = spreadsheet.add_worksheet(title="サマリー3", rows=400, cols=7)
+
+    # 会場リスト（高配当出現率降順）
+    venue_list = []
+    for vn, vs in venue_stats.items():
+        vr = len(vs["race_keys"])
+        vh = len(vs["high_payout_keys"])
+        vrate = vh / vr if vr > 0 else 0.0
+        venue_list.append((vn, vs, vrate))
+    venue_list.sort(key=lambda x: x[2], reverse=True)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     rows = [
@@ -555,7 +572,6 @@ def update_summary_sheet(
         ["■ 日付別内訳", "", "", "", "", "", ""],
         ["日付", "予想点数", "予想レース数", "的中数", "的中率", "払戻合計", "収支"],
     ]
-
     for d in sorted(daily.keys()):
         dd = daily[d]
         n = dd["bets"] // 100
@@ -566,33 +582,62 @@ def update_summary_sheet(
         dp = r - dd["bets"]
         rows.append([d, n, pr, h, dr, f"¥{r:,}", f"¥{dp:,}"])
 
-    # 会場別高配当出現率セクション（日付別内訳との間に3行空ける）
+    # ── 会場別高配当出現率 ──
     rows.append(["", "", "", "", "", "", ""])
     rows.append(["", "", "", "", "", "", ""])
     rows.append(["", "", "", "", "", "", ""])
     rows.append(["■ 会場別高配当出現率（払戻10,000円以上）", "", "", "", "", "", ""])
     rows.append(["会場", "予想レース数", "高配当レース数", "高配当出現率", "", "", ""])
-
-    venue_list = []
-    for vn, vs in venue_stats.items():
+    high_payout_venue_rows = []
+    for vn, vs, _ in venue_list:
         vr = len(vs["race_keys"])
         vh = len(vs["high_payout_keys"])
         vrate = vh / vr if vr > 0 else 0.0
-        venue_list.append((vn, vr, vh, vrate))
-    venue_list.sort(key=lambda x: x[3], reverse=True)
-
-    # 会場データが始まるシート行（0-indexed）を計算
-    # 固定9行 + 日付行 + 空行3行 + セクションヘッダー + 列ヘッダー = 14 + len(daily)
-    venue_data_start_row = 14 + len(daily)
-
-    for vn, vr, vh, vrate in venue_list:
+        high_payout_venue_rows.append((len(rows), vn))
         rows.append([vn, vr, vh, f"{vrate * 100:.1f}%", "", "", ""])
+
+    # ── 会場別収支・勝率 ──
+    rows.append(["", "", "", "", "", "", ""])
+    rows.append(["", "", "", "", "", "", ""])
+    rows.append(["■ 会場別収支・勝率", "", "", "", "", "", ""])
+    rows.append(["会場", "予想R数", "的中数", "的中率", "収支", "回収率", ""])
+    profit_venue_rows = []
+    for vn, vs, _ in venue_list:
+        vr = len(vs["race_keys"])
+        v_hit = len(vs["hit_race_keys"])
+        v_bet = vs["bets"]
+        v_ret = vs["ret"]
+        v_hit_rate = f"{v_hit / vr * 100:.1f}%" if vr > 0 else "0.0%"
+        v_profit = v_ret - v_bet
+        v_roi = f"{v_ret / v_bet * 100:.1f}%" if v_bet > 0 else "0.0%"
+        profit_venue_rows.append((len(rows), vn))
+        rows.append([vn, vr, v_hit, v_hit_rate, f"¥{v_profit:,}", v_roi, ""])
+
+    # ── 倍率帯別出現率 ──
+    rows.append(["", "", "", "", "", "", ""])
+    rows.append(["", "", "", "", "", "", ""])
+    rows.append(["■ 倍率帯別出現率", "", "", "", "", "", ""])
+    rows.append(["会場", "〜25倍(回)", "〜25倍(%)", "26〜100倍(回)", "26〜100倍(%)",
+                 "101倍〜(回)", "101倍〜(%)"])
+    odds_range_venue_rows = []
+    for vn, vs, _ in venue_list:
+        payouts = list(vs["race_payouts"].values())
+        total_p = len(payouts)
+        r1 = sum(1 for p in payouts if p <= 2500)
+        r2 = sum(1 for p in payouts if 2501 <= p <= 10000)
+        r3 = sum(1 for p in payouts if p >= 10001)
+        r1p = f"{r1 / total_p * 100:.1f}%" if total_p > 0 else "-"
+        r2p = f"{r2 / total_p * 100:.1f}%" if total_p > 0 else "-"
+        r3p = f"{r3 / total_p * 100:.1f}%" if total_p > 0 else "-"
+        odds_range_venue_rows.append((len(rows), vn))
+        rows.append([vn, r1, r1p, r2, r2p, r3, r3p])
 
     s_sheet.clear()
     s_sheet.update("A1", rows)
 
     # フォーマット
     try:
+        sid = s_sheet.id
         s_sheet.format("A5:G5", {
             "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
             "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True},
@@ -607,16 +652,14 @@ def update_summary_sheet(
         )
         s_sheet.format("G6", {"backgroundColor": profit_color, "textFormat": {"bold": True}})
 
-        # 会場別セクションに会場カラーを適用
-        sid = s_sheet.id
+        # 全会場セクションに会場カラーを適用（7列分）
         color_requests = []
-        for i, (vn, _, _, _) in enumerate(venue_list):
+        for row_idx, vn in (high_payout_venue_rows + profit_venue_rows + odds_range_venue_rows):
             bg = _VENUE_BG_COLORS.get(vn, _DEFAULT_BG)
-            row_idx = venue_data_start_row + i
             color_requests.append({"repeatCell": {
                 "range": {"sheetId": sid,
                           "startRowIndex": row_idx, "endRowIndex": row_idx + 1,
-                          "startColumnIndex": 0, "endColumnIndex": 4},
+                          "startColumnIndex": 0, "endColumnIndex": 7},
                 "cell": {"userEnteredFormat": {"backgroundColor": bg}},
                 "fields": "userEnteredFormat.backgroundColor",
             }})
