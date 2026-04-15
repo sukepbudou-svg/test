@@ -208,6 +208,7 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                         daily_race_count=daily_race_count,
                     )
                     race["pred_rows"] = pred_rows or []
+                    race["daily_race_count"] = daily_race_count
                     race["predicted"] = True
 
                 # ── 結果取得タイミング: 発走8分後 ──
@@ -217,6 +218,7 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                         race, today, spreadsheet_id, credentials_path,
                         fetch_race_result, update_result_row,
                         pred_rows_override=race.get("pred_rows", []),
+                        race_count=race.get("daily_race_count"),
                     )
                     if success:
                         race["result_fetched"] = True
@@ -315,6 +317,7 @@ def _fetch_and_record_result(
     race: dict, today, spreadsheet_id, credentials_path,
     fetch_race_result, update_result_row,
     pred_rows_override: list = None,
+    race_count: int = None,
 ) -> bool:
     """レース結果を取得して成績2シートに記録する。成功したらTrueを返す。"""
     venue_code = race["venue_code"]
@@ -336,6 +339,7 @@ def _fetch_and_record_result(
         actual_payout=result["payout"],
         credentials_path=credentials_path,
         pred_rows_override=pred_rows_override,
+        race_count=race_count,
     )
     return True
 

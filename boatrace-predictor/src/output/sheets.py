@@ -272,6 +272,7 @@ def update_result_row(
     actual_payout: int,
     credentials_path: str = None,
     pred_rows_override: list = None,
+    race_count: int = None,
 ) -> None:
     """
     「成績3」シートに1レース分の結果を記録・的中判定を更新する
@@ -285,17 +286,17 @@ def update_result_row(
 
     RESULT_SHEET = "成績3"
     RESULT_HEADERS = ["日付", "競艇場", "レース", "予想買い目", "的中確率", "期待回収率",
-                      "実際の結果", "実際の払戻", "的中", "収支（円）"]
+                      "実際の結果", "実際の払戻", "的中", "収支（円）", "本日レース数"]
     try:
         r_sheet = spreadsheet.worksheet(RESULT_SHEET)
         # クリア後など空の場合はヘッダーを再作成
         if not r_sheet.get_all_values():
             r_sheet.update("A1", [RESULT_HEADERS])
-            _format_header(spreadsheet, r_sheet, num_cols=10)
+            _format_header(spreadsheet, r_sheet, num_cols=11)
     except gspread.WorksheetNotFound:
         r_sheet = spreadsheet.add_worksheet(title=RESULT_SHEET, rows=2000, cols=12)
         r_sheet.update("A1", [RESULT_HEADERS])
-        _format_header(spreadsheet, r_sheet, num_cols=10)
+        _format_header(spreadsheet, r_sheet, num_cols=11)
 
     # メモリキャッシュ（auto_runner から渡された場合）を優先使用
     # → Google Sheets API 503 エラーを回避するため
@@ -354,11 +355,13 @@ def update_result_row(
                         r["買い目（3連単）"] = str(v)
                         break
 
+    rc = race_count if race_count is not None else "-"
+
     if not race_preds:
         # 予想なしの場合でも結果だけ記録
         r_sheet.append_row(
             [date, venue_name, race_no, "（予想なし）", "-", "-",
-             actual_combination, actual_payout, "-", 0],
+             actual_combination, actual_payout, "-", 0, rc],
             value_input_option="RAW"
         )
         _color_result_row(spreadsheet, r_sheet, len(r_sheet.get_all_values()), venue_name, "-")
@@ -373,7 +376,7 @@ def update_result_row(
         r_sheet.append_row(
             [date, venue_name, race_no, combination,
              pred.get("的中確率", "-"), pred.get("期待回収率", "-"),
-             actual_combination, actual_payout, hit, profit],
+             actual_combination, actual_payout, hit, profit, rc],
             value_input_option="RAW"
         )
         _color_result_row(spreadsheet, r_sheet, len(r_sheet.get_all_values()), venue_name, hit)
