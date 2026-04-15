@@ -579,6 +579,10 @@ def update_summary_sheet(
         venue_list.append((vn, vr, vh, vrate))
     venue_list.sort(key=lambda x: x[3], reverse=True)
 
+    # 会場データが始まるシート行（0-indexed）を計算
+    # 固定9行 + 日付行 + 空行 + セクションヘッダー + 列ヘッダー = 12 + len(daily)
+    venue_data_start_row = 12 + len(daily)
+
     for vn, vr, vh, vrate in venue_list:
         rows.append([vn, vr, vh, f"{vrate * 100:.1f}%", "", "", ""])
 
@@ -600,6 +604,22 @@ def update_summary_sheet(
             else {"red": 0.95, "green": 0.8, "blue": 0.8}
         )
         s_sheet.format("G6", {"backgroundColor": profit_color, "textFormat": {"bold": True}})
+
+        # 会場別セクションに会場カラーを適用
+        sid = s_sheet.id
+        color_requests = []
+        for i, (vn, _, _, _) in enumerate(venue_list):
+            bg = _VENUE_BG_COLORS.get(vn, _DEFAULT_BG)
+            row_idx = venue_data_start_row + i
+            color_requests.append({"repeatCell": {
+                "range": {"sheetId": sid,
+                          "startRowIndex": row_idx, "endRowIndex": row_idx + 1,
+                          "startColumnIndex": 0, "endColumnIndex": 4},
+                "cell": {"userEnteredFormat": {"backgroundColor": bg}},
+                "fields": "userEnteredFormat.backgroundColor",
+            }})
+        if color_requests:
+            spreadsheet.batch_update({"requests": color_requests})
     except Exception:
         pass
 
