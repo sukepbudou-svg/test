@@ -192,15 +192,16 @@ def append_prediction_row(
     row: dict,
     sheet_name: str = None,
     credentials_path: str = None,
+    race_count: int = None,
 ) -> None:
     """
-    1レース分の予想行を「予想」シートに追記する（自動モード用）
+    1レース分の予想行を日付シートに追記する（自動モード用）
 
     Args:
         row: {date, venue_name, race_no, combination, prob, avg_payout,
                expected_roi, confidence, odds_source}
+        race_count: 本日何レース目か（K列に記入）
     """
-    # シート名未指定の場合は今日の日付を使用（例: "2026-03-27"）
     if sheet_name is None:
         sheet_name = datetime.now().strftime("%Y-%m-%d")
 
@@ -213,18 +214,19 @@ def append_prediction_row(
     except gspread.WorksheetNotFound:
         sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=12)
         headers = ["日付", "競艇場", "レース", "狙い", "買い目（3連単）", "的中確率",
-                   "オッズ", "期待回収率", "信頼度", "オッズ元"]
+                   "オッズ", "期待回収率", "信頼度", "オッズ元", "本日レース数"]
         sheet.update("A1", [headers])
-        _format_header(spreadsheet, sheet, num_cols=10)
+        _format_header(spreadsheet, sheet, num_cols=11)
 
     cols = ["date", "venue_name", "race_no", "tier", "combination", "prob",
             "odds", "expected_roi", "confidence", "odds_source"]
     values = [row.get(c, "-") for c in cols]
+    values.append(race_count if race_count is not None else "-")
     sheet.append_row(values, value_input_option="RAW")
 
     # 競艇場ごとに背景色を適用
     last_row = len(sheet.get_all_values())
-    _apply_venue_color(sheet, last_row, str(row.get("venue_name", "")))
+    _apply_venue_color(sheet, last_row, str(row.get("venue_name", "")), num_cols=11)
 
 
 def _color_result_row(spreadsheet, sheet, row_no: int, venue_name: str, hit: str) -> None:

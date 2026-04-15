@@ -181,6 +181,8 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
         print("  本日の残りレースはありません")
     print()
 
+    daily_race_count = 0  # 本日の予想レースカウンター
+
     try:
         while True:
             now = datetime.now()
@@ -197,11 +199,13 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                 # ── 予想タイミング: 発走10分前 ──
                 predict_at = scheduled_dt - timedelta(minutes=PREDICT_BEFORE_MIN)
                 if not race["predicted"] and now >= predict_at:
+                    daily_race_count += 1
                     pred_rows = _predict_one_race(
                         race, df_program, model, payout_lookup,
                         today, spreadsheet_id, credentials_path,
                         fetch_beforeinfo_for_races, fetch_odds_for_races,
                         build_features, get_recommendations, append_prediction_row,
+                        daily_race_count=daily_race_count,
                     )
                     race["pred_rows"] = pred_rows or []
                     race["predicted"] = True
@@ -238,6 +242,7 @@ def _predict_one_race(
     today, spreadsheet_id, credentials_path,
     fetch_beforeinfo_for_races, fetch_odds_for_races,
     build_features, get_recommendations, append_prediction_row,
+    daily_race_count: int = None,
 ) -> list:
     """1レース分の予想を実行してスプレッドシートに書き込む。予想行リストを返す（メモリキャッシュ用）"""
     import pandas as pd
@@ -287,7 +292,8 @@ def _predict_one_race(
         if rec.get("combination") in ("見送り", "", "-"):
             continue
         row_dict = rec.to_dict()
-        append_prediction_row(spreadsheet_id, row_dict, credentials_path=credentials_path)
+        append_prediction_row(spreadsheet_id, row_dict, credentials_path=credentials_path,
+                              race_count=daily_race_count)
         print(f"  → {rec['combination']} 確率:{rec['prob']} 期待回収率:{rec['expected_roi']}")
         # 成績2シートの列名に合わせてキャッシュ用dictを作成
         pred_rows.append({
