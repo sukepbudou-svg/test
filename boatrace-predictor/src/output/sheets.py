@@ -274,7 +274,7 @@ def update_result_row(
     pred_rows_override: list = None,
 ) -> None:
     """
-    「成績2」シートに1レース分の結果を記録・的中判定を更新する
+    「成績3」シートに1レース分の結果を記録・的中判定を更新する
 
     成績シートの列構成:
     日付 | 競艇場 | レース | 予想買い目 | 的中確率 | 期待回収率 |
@@ -283,7 +283,7 @@ def update_result_row(
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
 
-    RESULT_SHEET = "成績2"
+    RESULT_SHEET = "成績3"
     RESULT_HEADERS = ["日付", "競艇場", "レース", "予想買い目", "的中確率", "期待回収率",
                       "実際の結果", "実際の払戻", "的中", "収支（円）"]
     try:
@@ -390,7 +390,7 @@ def apply_colors_to_results_sheet(
     spreadsheet = client.open_by_key(spreadsheet_id)
 
     try:
-        r_sheet = spreadsheet.worksheet("成績2")
+        r_sheet = spreadsheet.worksheet("成績3")
     except gspread.WorksheetNotFound:
         return
 
@@ -455,22 +455,22 @@ def update_summary_sheet(
     credentials_path: str = None,
 ) -> None:
     """
-    「成績2」シートを集計して「サマリー2」シートを更新する
+    「成績3」シートを集計して「サマリー3」シートを更新する
     的中率（レースベース）・回収率・会場別高配当出現率を自動計算する
     """
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
 
-    # 成績2シート読み込み（リトライ付き）
+    # 成績3シート読み込み（リトライ付き）
     try:
-        r_sheet = spreadsheet.worksheet("成績2")
+        r_sheet = spreadsheet.worksheet("成績3")
     except gspread.WorksheetNotFound:
-        print("[WARN] 成績2シートが見つかりません")
+        print("[WARN] 成績3シートが見つかりません")
         return
     try:
         records = _retry_get_records(r_sheet)
     except Exception:
-        print("[WARN] 成績2シートの読み込みに失敗しました（APIエラー）")
+        print("[WARN] 成績3シートの読み込みに失敗しました（APIエラー）")
         return
 
     if not records:
@@ -535,9 +535,9 @@ def update_summary_sheet(
     profit = total_return - total_bets
 
     try:
-        s_sheet = spreadsheet.worksheet("サマリー2")
+        s_sheet = spreadsheet.worksheet("サマリー3")
     except gspread.WorksheetNotFound:
-        s_sheet = spreadsheet.add_worksheet(title="サマリー2", rows=200, cols=7)
+        s_sheet = spreadsheet.add_worksheet(title="サマリー3", rows=200, cols=7)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     rows = [
@@ -600,7 +600,7 @@ def update_summary_sheet(
     except Exception:
         pass
 
-    print(f"[OK] サマリー2更新: 予想{pred_races}レース 的中率={race_hit_rate} 回収率={roi} 収支=¥{profit:,}")
+    print(f"[OK] サマリー3更新: 予想{pred_races}レース 的中率={race_hit_rate} 回収率={roi} 収支=¥{profit:,}")
 
 
 def write_backtest_summary(
@@ -620,9 +620,9 @@ def write_backtest_summary(
     spreadsheet = client.open_by_key(spreadsheet_id)
 
     try:
-        sheet = spreadsheet.worksheet("サマリー2")
+        sheet = spreadsheet.worksheet("サマリー3")
     except gspread.WorksheetNotFound:
-        sheet = spreadsheet.add_worksheet(title="サマリー2", rows=50, cols=5)
+        sheet = spreadsheet.add_worksheet(title="サマリー3", rows=50, cols=5)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     rows = [
