@@ -566,7 +566,9 @@ def update_summary_sheet(
         dp = r - dd["bets"]
         rows.append([d, n, pr, h, dr, f"¥{r:,}", f"¥{dp:,}"])
 
-    # 会場別高配当出現率セクション
+    # 会場別高配当出現率セクション（日付別内訳との間に3行空ける）
+    rows.append(["", "", "", "", "", "", ""])
+    rows.append(["", "", "", "", "", "", ""])
     rows.append(["", "", "", "", "", "", ""])
     rows.append(["■ 会場別高配当出現率（払戻10,000円以上）", "", "", "", "", "", ""])
     rows.append(["会場", "予想レース数", "高配当レース数", "高配当出現率", "", "", ""])
@@ -580,8 +582,8 @@ def update_summary_sheet(
     venue_list.sort(key=lambda x: x[3], reverse=True)
 
     # 会場データが始まるシート行（0-indexed）を計算
-    # 固定9行 + 日付行 + 空行 + セクションヘッダー + 列ヘッダー = 12 + len(daily)
-    venue_data_start_row = 12 + len(daily)
+    # 固定9行 + 日付行 + 空行3行 + セクションヘッダー + 列ヘッダー = 14 + len(daily)
+    venue_data_start_row = 14 + len(daily)
 
     for vn, vr, vh, vrate in venue_list:
         rows.append([vn, vr, vh, f"{vrate * 100:.1f}%", "", "", ""])
