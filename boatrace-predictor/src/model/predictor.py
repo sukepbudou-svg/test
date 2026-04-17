@@ -287,6 +287,14 @@ def get_recommendations(
 
         used = set()
 
+        # ── ド本命2点: 1〜25倍 ──
+        t0a = pick_tier(by_prob, used, 1.0, 25.0, 2, "ド本命")
+        used.update(t0a["combination"].tolist())
+
+        # ── 小穴2点: 26〜99倍 ──
+        t0b = pick_tier(by_prob, used, 26.0, 99.0, 2, "小穴")
+        used.update(t0b["combination"].tolist())
+
         # ── 狙い撃ち3点: 100〜150倍 ──
         t1 = pick_tier(by_prob, used, 100.0, 150.0, 3, "狙い撃ち", 80.0, 180.0)
         used.update(t1["combination"].tolist())
@@ -303,7 +311,7 @@ def get_recommendations(
         t4 = pick_tier(by_prob, used, 501.0, 99999.0, 2, "超大穴", 400.0, 99999.0)
         used.update(t4["combination"].tolist())
 
-        recommended = pd.concat([t1, t2, t3, t4]).reset_index(drop=True)
+        recommended = pd.concat([t0a, t0b, t1, t2, t3, t4]).reset_index(drop=True)
 
         if recommended.empty:
             all_recommendations.append({
