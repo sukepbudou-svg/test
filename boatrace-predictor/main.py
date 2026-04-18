@@ -419,7 +419,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="競艇3連単予想ツール")
     parser.add_argument(
         "--mode",
-        choices=["download", "download_history", "train", "predict", "backtest", "auto", "results"],
+        choices=["download", "download_history", "train", "predict", "backtest", "auto", "results", "nirentan"],
         required=True,
         help="実行モード"
     )
@@ -427,6 +427,7 @@ if __name__ == "__main__":
     parser.add_argument("--days-back", type=int, default=0, help="何日前のデータを取得するか（downloadモード用）")
     parser.add_argument("--venue", type=str, default=None, help="競艇場名または場コード（例: 福岡 または 22）")
     parser.add_argument("--race", type=int, default=None, help="レース番号（例: 6）")
+    parser.add_argument("--date", type=str, default=None, help="分析対象日（例: 2026-04-18）nirentanモード用")
     args = parser.parse_args()
 
     if args.mode == "download":
@@ -443,3 +444,9 @@ if __name__ == "__main__":
         cmd_auto()
     elif args.mode == "results":
         cmd_results()
+    elif args.mode == "nirentan":
+        from src.output.sheets import analyze_nirentan
+        target_date = args.date or datetime.now().strftime("%Y-%m-%d")
+        spreadsheet_id = os.environ.get("SPREADSHEET_ID", "")
+        credentials_path = os.environ.get("GOOGLE_CREDENTIALS_PATH")
+        analyze_nirentan(spreadsheet_id, target_date, credentials_path)

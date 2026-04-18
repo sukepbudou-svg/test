@@ -671,6 +671,116 @@ def update_summary_sheet(
     print(f"[OK] サマリー3更新: 予想{pred_races}レース 的中率={race_hit_rate} 回収率={roi} 収支=¥{profit:,}")
 
 
+def analyze_nirentan(
+    spreadsheet_id: str,
+    date: str,
+    credentials_path: str = None,
+) -> None:
+    """
+    指定日のド本命・小穴予想について2連単的中分析を行い「2連単分析」タブに書き出す
+    """
+    client = get_client(credentials_path)
+    spreadsheet = client.open_by_key(spreadsheet_id)
+
+    # 予想シート（日付タブ）読み込み
+    try:
+        pred_sheet = spreadsheet.worksheet(date)
+        pred_records = _retry_get_records(pred_sheet)
+    except gspread.WorksheetNotFound:
+        print(f"[ERROR] {date}の予想シートが見つかりません")
+        return
+    except Exception:
+        print(f"[ERROR] 予想シートの読み込みに失敗しました")
+        return
+
+    # 成績3から実際の結果を読み込み
+    try:
+        result_sheet = spreadsheet.worksheet("成績3")
+        result_records = _retry_get_records(result_sheet)
+    except gspread.WorksheetNotFound:
+        print(f"[ERROR] 成績3シートが見つかりません")
+        return
+    except Exception:
+        print(f"[ERROR] 成績3シートの読み込みに失敗しました")
+        return
+
+    # ド本命・小穴のみ抽出
+    target_preds = [
+        r for r in pred_records
+        if r.get("狙い", "") in ("ド本命", "小穴")
+        and str(r.get("日付", "")) == date
+    ]
+
+    # 実際の結果を (会場, レース) → 実際の結果 のdictに
+    result_dict = {}
+    for r in result_records:
+        if str(r.get("日付", "")) != date:
+            continue
+        key = (str(r.get("競艇場", "")), str(r.get("レース", "")))
+        actual = str(r.get("実際の結果", ""))
+        if actual and actual not in ("-", ""):
+            result_dict[key] = actual
+
+    # 分析テーブル作成
+    rows = []
+    hit_count = 0
+    for pred in target_preds:
+        venue = str(pred.get("競艇場", ""))
+        race_no = str(pred.get("レース", ""))
+        tier = str(pred.get("狙い", ""))
+        combo = str(pred.get("買い目（3連単）", ""))
+
+        # 3連単 → 2連単（1着-2着）
+        parts = combo.split("-")
+        pred_ni = f"{parts[0]}-{parts[1]}" if len(parts) >= 2 else "-"
+
+        actual_combo = result_dict.get((venue, race_no), "")
+        actual_parts = actual_combo.split("-")
+        actual_ni = f"{actual_parts[0]}-{actual_parts[1]}" if len(actual_parts) >= 2 else "-"
+
+        hit = "○" if pred_ni != "-" and pred_ni == actual_ni else "×"
+        if hit == "○":
+            hit_count += 1
+
+        rows.append([date, venue, race_no, tier, combo, pred_ni, actual_ni, hit, "-"])
+
+    # 「2連単分析」タブに書き出し
+    try:
+        out_sheet = spreadsheet.worksheet("2連単分析")
+        out_sheet.clear()
+    except gspread.WorksheetNotFound:
+        out_sheet = spreadsheet.add_worksheet(title="2連単分析", rows=500, cols=10)
+
+    headers = ["日付", "会場", "レース", "狙い", "予想3連単", "予想2連単",
+               "実際の2連単", "2連単的中", "2連単配当"]
+    out_sheet.update("A1", [headers] + rows)
+    _format_header(spreadsheet, out_sheet, num_cols=9)
+
+    # 的中行を緑色に
+    try:
+        sid = out_sheet.id
+        color_reqs = []
+        for i, row in enumerate(rows, start=2):
+            if row[7] == "○":
+                color_reqs.append({"repeatCell": {
+                    "range": {"sheetId": sid,
+                              "startRowIndex": i - 1, "endRowIndex": i,
+                              "startColumnIndex": 0, "endColumnIndex": 9},
+                    "cell": {"userEnteredFormat": {
+                        "backgroundColor": {"red": 0.7, "green": 0.95, "blue": 0.7}
+                    }},
+                    "fields": "userEnteredFormat.backgroundColor",
+                }})
+        if color_reqs:
+            spreadsheet.batch_update({"requests": color_reqs})
+    except Exception:
+        pass
+
+    total = len(rows)
+    print(f"[OK] 2連単分析完了: {total}点中{hit_count}点的中 "
+          f"({hit_count/total*100:.1f}%)" if total > 0 else "[OK] 対象データなし")
+
+
 def write_backtest_summary(
     spreadsheet_id: str,
     roi_history: dict,
