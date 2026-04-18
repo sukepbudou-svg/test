@@ -770,6 +770,51 @@ def analyze_nirentan(
         payout_str = f"¥{payout:,}" if isinstance(payout, int) else "-"
         rows.append([date, venue, race_no, tier, combo, pred_ni, actual_ni, hit, payout_str])
 
+    # ── 会場別集計 ──
+    venue_summary: dict = {}
+    for row in rows:
+        v = row[1]
+        hit = row[7]
+        payout_str = row[8]
+        if v not in venue_summary:
+            venue_summary[v] = {"bets": 0, "hits": 0, "total_payout": 0}
+        venue_summary[v]["bets"] += 1
+        if hit == "○":
+            venue_summary[v]["hits"] += 1
+            try:
+                payout_val = int(payout_str.replace("¥", "").replace(",", ""))
+                venue_summary[v]["total_payout"] += payout_val
+            except (ValueError, AttributeError):
+                pass
+
+    grand_bets = 0
+    grand_hits = 0
+    grand_payout = 0
+    summary_data_rows = []
+    for vn in sorted(venue_summary.keys()):
+        vs = venue_summary[vn]
+        n = vs["bets"]
+        h = vs["hits"]
+        tp = vs["total_payout"]
+        hit_rate = f"{h / n * 100:.1f}%" if n > 0 else "0.0%"
+        profit = tp - n * 100
+        grand_bets += n
+        grand_hits += h
+        grand_payout += tp
+        summary_data_rows.append([vn, n, h, hit_rate, f"¥{tp:,}", f"¥{profit:,}", "", "", ""])
+
+    grand_profit = grand_payout - grand_bets * 100
+    grand_hit_rate = f"{grand_hits / grand_bets * 100:.1f}%" if grand_bets > 0 else "0.0%"
+
+    summary_rows = [
+        ["", "", "", "", "", "", "", "", ""],
+        ["■ 会場別集計", "", "", "", "", "", "", "", ""],
+        ["会場", "予想点数", "的中数", "的中率", "総配当", "収支", "", "", ""],
+    ] + summary_data_rows + [
+        ["【合計】", grand_bets, grand_hits, grand_hit_rate,
+         f"¥{grand_payout:,}", f"¥{grand_profit:,}", "", "", ""],
+    ]
+
     # 「2連単分析」タブに書き出し
     try:
         out_sheet = spreadsheet.worksheet("2連単分析")
@@ -779,13 +824,16 @@ def analyze_nirentan(
 
     headers = ["日付", "会場", "レース", "狙い", "予想3連単", "予想2連単",
                "実際の2連単", "2連単的中", "2連単配当"]
-    out_sheet.update("A1", [headers] + rows)
+    all_data = [headers] + rows + summary_rows
+    out_sheet.update("A1", all_data)
     _format_header(spreadsheet, out_sheet, num_cols=9)
 
-    # 的中行を緑色に
+    # 色付け: 的中行は緑、会場別集計ヘッダーはグレー、合計行は濃いグレー、会場行に会場色
     try:
         sid = out_sheet.id
         color_reqs = []
+
+        # 明細行の的中を緑に
         for i, row in enumerate(rows, start=2):
             if row[7] == "○":
                 color_reqs.append({"repeatCell": {
@@ -797,6 +845,64 @@ def analyze_nirentan(
                     }},
                     "fields": "userEnteredFormat.backgroundColor",
                 }})
+
+        # 集計セクションの位置（details + 空行 + "■ 会場別集計" + 列ヘッダー）
+        summary_start = len(rows) + 1  # 1-indexed: header row = 1, rows end at len(rows)+1
+        section_header_idx = summary_start + 1   # "■ 会場別集計" row (0-indexed)
+        col_header_idx = summary_start + 2        # 列ヘッダー行 (0-indexed)
+
+        # "■ 会場別集計" 行をダークグレーに
+        color_reqs.append({"repeatCell": {
+            "range": {"sheetId": sid,
+                      "startRowIndex": section_header_idx, "endRowIndex": section_header_idx + 1,
+                      "startColumnIndex": 0, "endColumnIndex": 9},
+            "cell": {"userEnteredFormat": {
+                "backgroundColor": {"red": 0.3, "green": 0.3, "blue": 0.3},
+                "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True},
+            }},
+            "fields": "userEnteredFormat(backgroundColor,textFormat)",
+        }})
+        # 列ヘッダー行をグレーに
+        color_reqs.append({"repeatCell": {
+            "range": {"sheetId": sid,
+                      "startRowIndex": col_header_idx, "endRowIndex": col_header_idx + 1,
+                      "startColumnIndex": 0, "endColumnIndex": 9},
+            "cell": {"userEnteredFormat": {
+                "backgroundColor": {"red": 0.82, "green": 0.86, "blue": 0.92},
+                "textFormat": {"bold": True},
+            }},
+            "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
+        }})
+
+        # 会場別行に会場カラー
+        for j, (vn, vs) in enumerate([(vn, venue_summary[vn]) for vn in sorted(venue_summary.keys())]):
+            row_idx = col_header_idx + 1 + j
+            bg = _VENUE_BG_COLORS.get(vn, _DEFAULT_BG)
+            color_reqs.append({"repeatCell": {
+                "range": {"sheetId": sid,
+                          "startRowIndex": row_idx, "endRowIndex": row_idx + 1,
+                          "startColumnIndex": 0, "endColumnIndex": 9},
+                "cell": {"userEnteredFormat": {"backgroundColor": bg}},
+                "fields": "userEnteredFormat.backgroundColor",
+            }})
+
+        # 合計行をゴールド系に
+        total_row_idx = col_header_idx + 1 + len(venue_summary)
+        profit_color = (
+            {"red": 0.8, "green": 0.95, "blue": 0.8} if grand_profit >= 0
+            else {"red": 0.95, "green": 0.8, "blue": 0.8}
+        )
+        color_reqs.append({"repeatCell": {
+            "range": {"sheetId": sid,
+                      "startRowIndex": total_row_idx, "endRowIndex": total_row_idx + 1,
+                      "startColumnIndex": 0, "endColumnIndex": 9},
+            "cell": {"userEnteredFormat": {
+                "backgroundColor": profit_color,
+                "textFormat": {"bold": True},
+            }},
+            "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
+        }})
+
         if color_reqs:
             spreadsheet.batch_update({"requests": color_reqs})
     except Exception:
