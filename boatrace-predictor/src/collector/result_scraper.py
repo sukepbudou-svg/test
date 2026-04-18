@@ -52,6 +52,66 @@ def fetch_race_result(date: datetime, venue_code: str, race_no: int, timeout: in
     return _parse_result(soup)
 
 
+def fetch_nirentan_payout(date: datetime, venue_code: str, race_no: int, timeout: int = 10) -> dict:
+    """
+    指定レースの2連単払戻額を取得する
+
+    Returns:
+        {
+            "combination": "2-1",   # 2連単の着順
+            "payout": 1230,         # 2連単払戻額（円）
+            "available": True,
+        }
+    """
+    hd = date.strftime("%Y%m%d")
+    params = {"rno": race_no, "jcd": venue_code.zfill(2), "hd": hd}
+
+    for attempt in range(3):
+        try:
+            resp = requests.get(RESULT_URL, params=params, headers=HEADERS, timeout=timeout)
+            resp.raise_for_status()
+            break
+        except requests.RequestException as e:
+            if attempt < 2:
+                time.sleep(2)
+            else:
+                return {"available": False, "error": str(e)}
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    return _parse_nirentan(soup)
+
+
+def _parse_nirentan(soup: BeautifulSoup) -> dict:
+    """HTMLから2連単の着順・払戻をパースする"""
+    result = {"available": False, "combination": "", "payout": 0}
+
+    for td in soup.find_all("td"):
+        if td.get_text(strip=True).translate(_FW2HW) != "2連単":
+            continue
+        row = td.parent
+        numbers = [
+            sp.get_text(strip=True).translate(_FW2HW)
+            for sp in row.find_all("span")
+            if sp.get("class") and any("numberSet1_number" in c for c in sp.get("class", []))
+        ]
+        if len(numbers) >= 2:
+            result["combination"] = f"{numbers[0]}-{numbers[1]}"
+            result["available"] = True
+
+        payout_span = row.find("span", class_="is-payout1")
+        if payout_span:
+            pay_text = re.sub(r"[^\d]", "", payout_span.get_text(strip=True))
+            try:
+                result["payout"] = int(pay_text)
+            except ValueError:
+                pass
+
+        if result["available"]:
+            return result
+
+    return result
+
+
 def _parse_result(soup: BeautifulSoup) -> dict:
     """HTMLから3連単の着順・払戻をパースする"""
     result = {"available": False, "combination": "", "payout": 0}

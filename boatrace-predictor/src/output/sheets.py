@@ -721,6 +721,30 @@ def analyze_nirentan(
         if actual and actual not in ("-", ""):
             result_dict[key] = actual
 
+    # 2連単配当をレースごとに取得（会場+レースNo → payout）
+    from src.collector.result_scraper import fetch_nirentan_payout
+    from src.collector.parser import VENUE_CODES
+    venue_name_to_code = {v: k for k, v in VENUE_CODES.items()}
+    date_dt = datetime.strptime(date, "%Y-%m-%d")
+    nirentan_payouts = {}
+    seen_races = set()
+    for r in result_records:
+        if str(r.get("日付", "")) != date:
+            continue
+        venue = str(r.get("競艇場", ""))
+        race_no = str(r.get("レース", ""))
+        key = (venue, race_no)
+        if key in seen_races:
+            continue
+        seen_races.add(key)
+        venue_code = venue_name_to_code.get(venue)
+        if not venue_code:
+            continue
+        ni_result = fetch_nirentan_payout(date_dt, venue_code, int(race_no))
+        if ni_result.get("available"):
+            nirentan_payouts[key] = ni_result["payout"]
+        time.sleep(0.5)  # サーバー負荷軽減
+
     # 分析テーブル作成
     rows = []
     hit_count = 0
@@ -742,7 +766,9 @@ def analyze_nirentan(
         if hit == "○":
             hit_count += 1
 
-        rows.append([date, venue, race_no, tier, combo, pred_ni, actual_ni, hit, "-"])
+        payout = nirentan_payouts.get((venue, race_no), "-")
+        payout_str = f"¥{payout:,}" if isinstance(payout, int) else "-"
+        rows.append([date, venue, race_no, tier, combo, pred_ni, actual_ni, hit, payout_str])
 
     # 「2連単分析」タブに書き出し
     try:
