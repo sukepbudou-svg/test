@@ -46,8 +46,32 @@ def fetch_beforeinfo(date: datetime, venue_code: str, race_no: int, timeout: int
     return _parse_beforeinfo(soup, venue_code, race_no)
 
 
+def _parse_weather_conditions(soup: BeautifulSoup) -> dict:
+    """直前情報ページから天候・風速・波高をパースする"""
+    conditions = {"weather": None, "wind_speed": 0, "wave_height": 0}
+
+    # weather系クラスの要素を優先、なければページ全体のテキスト
+    weather_el = soup.find(class_=re.compile(r'weather', re.I))
+    text = weather_el.get_text() if weather_el else soup.get_text()
+
+    m = re.search(r'風速[：:\s]*(\d+)', text)
+    if m:
+        conditions["wind_speed"] = int(m.group(1))
+
+    m = re.search(r'波高[：:\s]*(\d+)', text)
+    if m:
+        conditions["wave_height"] = int(m.group(1))
+
+    for kw, code in [("雨", "rain"), ("曇", "cloudy"), ("晴", "sunny")]:
+        if kw in text:
+            conditions["weather"] = code
+            break
+
+    return conditions
+
+
 def _parse_beforeinfo(soup: BeautifulSoup, venue_code: str, race_no: int) -> dict:
-    """BeautifulSoupオブジェクトから展示タイム・STをパースする"""
+    """BeautifulSoupオブジェクトから展示タイム・STおよび天候をパースする"""
     result = {}
 
     # テーブルを全て取得して展示タイムが含まれる行を探す
@@ -80,8 +104,16 @@ def _parse_beforeinfo(soup: BeautifulSoup, venue_code: str, race_no: int) -> dic
         # フォールバック: テキスト全体から数値パターンを探す
         result = _parse_fallback(soup)
 
-    if result:
-        print(f"  [OK] 直前情報 場{venue_code} R{race_no}: {len(result)}艇分の展示タイム取得")
+    # 天候・風速・波高を取得して "weather" キーに追加
+    weather = _parse_weather_conditions(soup)
+    result["weather"] = weather
+
+    boat_count = sum(1 for k in result if isinstance(k, int))
+    if boat_count > 0:
+        w = weather
+        weather_str = (f" 天候:{w['weather']} 風速:{w['wind_speed']}m 波高:{w['wave_height']}cm"
+                       if w.get("wind_speed") else "")
+        print(f"  [OK] 直前情報 場{venue_code} R{race_no}: {boat_count}艇分{weather_str}")
     else:
         print(f"  [--] 直前情報 場{venue_code} R{race_no}: 取得できず（レース前または構造変更）")
 

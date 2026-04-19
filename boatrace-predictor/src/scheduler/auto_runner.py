@@ -260,16 +260,21 @@ def _predict_one_race(
         (df_program["race_no"] == race_no)
     ]
 
-    # 展示タイム取得
+    # 展示タイム・天候取得
     from src.collector.beforeinfo import fetch_beforeinfo
     beforeinfo_raw = fetch_beforeinfo(today, venue_code, race_no)
+    race_weather = beforeinfo_raw.pop("weather", None) if isinstance(beforeinfo_raw, dict) else None
     df_beforeinfo = pd.DataFrame([
         {"date": today.strftime("%Y-%m-%d"), "venue_code": venue_code,
          "race_no": race_no, "boat_no": bn,
          "exhibition_time": info.get("exhibition_time"),
          "exhibition_st": info.get("exhibition_st")}
         for bn, info in beforeinfo_raw.items()
+        if isinstance(bn, int)
     ]) if beforeinfo_raw else pd.DataFrame()
+    if race_weather and race_weather.get("wind_speed"):
+        w = race_weather
+        print(f"  天候: {w.get('weather','不明')} 風速:{w.get('wind_speed')}m 波高:{w.get('wave_height')}cm")
 
     # 特徴量生成
     df_features = build_features(df_prog_race, pd.DataFrame(), pd.DataFrame(),
@@ -282,10 +287,11 @@ def _predict_one_race(
     from src.collector.odds import fetch_odds
     live_odds = fetch_odds(today, venue_code, race_no)
     all_live_odds = {(venue_code, race_no): live_odds} if live_odds else {}
+    all_weather = {(venue_code, race_no): race_weather} if race_weather else {}
 
     # 予想生成
     recs = get_recommendations(model, df_features, payout_lookup=payout_lookup,
-                               all_live_odds=all_live_odds)
+                               all_live_odds=all_live_odds, all_weather=all_weather)
 
     # スプレッドシートに書き込む＆メモリキャッシュ用にリストを作成
     pred_rows = []

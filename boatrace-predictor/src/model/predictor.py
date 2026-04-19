@@ -112,11 +112,41 @@ def load_payout_lookup() -> dict:
     return {str(i): int(300 * (i ** 0.8)) for i in range(1, 121)}
 
 
+def _apply_weather_adjustment(win_probs: np.ndarray, weather: dict) -> np.ndarray:
+    """
+    天候・風速・波高に基づいて艇別勝率を微調整する。
+    一般則: 風強・波高 → 内コース（1,2番）有利、外コース（5,6番）不利
+    """
+    wind = weather.get("wind_speed", 0) or 0
+    wave = weather.get("wave_height", 0) or 0
+    cond = weather.get("weather") or ""
+
+    # 各艇への調整量（合計ゼロで正規化不要）
+    adj = np.zeros(6)
+
+    if wind >= 5:
+        adj += np.array([+0.025, +0.015, +0.005, 0.0, -0.015, -0.030])
+    elif wind >= 3:
+        adj += np.array([+0.010, +0.007, +0.003, 0.0, -0.007, -0.013])
+
+    if wave >= 20:
+        adj += np.array([+0.015, +0.010, +0.005, 0.0, -0.010, -0.020])
+    elif wave >= 10:
+        adj += np.array([+0.008, +0.005, +0.002, 0.0, -0.005, -0.010])
+
+    if cond == "rain":
+        adj += np.array([+0.005, +0.003, +0.001, 0.0, -0.003, -0.006])
+
+    probs = np.clip(win_probs + adj, 0.001, None)
+    return probs / probs.sum()
+
+
 def predict_race(
     model: lgb.Booster,
     race_features: pd.Series,
     payout_lookup: dict = None,
     live_odds: dict = None,
+    weather: dict = None,
 ) -> pd.DataFrame:
     """
     1レース分の3連単予想を生成する
@@ -155,6 +185,10 @@ def predict_race(
     # 4エージェントの勝率を重み付け合成
     win_probs = (WEIGHT_ML * ml_probs + WEIGHT_COURSE * cs_probs
                  + WEIGHT_RACER * rp_probs + WEIGHT_MOTOR * mt_probs)
+
+    # 天候・風速・波高による調整
+    if weather:
+        win_probs = _apply_weather_adjustment(win_probs, weather)
 
     # 各エージェントの単独トップ5を取得（合議チェック用）
     def _top5(probs: np.ndarray) -> set:
@@ -238,6 +272,7 @@ def get_recommendations(
     min_roi: float = MIN_EXPECTED_ROI,
     payout_lookup: dict = None,
     all_live_odds: dict = None,
+    all_weather: dict = None,
 ) -> pd.DataFrame:
     """
     本日の全レースから推奨買い目を選出する
@@ -252,14 +287,13 @@ def get_recommendations(
     all_recommendations = []
 
     for _, race_row in df_today.iterrows():
-        # このレースのリアルタイムオッズを取得（あれば）
-        live_odds = None
-        if all_live_odds:
-            venue_code = str(race_row.get("venue_code", "")).zfill(2)
-            race_no = int(race_row.get("race_no", 0))
-            live_odds = all_live_odds.get((venue_code, race_no))
+        # このレースのリアルタイムオッズ・天候を取得（あれば）
+        venue_code = str(race_row.get("venue_code", "")).zfill(2)
+        race_no = int(race_row.get("race_no", 0))
+        live_odds = all_live_odds.get((venue_code, race_no)) if all_live_odds else None
+        weather = all_weather.get((venue_code, race_no)) if all_weather else None
 
-        predictions = predict_race(model, race_row, payout_lookup, live_odds)
+        predictions = predict_race(model, race_row, payout_lookup, live_odds, weather)
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
 
         def pick_tier(pool, exclude_combos, min_odds, max_odds, n, tier_name, fallback_min=None, fallback_max=None):
