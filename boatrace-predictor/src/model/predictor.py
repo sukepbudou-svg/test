@@ -364,7 +364,7 @@ def get_recommendations(
             for _, rec in recommended.iterrows():
                 agreement = int(rec.get("agreement", 0))
                 # 4エージェント中: ★★★=3〜4合意, ★★☆=2合意, ★☆☆=1以下
-                confidence = "★★★" if agreement >= 3 else "★★☆" if agreement >= 2 else "★☆☆"
+                confidence = "★★★★" if agreement >= 4 else "★★★☆" if agreement >= 3 else "★★☆☆" if agreement >= 2 else "★☆☆☆"
                 src = rec.get("odds_source", "history")
                 odds_display = f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)"
                 all_recommendations.append({
