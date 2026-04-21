@@ -231,6 +231,7 @@ def _pivot_program(df_program: pd.DataFrame) -> pd.DataFrame:
     ]
 
     grade_map = {"A1": 4, "A2": 3, "B1": 2, "B2": 1}
+    meet_grade_map = {"SG": 5, "G1": 4, "G2": 3, "G3": 2, "一般": 1}
     df = df_program.copy()
     df["grade_num"] = df["grade"].map(grade_map).fillna(0)
 
@@ -238,8 +239,13 @@ def _pivot_program(df_program: pd.DataFrame) -> pd.DataFrame:
     rows = []
 
     for (date, venue_code, race_no), group in df.groupby(["date", "venue_code", "race_no"]):
-        row = {"date": date, "venue_code": venue_code, "race_no": race_no,
-               "venue_name": group["venue_name"].iloc[0]}
+        mg = group["meet_grade"].iloc[0] if "meet_grade" in group.columns else "一般"
+        row = {
+            "date": date, "venue_code": venue_code, "race_no": race_no,
+            "venue_name": group["venue_name"].iloc[0],
+            "meet_grade": mg,
+            "meet_grade_num": meet_grade_map.get(str(mg), 1),
+        }
         for _, racer in group.iterrows():
             bn = int(racer["boat_no"])
             for col in all_feature_cols:
@@ -288,8 +294,8 @@ def get_feature_columns() -> list[str]:
     for bn in range(1, 7):
         for col in base_cols:
             cols.append(f"boat{bn}_{col}")
-    # レース全体の特徴量（シリーズ日程）
-    cols += ["series_day", "is_final_day_num"]
+    # レース全体の特徴量（シリーズ日程・開催グレード）
+    cols += ["series_day", "is_final_day_num", "meet_grade_num"]
     return cols
 
 

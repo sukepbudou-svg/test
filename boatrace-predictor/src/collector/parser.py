@@ -48,6 +48,7 @@ def parse_program(txt_path: Path) -> pd.DataFrame:
     venue_code = None
     race_no = None
     scheduled_time = None
+    meet_grade = "一般"
     # 全角数字・全角コロン→半角変換テーブル
     fw2hw = str.maketrans("０１２３４５６７８９Ｒ：", "0123456789R:")
 
@@ -55,6 +56,22 @@ def parse_program(txt_path: Path) -> pd.DataFrame:
         # 場コード取得
         if re.match(r"^\d{2}BBGN", line):
             venue_code = line[:2]
+            # 開催グレードを次の60行から検出（ＳＧ/Ｇ１/Ｇ２/Ｇ３の全角キーワードで判定）
+            meet_grade = "一般"
+            for j in range(i, min(i + 60, len(lines))):
+                sl = lines[j]
+                if "ＳＧ" in sl:
+                    meet_grade = "SG"
+                    break
+                elif "Ｇ１" in sl:
+                    meet_grade = "G1"
+                    break
+                elif "Ｇ２" in sl:
+                    meet_grade = "G2"
+                    break
+                elif "Ｇ３" in sl:
+                    meet_grade = "G3"
+                    break
 
         # レース番号取得（全角数字・全角R 例: "　１Ｒ  カタメン１予"）
         line_hw = line.translate(fw2hw)
@@ -110,6 +127,7 @@ def parse_program(txt_path: Path) -> pd.DataFrame:
                 "boat_no_equip": int(g[13]),
                 "boat_2rate": float(g[14]),
                 "scheduled_time": scheduled_time,
+                "meet_grade": meet_grade,
             })
 
     df = pd.DataFrame(records)

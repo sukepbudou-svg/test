@@ -84,6 +84,12 @@ SERIES_DAY_OUTER_ADJ = {1: +0.03, 2: +0.01, 3: 0.0, 4: 0.0,  5: 0.0}
 SERIES_FINAL_INNER_ADJ = -0.07   # 最終日: 内コース不利
 SERIES_FINAL_OUTER_ADJ = +0.05   # 最終日: 外コース積極的
 
+# ── 開催グレードによるコース補正 ──
+# SG/G1はトップ選手が外からでも仕掛けてくるため内コース優位が弱まる
+# 一般戦は技量差が出やすく内コース有利がより強まる
+GRADE_INNER_ADJ = {"SG": -0.04, "G1": -0.02, "G2": 0.0, "G3": +0.01, "一般": +0.02}
+GRADE_OUTER_ADJ = {"SG": +0.04, "G1": +0.02, "G2": 0.0, "G3": -0.01, "一般": -0.02}
+
 
 def predict_win_probs(race_row: pd.Series) -> np.ndarray:
     """
@@ -102,6 +108,7 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
     race_no = int(race_row.get("race_no", 6))
     series_day = int(race_row.get("series_day", 3) or 3)
     is_final = bool(race_row.get("is_final_day_num", 0))
+    meet_grade = str(race_row.get("meet_grade", "一般") or "一般")
 
     # 会場別コース勝率プロファイルを取得（なければ全国平均）
     venue_profile = VENUE_COURSE_PROFILES.get(venue_name, COURSE_WIN_RATES)
@@ -116,6 +123,10 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
     else:
         series_inner_adj = SERIES_DAY_INNER_ADJ.get(series_day, 0.0)
         series_outer_adj = SERIES_DAY_OUTER_ADJ.get(series_day, 0.0)
+
+    # 開催グレード補正値
+    grade_inner_adj = GRADE_INNER_ADJ.get(meet_grade, 0.0)
+    grade_outer_adj = GRADE_OUTER_ADJ.get(meet_grade, 0.0)
 
     # ── レース内の展示ST平均を計算（相対比較用）──
     st_vals_in_race = []
@@ -157,6 +168,12 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
             base_rate *= (1.0 + series_inner_adj)
         elif course >= 4:
             base_rate *= (1.0 + series_outer_adj)
+
+        # 開催グレード補正（SG/G1は外コース選手が積極的、一般戦は内コース有利が強い）
+        if course == 1:
+            base_rate *= (1.0 + grade_inner_adj)
+        elif course >= 4:
+            base_rate *= (1.0 + grade_outer_adj)
 
         # ── 展示タイム補正（レース内相対比較）──
         exh_time = race_row.get(f"boat{boat}_exhibition_time", None)
