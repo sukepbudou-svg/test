@@ -165,20 +165,12 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
         )
         return
 
-    # 起動時点で発走済みのレースを仕分け
+    # 起動時点で既に発走済みのレースはスキップ
     now_start = datetime.now()
     for race in schedule:
-        if race["scheduled_dt"] > now_start:
-            continue  # 未発走は何もしない
-        race["predicted"] = True
-        result_at = race["scheduled_dt"] + timedelta(minutes=RESULT_AFTER_MIN)
-        # 結果取得タイミングを2時間以上過ぎているレースはスキップ
-        # それ以外（再起動直後など）は結果取得を試みる
-        if now_start >= result_at + timedelta(minutes=15):
+        if race["scheduled_dt"] <= now_start:
+            race["predicted"] = True
             race["result_fetched"] = True
-        else:
-            race["result_fetched"] = False
-            race["last_result_attempt"] = None
 
     upcoming = [r for r in schedule if not r["predicted"]]
     total = len(schedule)
