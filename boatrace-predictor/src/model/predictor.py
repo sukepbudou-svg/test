@@ -46,6 +46,9 @@ def build_payout_lookup(df_payout: pd.DataFrame, model: lgb.Booster, df_features
     """
     df_features = add_course_advantage(df_features)
     feature_cols = get_feature_columns() + [f"boat{bn}_course_advantage" for bn in range(1, 7)]
+    # 旧モデルとの互換性
+    if model.num_feature() < len(feature_cols):
+        feature_cols = [c for c in feature_cols if c != "meet_grade_num"]
     trifecta_payout = df_payout[df_payout["bet_type"] == "３連単"].copy()
 
     rank_payouts = {i: [] for i in range(1, 121)}
@@ -164,6 +167,9 @@ def predict_race(
         payout_lookup = load_payout_lookup()
 
     feature_cols = get_feature_columns() + [f"boat{bn}_course_advantage" for bn in range(1, 7)]
+    # 旧モデルとの互換性: 再学習前は meet_grade_num を除外して列数を合わせる
+    if model.num_feature() < len(feature_cols):
+        feature_cols = [c for c in feature_cols if c != "meet_grade_num"]
     X = race_features.reindex(feature_cols, fill_value=0).fillna(0).values.reshape(1, -1)
     ml_probs = model.predict(X)[0]
 
