@@ -5,6 +5,109 @@
 
 import pandas as pd
 import numpy as np
+from pathlib import Path
+
+
+def _calculate_series_day(df_program: pd.DataFrame, raw_dir: Path = None) -> pd.DataFrame:
+    """
+    各(venue_code, date)がシリーズの何日目かを計算する
+
+    複数日分のデータがある場合: 連続開催日から自動計算
+    単日データ(予測時)の場合: raw_dirのBファイル履歴から推定
+    """
+    if df_program.empty:
+        return pd.DataFrame(columns=["venue_code", "date", "series_day", "is_final_day_num"])
+
+    venue_dates = (
+        df_program[["venue_code", "date"]]
+        .drop_duplicates()
+        .copy()
+    )
+    venue_dates["date_dt"] = pd.to_datetime(venue_dates["date"])
+    venue_dates = venue_dates.sort_values(["venue_code", "date_dt"])
+
+    unique_dates = venue_dates["date"].nunique()
+    results = []
+
+    if unique_dates >= 3:
+        # 複数日分のデータがある場合: 連続開催日から計算
+        for vc, grp in venue_dates.groupby("venue_code"):
+            dates = sorted(grp["date_dt"].tolist())
+            series_day_map = {}
+            series_start_idx = 0
+            for i, d in enumerate(dates):
+                if i == 0 or (d - dates[i - 1]).days > 1:
+                    series_start_idx = i
+                series_day_map[d] = i - series_start_idx + 1
+
+            final_day_set = set()
+            for i, d in enumerate(dates):
+                if i == len(dates) - 1 or (dates[i + 1] - d).days > 1:
+                    final_day_set.add(d)
+
+            for d in dates:
+                results.append({
+                    "venue_code": vc,
+                    "date": d.strftime("%Y-%m-%d"),
+                    "series_day": series_day_map[d],
+                    "is_final_day_num": int(d in final_day_set),
+                })
+    else:
+        # 単日データ: Bファイル履歴から推定
+        for vc, grp in venue_dates.groupby("venue_code"):
+            date_str = grp["date"].iloc[0]
+            sd, is_final = _estimate_series_day_from_files(vc, date_str, raw_dir)
+            results.append({
+                "venue_code": vc,
+                "date": date_str,
+                "series_day": sd,
+                "is_final_day_num": int(is_final),
+            })
+
+    return pd.DataFrame(results)
+
+
+def _estimate_series_day_from_files(venue_code: str, date_str: str, raw_dir: Path = None) -> tuple:
+    """raw_dirのBファイル履歴から開催シリーズ日数を推定する"""
+    from datetime import datetime, timedelta
+
+    if raw_dir is None:
+        raw_dir = Path(__file__).parent.parent.parent / "data" / "raw" / "B"
+
+    try:
+        today = datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return 1, False
+
+    series_day = 1
+    for days_back in range(1, 8):
+        prev = today - timedelta(days=days_back)
+        b_file = raw_dir / f"b{prev.strftime('%y%m%d')}.txt"
+        if not b_file.exists():
+            break
+        try:
+            with open(b_file, encoding="cp932", errors="replace") as f:
+                if f"{venue_code}BBGN" in f.read():
+                    series_day += 1
+                else:
+                    break
+        except Exception:
+            break
+
+    # 翌日のBファイルに同会場がなければ最終日
+    next_date = today + timedelta(days=1)
+    next_file = raw_dir / f"b{next_date.strftime('%y%m%d')}.txt"
+    is_final = False
+    if next_file.exists():
+        try:
+            with open(next_file, encoding="cp932", errors="replace") as f:
+                is_final = f"{venue_code}BBGN" not in f.read()
+        except Exception:
+            pass
+    elif series_day >= 3:
+        is_final = True  # 翌日ファイルなし+3日以上経過は最終日とみなす
+
+    return series_day, is_final
 
 
 def build_features(
@@ -70,6 +173,19 @@ def build_features(
 
     # レースごとに6艇分の特徴量をピボット
     program_pivot = _pivot_program(df_program)
+
+    # シリーズ日（初日/最終日）を計算して結合
+    series_df = _calculate_series_day(df_program)
+    if not series_df.empty:
+        program_pivot = program_pivot.merge(
+            series_df[["venue_code", "date", "series_day", "is_final_day_num"]],
+            on=["venue_code", "date"], how="left"
+        )
+        program_pivot["series_day"] = program_pivot["series_day"].fillna(1).astype(int)
+        program_pivot["is_final_day_num"] = program_pivot["is_final_day_num"].fillna(0).astype(int)
+    else:
+        program_pivot["series_day"] = 1
+        program_pivot["is_final_day_num"] = 0
 
     # 展示タイムをピボットして結合
     if exh_df is not None and not exh_df.empty:
@@ -172,6 +288,8 @@ def get_feature_columns() -> list[str]:
     for bn in range(1, 7):
         for col in base_cols:
             cols.append(f"boat{bn}_{col}")
+    # レース全体の特徴量（シリーズ日程）
+    cols += ["series_day", "is_final_day_num"]
     return cols
 
 

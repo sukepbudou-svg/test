@@ -74,6 +74,16 @@ EXHTIME_WEIGHT   = 0.15
 EXHST_BASELINE = 0.15
 EXHST_WEIGHT   = 0.10
 
+# ── シリーズ日程ごとの内・外コース補正 ──
+# 初日: モーター未調整で不安定 → 内コース有利が弱まる
+# 2日目: やや安定
+# 3日目以降(中盤): 標準
+# 最終日: 選手が勝負に出る → 荒れやすい
+SERIES_DAY_INNER_ADJ = {1: -0.05, 2: -0.02, 3: 0.0, 4: 0.01, 5: 0.01}
+SERIES_DAY_OUTER_ADJ = {1: +0.03, 2: +0.01, 3: 0.0, 4: 0.0,  5: 0.0}
+SERIES_FINAL_INNER_ADJ = -0.07   # 最終日: 内コース不利
+SERIES_FINAL_OUTER_ADJ = +0.05   # 最終日: 外コース積極的
+
 
 def predict_win_probs(race_row: pd.Series) -> np.ndarray:
     """
@@ -90,12 +100,22 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
     """
     venue_name = str(race_row.get("venue_name", ""))
     race_no = int(race_row.get("race_no", 6))
+    series_day = int(race_row.get("series_day", 3) or 3)
+    is_final = bool(race_row.get("is_final_day_num", 0))
 
     # 会場別コース勝率プロファイルを取得（なければ全国平均）
     venue_profile = VENUE_COURSE_PROFILES.get(venue_name, COURSE_WIN_RATES)
 
     # レース番号補正係数
     race_inner_factor = RACE_NO_INNER_FACTOR.get(race_no, 1.0)
+
+    # シリーズ日程補正値
+    if is_final:
+        series_inner_adj = SERIES_FINAL_INNER_ADJ
+        series_outer_adj = SERIES_FINAL_OUTER_ADJ
+    else:
+        series_inner_adj = SERIES_DAY_INNER_ADJ.get(series_day, 0.0)
+        series_outer_adj = SERIES_DAY_OUTER_ADJ.get(series_day, 0.0)
 
     # ── レース内の展示ST平均を計算（相対比較用）──
     st_vals_in_race = []
@@ -130,8 +150,13 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
         if course == 1:
             base_rate *= race_inner_factor
         elif course >= 4:
-            # 外コースは後半レースで有利になる
             base_rate *= (2.0 - race_inner_factor)
+
+        # シリーズ日程補正（初日/最終日は荒れやすい）
+        if course == 1:
+            base_rate *= (1.0 + series_inner_adj)
+        elif course >= 4:
+            base_rate *= (1.0 + series_outer_adj)
 
         # ── 展示タイム補正（レース内相対比較）──
         exh_time = race_row.get(f"boat{boat}_exhibition_time", None)
