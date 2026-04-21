@@ -331,16 +331,16 @@ def get_recommendations(
         t0b = pick_tier(by_prob, used, 26.0, 99.0, 3, "中アナ")
         used.update(t0b["combination"].tolist())
 
-        # ── 狙い撃ち3点: 100〜150倍 ──
-        t1 = pick_tier(by_prob, used, 100.0, 150.0, 3, "狙い撃ち", 80.0, 180.0)
+        # ── 大アナ2点: 100〜200倍 ──
+        t1 = pick_tier(by_prob, used, 100.0, 200.0, 2, "大アナ", 80.0, 220.0)
         used.update(t1["combination"].tolist())
 
-        # ── 中穴3点: 151〜250倍 ──
-        t2 = pick_tier(by_prob, used, 151.0, 250.0, 3, "中穴", 130.0, 300.0)
+        # ── 大大アナ2点: 201〜300倍 ──
+        t2 = pick_tier(by_prob, used, 201.0, 300.0, 2, "大大アナ", 180.0, 320.0)
         used.update(t2["combination"].tolist())
 
-        # ── 大穴2点: 251〜500倍 ──
-        t3 = pick_tier(by_prob, used, 251.0, 500.0, 2, "大穴", 200.0, 600.0)
+        # ── 大大大アナ2点: 301〜500倍 ──
+        t3 = pick_tier(by_prob, used, 301.0, 500.0, 2, "大大大アナ", 260.0, 550.0)
         used.update(t3["combination"].tolist())
 
         # ── 超大穴2点: 501倍以上 ──
