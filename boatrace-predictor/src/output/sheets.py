@@ -224,9 +224,40 @@ def append_prediction_row(
     values.append(race_count if race_count is not None else "-")
     sheet.append_row(values, value_input_option="RAW")
 
-    # 競艇場ごとに背景色を適用
+    # 会場色 + 信頼度色を1回のbatch_updateで適用
     last_row = len(sheet.get_all_values())
-    _apply_venue_color(sheet, last_row, str(row.get("venue_name", "")), num_cols=11)
+    try:
+        sid = sheet.id
+        bg = _VENUE_BG_COLORS.get(str(row.get("venue_name", "")), _DEFAULT_BG)
+        reqs = [{"repeatCell": {
+            "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
+                      "startColumnIndex": 0, "endColumnIndex": 11},
+            "cell": {"userEnteredFormat": {"backgroundColor": bg}},
+            "fields": "userEnteredFormat.backgroundColor",
+        }}]
+        confidence = str(row.get("confidence", ""))
+        if confidence == "★★★★":
+            reqs.append({"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
+                          "startColumnIndex": 8, "endColumnIndex": 9},
+                "cell": {"userEnteredFormat": {
+                    "backgroundColor": {"red": 0.6, "green": 0.9, "blue": 0.6},
+                    "textFormat": {"bold": True},
+                }},
+                "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
+            }})
+        elif confidence == "★★★☆":
+            reqs.append({"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
+                          "startColumnIndex": 8, "endColumnIndex": 9},
+                "cell": {"userEnteredFormat": {
+                    "backgroundColor": {"red": 0.8, "green": 0.95, "blue": 0.8},
+                }},
+                "fields": "userEnteredFormat.backgroundColor",
+            }})
+        spreadsheet.batch_update({"requests": reqs})
+    except Exception:
+        pass
 
 
 def _color_result_row(spreadsheet, sheet, row_no: int, venue_name: str, hit: str) -> None:
