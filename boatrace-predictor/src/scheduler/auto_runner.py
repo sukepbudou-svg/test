@@ -13,7 +13,7 @@ from pathlib import Path
 # 発走何分前に予想を実行するか
 PREDICT_BEFORE_MIN = 10
 # 発走後何分後に結果を取得するか
-RESULT_AFTER_MIN = 8
+RESULT_AFTER_MIN = 12
 # ループの確認間隔（秒）
 LOOP_INTERVAL_SEC = 30
 
@@ -333,7 +333,7 @@ def _fetch_and_record_result(
 
     result = fetch_race_result(today, venue_code, race_no)
     if not result.get("available"):
-        print(f"  [WARN] 結果未確定 → 2分後に再試行します")
+        print(f"  [WARN] 結果未確定 → {LOOP_INTERVAL_SEC}秒後に再試行します")
         return False
 
     update_result_row(
