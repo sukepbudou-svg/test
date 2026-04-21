@@ -144,12 +144,25 @@ def _apply_weather_adjustment(win_probs: np.ndarray, weather: dict) -> np.ndarra
     return probs / probs.sum()
 
 
+def _zero_absent(probs: np.ndarray, absent_boats: list) -> np.ndarray:
+    """欠場艇の勝率を0にして残り艇で正規化する"""
+    if not absent_boats:
+        return probs
+    p = probs.copy()
+    for bn in absent_boats:
+        if 1 <= bn <= 6:
+            p[bn - 1] = 0.0
+    total = p.sum()
+    return p / total if total > 0 else p
+
+
 def predict_race(
     model: lgb.Booster,
     race_features: pd.Series,
     payout_lookup: dict = None,
     live_odds: dict = None,
     weather: dict = None,
+    absent_boats: list = None,
 ) -> pd.DataFrame:
     """
     1レース分の3連単予想を生成する
@@ -187,6 +200,13 @@ def predict_race(
 
     # モーター状態エージェントの勝率
     mt_probs = motor_win_probs(race_features)
+
+    # 欠場艇を全エージェントから除外して正規化
+    if absent_boats:
+        ml_probs = _zero_absent(ml_probs, absent_boats)
+        cs_probs = _zero_absent(cs_probs, absent_boats)
+        rp_probs = _zero_absent(rp_probs, absent_boats)
+        mt_probs = _zero_absent(mt_probs, absent_boats)
 
     # 4エージェントの勝率を重み付け合成
     win_probs = (WEIGHT_ML * ml_probs + WEIGHT_COURSE * cs_probs
@@ -279,6 +299,7 @@ def get_recommendations(
     payout_lookup: dict = None,
     all_live_odds: dict = None,
     all_weather: dict = None,
+    all_absent: dict = None,
 ) -> pd.DataFrame:
     """
     本日の全レースから推奨買い目を選出する
@@ -298,8 +319,9 @@ def get_recommendations(
         race_no = int(race_row.get("race_no", 0))
         live_odds = all_live_odds.get((venue_code, race_no)) if all_live_odds else None
         weather = all_weather.get((venue_code, race_no)) if all_weather else None
+        absent_boats = all_absent.get((venue_code, race_no)) if all_absent else None
 
-        predictions = predict_race(model, race_row, payout_lookup, live_odds, weather)
+        predictions = predict_race(model, race_row, payout_lookup, live_odds, weather, absent_boats)
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
 
         def pick_tier(pool, exclude_combos, min_odds, max_odds, n, tier_name, fallback_min=None, fallback_max=None):

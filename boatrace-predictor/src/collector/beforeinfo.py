@@ -73,6 +73,7 @@ def _parse_weather_conditions(soup: BeautifulSoup) -> dict:
 def _parse_beforeinfo(soup: BeautifulSoup, venue_code: str, race_no: int) -> dict:
     """BeautifulSoupオブジェクトから展示タイム・STおよび天候をパースする"""
     result = {}
+    absent_boats = []
 
     # テーブルを全て取得して展示タイムが含まれる行を探す
     # boatrace.jp の直前情報ページ構造:
@@ -91,6 +92,12 @@ def _parse_beforeinfo(soup: BeautifulSoup, venue_code: str, race_no: int) -> dic
             if boat_no is None:
                 continue
 
+            # 欠場チェック（行テキストに「欠場」が含まれる場合）
+            row_text = row.get_text()
+            if "欠場" in row_text:
+                absent_boats.append(boat_no)
+                continue
+
             exh_time = _extract_exhibition_time(cells)
             exh_st = _extract_exhibition_st(cells)
 
@@ -107,13 +114,15 @@ def _parse_beforeinfo(soup: BeautifulSoup, venue_code: str, race_no: int) -> dic
     # 天候・風速・波高を取得して "weather" キーに追加
     weather = _parse_weather_conditions(soup)
     result["weather"] = weather
+    result["absent_boats"] = absent_boats
 
     boat_count = sum(1 for k in result if isinstance(k, int))
     if boat_count > 0:
         w = weather
         weather_str = (f" 天候:{w['weather']} 風速:{w['wind_speed']}m 波高:{w['wave_height']}cm"
                        if w.get("wind_speed") else "")
-        print(f"  [OK] 直前情報 場{venue_code} R{race_no}: {boat_count}艇分{weather_str}")
+        absent_str = f" 欠場:{absent_boats}" if absent_boats else ""
+        print(f"  [OK] 直前情報 場{venue_code} R{race_no}: {boat_count}艇分{weather_str}{absent_str}")
     else:
         print(f"  [--] 直前情報 場{venue_code} R{race_no}: 取得できず（レース前または構造変更）")
 

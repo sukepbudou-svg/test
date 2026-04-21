@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 # 発走何分前に予想を実行するか
-PREDICT_BEFORE_MIN = 10
+PREDICT_BEFORE_MIN = 6
 # 発走後何分後に結果を取得するか
 RESULT_AFTER_MIN = 12
 # ループの確認間隔（秒）
@@ -265,10 +265,11 @@ def _predict_one_race(
         (df_program["race_no"] == race_no)
     ]
 
-    # 展示タイム・天候取得
+    # 展示タイム・天候・欠場艇取得
     from src.collector.beforeinfo import fetch_beforeinfo
     beforeinfo_raw = fetch_beforeinfo(today, venue_code, race_no)
     race_weather = beforeinfo_raw.pop("weather", None) if isinstance(beforeinfo_raw, dict) else None
+    absent_boats = beforeinfo_raw.pop("absent_boats", []) if isinstance(beforeinfo_raw, dict) else []
     df_beforeinfo = pd.DataFrame([
         {"date": today.strftime("%Y-%m-%d"), "venue_code": venue_code,
          "race_no": race_no, "boat_no": bn,
@@ -280,6 +281,8 @@ def _predict_one_race(
     if race_weather and race_weather.get("wind_speed"):
         w = race_weather
         print(f"  天候: {w.get('weather','不明')} 風速:{w.get('wind_speed')}m 波高:{w.get('wave_height')}cm")
+    if absent_boats:
+        print(f"  欠場艇: {absent_boats} → 残り{6 - len(absent_boats)}艇で予想")
 
     # 特徴量生成
     df_features = build_features(df_prog_race, pd.DataFrame(), pd.DataFrame(),
@@ -293,10 +296,12 @@ def _predict_one_race(
     live_odds = fetch_odds(today, venue_code, race_no)
     all_live_odds = {(venue_code, race_no): live_odds} if live_odds else {}
     all_weather = {(venue_code, race_no): race_weather} if race_weather else {}
+    all_absent = {(venue_code, race_no): absent_boats} if absent_boats else {}
 
     # 予想生成
     recs = get_recommendations(model, df_features, payout_lookup=payout_lookup,
-                               all_live_odds=all_live_odds, all_weather=all_weather)
+                               all_live_odds=all_live_odds, all_weather=all_weather,
+                               all_absent=all_absent)
 
     # スプレッドシートに書き込む＆メモリキャッシュ用にリストを作成
     pred_rows = []
