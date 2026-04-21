@@ -102,6 +102,7 @@ def build_race_schedule(df_program) -> list[dict]:
             "scheduled_dt": scheduled_dt,
             "predicted": False,
             "result_fetched": False,
+            "last_result_attempt": None,
         })
 
     # 発走時刻順にソート
@@ -164,12 +165,20 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
         )
         return
 
-    # 起動時点で既に発走済みのレースはスキップ
+    # 起動時点で発走済みのレースを仕分け
     now_start = datetime.now()
     for race in schedule:
-        if race["scheduled_dt"] <= now_start:
-            race["predicted"] = True
+        if race["scheduled_dt"] > now_start:
+            continue  # 未発走は何もしない
+        race["predicted"] = True
+        result_at = race["scheduled_dt"] + timedelta(minutes=RESULT_AFTER_MIN)
+        # 結果取得タイミングを2時間以上過ぎているレースはスキップ
+        # それ以外（再起動直後など）は結果取得を試みる
+        if now_start >= result_at + timedelta(hours=2):
             race["result_fetched"] = True
+        else:
+            race["result_fetched"] = False
+            race["last_result_attempt"] = None
 
     upcoming = [r for r in schedule if not r["predicted"]]
     total = len(schedule)
@@ -211,9 +220,13 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                     race["daily_race_count"] = daily_race_count
                     race["predicted"] = True
 
-                # ── 結果取得タイミング: 発走8分後 ──
+                # ── 結果取得タイミング: 発走12分後（2分間隔でリトライ）──
                 result_at = scheduled_dt + timedelta(minutes=RESULT_AFTER_MIN)
-                if race["predicted"] and not race["result_fetched"] and now >= result_at:
+                last_attempt = race.get("last_result_attempt")
+                retry_ok = (last_attempt is None or
+                            now >= last_attempt + timedelta(minutes=2))
+                if race["predicted"] and not race["result_fetched"] and now >= result_at and retry_ok:
+                    race["last_result_attempt"] = now
                     success = _fetch_and_record_result(
                         race, today, spreadsheet_id, credentials_path,
                         fetch_race_result, update_result_row,
