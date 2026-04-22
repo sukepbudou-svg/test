@@ -12,7 +12,8 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 
-from src.collector.scraper import HEADERS, VENUE_CODES, GRADE_MAP, CONDITION_NUM, SURFACE_NUM
+from src.collector.scraper import HEADERS, VENUE_CODES, GRADE_MAP
+from src.features.builder import CONDITION_NUM, SURFACE_NUM
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data" / "raw"
 
