@@ -113,26 +113,46 @@ def _extract_race_links(soup: BeautifulSoup, date_str: str) -> list[dict]:
 
 
 def _fetch_netkeiba_race_list(date_str: str) -> list[dict]:
-    """netkeibaの成績一覧ページからrace_idを取得する（フォールバック）"""
-    url = f"https://db.netkeiba.com/?pid=race_list&date={date_str}"
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=15)
-        resp.encoding = "EUC-JP"
-        soup = BeautifulSoup(resp.text, "html.parser")
-    except requests.RequestException:
-        return []
+    """netkeibaからrace_idリストを取得する（複数URLを試す）"""
+    yyyy = date_str[:4]
+    mm = date_str[4:6]
+    dd = date_str[6:8]
 
-    race_ids = []
-    seen = set()
-    # netkeibaのdb.netkeiba.comはrace_idを含むリンクを持つ
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        m = re.search(r'/race/(\d{12})/', href)
-        if m and m.group(1) not in seen:
-            seen.add(m.group(1))
-            race_ids.append({"race_id": m.group(1), "source": "netkeiba_db"})
+    urls = [
+        # db.netkeiba.com スラッシュ区切り
+        f"https://db.netkeiba.com/?pid=race_list&date={yyyy}%2F{mm}%2F{dd}",
+        # race.netkeiba.com 静的レース一覧
+        f"https://race.netkeiba.com/top/race_list_2.html?kaisai_date={date_str}",
+        # db.netkeiba.com ハイフン区切り
+        f"https://db.netkeiba.com/?pid=race_list&date={yyyy}-{mm}-{dd}",
+    ]
 
-    return race_ids
+    for url in urls:
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=15)
+            # EUC-JPとUTF-8両方試す
+            for enc in ["EUC-JP", "utf-8"]:
+                try:
+                    resp.encoding = enc
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                    race_ids = []
+                    seen = set()
+                    for a in soup.find_all("a", href=True):
+                        href = a["href"]
+                        # 10〜12桁のrace_idに対応
+                        m = re.search(r'/race/(\d{10,12})/?', href)
+                        if m and m.group(1) not in seen:
+                            seen.add(m.group(1))
+                            race_ids.append({"race_id": m.group(1)})
+                    if race_ids:
+                        print(f"  [OK] {len(race_ids)}レース発見 ({url})")
+                        return race_ids
+                except Exception:
+                    continue
+        except requests.RequestException:
+            continue
+
+    return []
 
 
 def _fetch_race_result(link_info: dict, date: datetime) -> list[dict]:
