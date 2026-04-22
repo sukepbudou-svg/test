@@ -6,7 +6,20 @@ import argparse
 import os
 from pathlib import Path
 
-CREDENTIALS_PATH = str(Path(__file__).parent / "credentials.json")
+# credentials.jsonの検索順: 環境変数 → keiba-predictorフォルダ → boatrace-predictorフォルダ
+def _find_credentials() -> str:
+    env = os.environ.get("CREDENTIALS_PATH")
+    if env and Path(env).exists():
+        return env
+    local = Path(__file__).parent / "credentials.json"
+    if local.exists():
+        return str(local)
+    sibling = Path(__file__).parent.parent / "boatrace-predictor" / "credentials.json"
+    if sibling.exists():
+        return str(sibling)
+    return str(local)  # 見つからない場合はデフォルトパスを返す
+
+CREDENTIALS_PATH = _find_credentials()
 
 
 def cmd_train():
