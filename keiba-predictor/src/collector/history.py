@@ -155,9 +155,21 @@ def _fetch_netkeiba_race_list(date_str: str) -> list[dict]:
                     result = [{"race_id": rid} for rid in sorted(ids_found)]
                     print(f"  [OK] {len(result)}レース発見 (enc={enc})")
                     return result
-            resp.encoding = "utf-8"
-            snippet = " ".join(resp.text.split())[:150]
-            print(f"  [DEBUG] 先頭内容: {snippet}")
+            # デバッグ: raceを含むリンクを調べる（最初の1URLのみ）
+            resp.encoding = "EUC-JP"
+            soup_dbg = BeautifulSoup(resp.text, "html.parser")
+            all_hrefs = [a.get("href", "") for a in soup_dbg.find_all("a", href=True)]
+            race_hrefs = [h for h in all_hrefs if "race" in h.lower() or "2026" in h or "2025" in h]
+            print(f"  [DEBUG] 総リンク数={len(all_hrefs)} race含={len(race_hrefs)}")
+            if race_hrefs:
+                print(f"  [DEBUG] race系リンク例: {race_hrefs[:4]}")
+            elif all_hrefs:
+                print(f"  [DEBUG] リンク例: {all_hrefs[:4]}")
+            # 12桁数字パターンを全文から直接検索
+            nums = re.findall(r'20[23]\d{9}', resp.text)
+            if nums:
+                print(f"  [DEBUG] 12桁数字パターン: {nums[:4]}")
+            break  # 最初のURLのみ詳細デバッグ
         except requests.RequestException as e:
             print(f"  [WARN] 接続失敗: {type(e).__name__} {url[:50]}")
 
