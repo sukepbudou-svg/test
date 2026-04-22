@@ -118,39 +118,48 @@ def _fetch_netkeiba_race_list(date_str: str) -> list[dict]:
     mm = date_str[4:6]
     dd = date_str[6:8]
 
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/122.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+        "Referer": "https://db.netkeiba.com/",
+    }
+
+    # スラッシュを%2Fに変換しないよう直接文字列として渡す
     urls = [
-        # db.netkeiba.com スラッシュ区切り
-        f"https://db.netkeiba.com/?pid=race_list&date={yyyy}%2F{mm}%2F{dd}",
-        # race.netkeiba.com 静的レース一覧
+        f"https://db.netkeiba.com/?pid=race_list&date={yyyy}/{mm}/{dd}",
         f"https://race.netkeiba.com/top/race_list_2.html?kaisai_date={date_str}",
-        # db.netkeiba.com ハイフン区切り
+        f"https://db.netkeiba.com/?pid=race_list&date={date_str}",
         f"https://db.netkeiba.com/?pid=race_list&date={yyyy}-{mm}-{dd}",
     ]
 
     for url in urls:
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=15)
-            # EUC-JPとUTF-8両方試す
+            resp = requests.get(url, headers=headers, timeout=15)
+            print(f"  [DEBUG] status={resp.status_code} size={len(resp.content)} {url[:60]}")
+            if resp.status_code != 200:
+                continue
             for enc in ["EUC-JP", "utf-8"]:
-                try:
-                    resp.encoding = enc
-                    soup = BeautifulSoup(resp.text, "html.parser")
-                    race_ids = []
-                    seen = set()
-                    for a in soup.find_all("a", href=True):
-                        href = a["href"]
-                        # 10〜12桁のrace_idに対応
-                        m = re.search(r'/race/(\d{10,12})/?', href)
-                        if m and m.group(1) not in seen:
-                            seen.add(m.group(1))
-                            race_ids.append({"race_id": m.group(1)})
-                    if race_ids:
-                        print(f"  [OK] {len(race_ids)}レース発見 ({url})")
-                        return race_ids
-                except Exception:
-                    continue
-        except requests.RequestException:
-            continue
+                resp.encoding = enc
+                text = resp.text
+                ids_found = set()
+                for m in re.finditer(r'/race/(\d{10,12})/?', text):
+                    ids_found.add(m.group(1))
+                for m in re.finditer(r'race_id=(\d{10,12})', text):
+                    ids_found.add(m.group(1))
+                if ids_found:
+                    result = [{"race_id": rid} for rid in sorted(ids_found)]
+                    print(f"  [OK] {len(result)}レース発見 (enc={enc})")
+                    return result
+            resp.encoding = "utf-8"
+            snippet = " ".join(resp.text.split())[:150]
+            print(f"  [DEBUG] 先頭内容: {snippet}")
+        except requests.RequestException as e:
+            print(f"  [WARN] 接続失敗: {type(e).__name__} {url[:50]}")
 
     return []
 
