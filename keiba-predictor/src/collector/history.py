@@ -113,7 +113,7 @@ def _extract_race_links(soup: BeautifulSoup, date_str: str) -> list[dict]:
 
 
 def _fetch_netkeiba_race_list(date_str: str) -> list[dict]:
-    """netkeibaからrace_idリストを取得する（複数URLを試す）"""
+    """複数ソースからrace_idリストを取得する"""
     yyyy = date_str[:4]
     mm = date_str[4:6]
     dd = date_str[6:8]
@@ -126,21 +126,20 @@ def _fetch_netkeiba_race_list(date_str: str) -> list[dict]:
         ),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
-        "Referer": "https://db.netkeiba.com/",
     }
 
-    # スラッシュを%2Fに変換しないよう直接文字列として渡す
     urls = [
-        f"https://db.netkeiba.com/?pid=race_list&date={yyyy}/{mm}/{dd}",
+        # Yahoo競馬（静的HTML）
+        f"https://keiba.yahoo.co.jp/race/list/{date_str}/",
+        # race.netkeiba.com AJAXフラグメント
         f"https://race.netkeiba.com/top/race_list_2.html?kaisai_date={date_str}",
-        f"https://db.netkeiba.com/?pid=race_list&date={date_str}",
-        f"https://db.netkeiba.com/?pid=race_list&date={yyyy}-{mm}-{dd}",
+        # db.netkeiba.com スラッシュ区切り
+        f"https://db.netkeiba.com/?pid=race_list&date={yyyy}/{mm}/{dd}",
     ]
 
     for url in urls:
         try:
             resp = requests.get(url, headers=headers, timeout=15)
-            print(f"  [DEBUG] status={resp.status_code} size={len(resp.content)} {url[:60]}")
             if resp.status_code != 200:
                 continue
             for enc in ["EUC-JP", "utf-8"]:
@@ -153,25 +152,10 @@ def _fetch_netkeiba_race_list(date_str: str) -> list[dict]:
                     ids_found.add(m.group(1))
                 if ids_found:
                     result = [{"race_id": rid} for rid in sorted(ids_found)]
-                    print(f"  [OK] {len(result)}レース発見 (enc={enc})")
+                    print(f"  [OK] {len(result)}レース発見 ({url[:55]})")
                     return result
-            # デバッグ: raceを含むリンクを調べる（最初の1URLのみ）
-            resp.encoding = "EUC-JP"
-            soup_dbg = BeautifulSoup(resp.text, "html.parser")
-            all_hrefs = [a.get("href", "") for a in soup_dbg.find_all("a", href=True)]
-            race_hrefs = [h for h in all_hrefs if "race" in h.lower() or "2026" in h or "2025" in h]
-            print(f"  [DEBUG] 総リンク数={len(all_hrefs)} race含={len(race_hrefs)}")
-            if race_hrefs:
-                print(f"  [DEBUG] race系リンク例: {race_hrefs[:4]}")
-            elif all_hrefs:
-                print(f"  [DEBUG] リンク例: {all_hrefs[:4]}")
-            # 12桁数字パターンを全文から直接検索
-            nums = re.findall(r'20[23]\d{9}', resp.text)
-            if nums:
-                print(f"  [DEBUG] 12桁数字パターン: {nums[:4]}")
-            break  # 最初のURLのみ詳細デバッグ
-        except requests.RequestException as e:
-            print(f"  [WARN] 接続失敗: {type(e).__name__} {url[:50]}")
+        except requests.RequestException:
+            continue
 
     return []
 
