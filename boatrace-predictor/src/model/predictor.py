@@ -378,17 +378,30 @@ def get_recommendations(
         should_bet, _ = _is_race_worth_betting(by_prob)
 
         def pick_tier(pool, exclude_combos, min_odds, max_odds, n, tier_name, fallback_min=None, fallback_max=None):
-            """指定オッズ範囲からエージェント合議＋格上絡み＋ROIで上位n点を選出"""
+            """
+            指定オッズ範囲から複合スコアで上位n点を選出
+
+            複合スコア（全要素をバランスよく評価）:
+              合議度(35%) + 期待ROI(35%) + 格上絡み(20%) + 的中確率(10%)
+            どれか1つが突出して強くなることを防ぎ、あらゆる角度から総合判断する
+            """
+            def _score(df):
+                df = df.copy()
+                max_prob = df["prob"].max()
+                max_roi  = df["expected_roi"].clip(upper=5.0).max()
+                df["_composite"] = (
+                    0.35 * (df["agreement"] / 4.0) +
+                    0.35 * (df["expected_roi"].clip(upper=5.0) / max(max_roi, 0.01)) +
+                    0.20 * df["grade_anchor"] +
+                    0.10 * (df["prob"] / max(max_prob, 1e-9))
+                )
+                return df.sort_values("_composite", ascending=False)
+
             candidates = pool[
                 (pool["odds_value"] >= min_odds) & (pool["odds_value"] <= max_odds)
             ].copy()
             candidates = candidates[~candidates["combination"].isin(exclude_combos)]
-            # 合議数 → 格上絡みスコア → 期待ROIの順で優先
-            candidates = candidates.sort_values(
-                ["agreement", "grade_anchor", "expected_roi"],
-                ascending=[False, False, False]
-            )
-            result = candidates.head(n).copy()
+            result = _score(candidates).head(n).copy()
 
             # 足りない場合はフォールバック範囲で補完
             if len(result) < n and fallback_min is not None:
@@ -397,11 +410,7 @@ def get_recommendations(
                 ].copy()
                 fb = fb[~fb["combination"].isin(exclude_combos)]
                 fb = fb[~fb["combination"].isin(result["combination"])]
-                fb = fb.sort_values(
-                    ["agreement", "grade_anchor", "expected_roi"],
-                    ascending=[False, False, False]
-                )
-                extra = fb.head(n - len(result)).copy()
+                extra = _score(fb).head(n - len(result)).copy()
                 result = pd.concat([result, extra]).reset_index(drop=True)
 
             result["tier"] = tier_name
