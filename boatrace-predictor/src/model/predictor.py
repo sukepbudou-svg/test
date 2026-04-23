@@ -370,16 +370,9 @@ def get_recommendations(
                 (pool["odds_value"] >= min_odds) & (pool["odds_value"] <= max_odds)
             ].copy()
             candidates = candidates[~candidates["combination"].isin(exclude_combos)]
-            # 合議数2以上の組み合わせを優先（複数エージェントが認めたものだけ）
-            strong = candidates[candidates["agreement"] >= 2].sort_values(
-                ["agreement", "expected_roi"], ascending=[False, False])
-            result = strong.head(n).copy()
-            # 足りない場合は合議数1以上で補完
-            if len(result) < n:
-                weak = candidates[candidates["agreement"] >= 1]
-                weak = weak[~weak["combination"].isin(result["combination"])]
-                weak = weak.sort_values(["agreement", "expected_roi"], ascending=[False, False])
-                result = pd.concat([result, weak.head(n - len(result))]).reset_index(drop=True)
+            # 合議数→期待ROIの順（高合議が自然に優先される）
+            candidates = candidates.sort_values(["agreement", "expected_roi"], ascending=[False, False])
+            result = candidates.head(n).copy()
 
             # 足りない場合はフォールバック範囲で補完
             if len(result) < n and fallback_min is not None:
@@ -397,8 +390,8 @@ def get_recommendations(
 
         used = set()
 
-        # ── 小穴3点: 35〜60倍 ──
-        t0b = pick_tier(by_prob, used, 35.0, 60.0, 3, "小穴")
+        # ── 小穴3点: 35〜60倍（足りなければ25〜70倍に拡張）──
+        t0b = pick_tier(by_prob, used, 35.0, 60.0, 3, "小穴", 25.0, 70.0)
         used.update(t0b["combination"].tolist())
 
         # ── 大穴100～2点: 100〜150倍 ──
