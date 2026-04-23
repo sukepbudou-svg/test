@@ -225,14 +225,14 @@ def append_prediction_row(
     values.append(row.get("bet_label", ""))
     sheet.append_row(values, value_input_option="RAW")
 
-    # 会場色 + 信頼度色を1回のbatch_updateで適用
+    # 会場色 + 信頼度色 + 激熱色を1回のbatch_updateで適用
     last_row = len(sheet.get_all_values())
     try:
         sid = sheet.id
         bg = _VENUE_BG_COLORS.get(str(row.get("venue_name", "")), _DEFAULT_BG)
         reqs = [{"repeatCell": {
             "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                      "startColumnIndex": 0, "endColumnIndex": 11},
+                      "startColumnIndex": 0, "endColumnIndex": 12},
             "cell": {"userEnteredFormat": {"backgroundColor": bg}},
             "fields": "userEnteredFormat.backgroundColor",
         }}]
@@ -255,6 +255,17 @@ def append_prediction_row(
                     "backgroundColor": {"red": 0.8, "green": 0.95, "blue": 0.8},
                 }},
                 "fields": "userEnteredFormat.backgroundColor",
+            }})
+        # 激熱ラベルのときはL列を薄いオレンジで色付け・太字
+        if row.get("bet_label") == "激熱":
+            reqs.append({"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
+                          "startColumnIndex": 11, "endColumnIndex": 12},
+                "cell": {"userEnteredFormat": {
+                    "backgroundColor": {"red": 1.0, "green": 0.85, "blue": 0.6},
+                    "textFormat": {"bold": True},
+                }},
+                "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
             }})
         spreadsheet.batch_update({"requests": reqs})
     except Exception:

@@ -431,10 +431,8 @@ def get_recommendations(
                 src = rec.get("odds_source", "history")
                 odds_display = f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)"
                 tier = rec.get("tier", "")
-                if should_bet and tier == "小穴":
-                    bet_label = "小穴勝負時"
-                elif should_bet and tier in ("大穴100～", "大アナ151～", "超大穴251～"):
-                    bet_label = "大穴勝負時"
+                if should_bet and tier in ("小穴", "大穴100～", "大アナ151～", "超大穴251～"):
+                    bet_label = "激熱"
                 else:
                     bet_label = ""
                 all_recommendations.append({
