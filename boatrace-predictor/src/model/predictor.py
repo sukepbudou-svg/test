@@ -364,24 +364,8 @@ def get_recommendations(
         predictions = predict_race(model, race_row, payout_lookup, live_odds, weather, absent_boats)
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
 
-        # ── レース選別フィルター ──
-        should_bet, skip_reason = _is_race_worth_betting(by_prob)
-        if not should_bet:
-            venue_name = race_row.get("venue_name", "")
-            print(f"  → {venue_name} {race_no}R 見送り: {skip_reason}")
-            all_recommendations.append({
-                "date": race_row.get("date", ""),
-                "venue_name": venue_name,
-                "race_no": race_no,
-                "combination": "見送り",
-                "prob": "0%",
-                "odds": "-",
-                "expected_roi": "0%",
-                "confidence": f"見送り({skip_reason})",
-                "odds_source": "-",
-                "tier": "-",
-            })
-            continue
+        # ── レース選別フィルター（見送りでも予想は出す・L列に判定を記入）──
+        should_bet, _ = _is_race_worth_betting(by_prob)
 
         def pick_tier(pool, exclude_combos, min_odds, max_odds, n, tier_name, fallback_min=None, fallback_max=None):
             """指定オッズ範囲からエージェント合議＋ROIで上位n点を選出"""
@@ -438,14 +422,21 @@ def get_recommendations(
                 "confidence": "見送り",
                 "odds_source": "-",
                 "tier": "-",
+                "bet_label": "",
             })
         else:
             for _, rec in recommended.iterrows():
                 agreement = int(rec.get("agreement", 0))
-                # 4エージェント中: ★★★=3〜4合意, ★★☆=2合意, ★☆☆=1以下
                 confidence = "★★★★" if agreement >= 4 else "★★★☆" if agreement >= 3 else "★★☆☆" if agreement >= 2 else "★☆☆☆"
                 src = rec.get("odds_source", "history")
                 odds_display = f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)"
+                tier = rec.get("tier", "")
+                if should_bet and tier == "小穴":
+                    bet_label = "小穴勝負時"
+                elif should_bet and tier in ("大穴100～", "大アナ151～", "超大穴251～"):
+                    bet_label = "大穴勝負時"
+                else:
+                    bet_label = ""
                 all_recommendations.append({
                     "date": race_row.get("date", ""),
                     "venue_name": race_row.get("venue_name", ""),
@@ -456,7 +447,8 @@ def get_recommendations(
                     "expected_roi": f"{rec['expected_roi']*100:.0f}%",
                     "confidence": confidence,
                     "odds_source": "リアルタイム" if src == "live" else "履歴平均",
-                    "tier": rec.get("tier", "本命"),  # 狙い列の値
+                    "tier": tier,
+                    "bet_label": bet_label,
                 })
 
     return pd.DataFrame(all_recommendations)

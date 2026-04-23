@@ -170,13 +170,13 @@ def write_predictions(
         sheet = spreadsheet.add_worksheet(title=sheet_name, rows=200, cols=10)
 
     # ヘッダー行
-    headers = ["日付", "競艇場", "レース", "狙い", "買い目（3連単）", "的中確率", "オッズ", "期待回収率", "信頼度", "オッズ元"]
+    headers = ["日付", "競艇場", "レース", "狙い", "買い目（3連単）", "的中確率", "オッズ", "期待回収率", "信頼度", "オッズ元", "勝負推奨"]
     sheet.update("A1", [headers])
-    _format_header(spreadsheet, sheet, num_cols=10)
+    _format_header(spreadsheet, sheet, num_cols=11)
 
     # データ行
     if not recommendations.empty:
-        cols = ["date", "venue_name", "race_no", "tier", "combination", "prob", "odds", "expected_roi", "confidence", "odds_source"]
+        cols = ["date", "venue_name", "race_no", "tier", "combination", "prob", "odds", "expected_roi", "confidence", "odds_source", "bet_label"]
         # 列がない場合（見送り行など）は"-"で埋める
         for col in cols:
             if col not in recommendations.columns:
@@ -214,14 +214,15 @@ def append_prediction_row(
     except gspread.WorksheetNotFound:
         sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=12)
         headers = ["日付", "競艇場", "レース", "狙い", "買い目（3連単）", "的中確率",
-                   "オッズ", "期待回収率", "信頼度", "オッズ元", "本日レース数"]
+                   "オッズ", "期待回収率", "信頼度", "オッズ元", "本日レース数", "勝負推奨"]
         sheet.update("A1", [headers])
-        _format_header(spreadsheet, sheet, num_cols=11)
+        _format_header(spreadsheet, sheet, num_cols=12)
 
     cols = ["date", "venue_name", "race_no", "tier", "combination", "prob",
             "odds", "expected_roi", "confidence", "odds_source"]
     values = [row.get(c, "-") for c in cols]
     values.append(race_count if race_count is not None else "-")
+    values.append(row.get("bet_label", ""))
     sheet.append_row(values, value_input_option="RAW")
 
     # 会場色 + 信頼度色を1回のbatch_updateで適用
