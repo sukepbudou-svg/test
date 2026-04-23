@@ -18,6 +18,7 @@ BASELINE_NATIONAL_2    = 0.46  # 全国2連率の平均
 BASELINE_LOCAL_2       = 0.45  # 当地2連率の平均
 BASELINE_BOAT_2        = 0.30  # 艇2連率の平均
 BASELINE_NATIONAL_3    = 0.60  # 全国3連率の平均（2連率から近似）
+BASELINE_RECENT_FORM   = 0.583 # 直近調子の平均（平均着順3.5換算）
 # ─── 枠番別展示ST基準値 ───
 # 外枠ほど積極的なスタートを狙う傾向がある
 BASELINE_ST_BY_LANE = {1: 0.155, 2: 0.152, 3: 0.150, 4: 0.148, 5: 0.145, 6: 0.142}
@@ -26,13 +27,14 @@ BASELINE_ST_BY_LANE = {1: 0.155, 2: 0.152, 3: 0.150, 4: 0.148, 5: 0.145, 6: 0.14
 EXHTIME_RANK_FACTOR = {1: 1.12, 2: 1.06, 3: 1.02, 4: 0.98, 5: 0.94, 6: 0.88}
 
 # ─── 各指標の重み ───
-W_NATIONAL_WIN  = 0.20
-W_LOCAL_WIN     = 0.15
-W_MOTOR_2RATE   = 0.12
-W_NATIONAL_2    = 0.13
-W_LOCAL_2       = 0.10  # 当地2連率（新規追加）
-W_BOAT_2        = 0.05  # 艇2連率（新規追加）
-W_NATIONAL_3    = 0.05  # 全国3連率（近似値・新規追加）
+W_NATIONAL_WIN  = 0.17
+W_LOCAL_WIN     = 0.13
+W_MOTOR_2RATE   = 0.10
+W_NATIONAL_2    = 0.11
+W_LOCAL_2       = 0.10  # 当地2連率
+W_BOAT_2        = 0.05  # 艇2連率
+W_NATIONAL_3    = 0.05  # 全国3連率（近似値）
+W_RECENT_FORM   = 0.09  # 直近調子（過去10走の着順）
 W_ST            = 0.10  # 展示ST重み
 W_EXHTIME       = 0.10  # 展示タイムランク重み
 
@@ -74,6 +76,7 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
         l2  = float(race_row.get(f"boat{boat}_local_2rate",       BASELINE_LOCAL_2)      or BASELINE_LOCAL_2)
         b2  = float(race_row.get(f"boat{boat}_boat_2rate",        BASELINE_BOAT_2)       or BASELINE_BOAT_2)
         n3  = float(race_row.get(f"boat{boat}_national_3rate",    BASELINE_NATIONAL_3)   or BASELINE_NATIONAL_3)
+        rf  = float(race_row.get(f"boat{boat}_recent_form_score", BASELINE_RECENT_FORM)  or BASELINE_RECENT_FORM)
         gn  = int(race_row.get(f"boat{boat}_grade_num", 2) or 2)
 
         # 各指標を基準値からの比率でスコア化
@@ -84,7 +87,8 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
             W_NATIONAL_2   * (n2 / BASELINE_NATIONAL_2)   +
             W_LOCAL_2      * (l2 / BASELINE_LOCAL_2)      +
             W_BOAT_2       * (b2 / BASELINE_BOAT_2)       +
-            W_NATIONAL_3   * (n3 / BASELINE_NATIONAL_3)
+            W_NATIONAL_3   * (n3 / BASELINE_NATIONAL_3)   +
+            W_RECENT_FORM  * (rf / BASELINE_RECENT_FORM)
         )
 
         # グレード補正

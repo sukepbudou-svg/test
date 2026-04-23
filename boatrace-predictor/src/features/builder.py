@@ -110,11 +110,35 @@ def _estimate_series_day_from_files(venue_code: str, date_str: str, raw_dir: Pat
     return series_day, is_final
 
 
+def compute_recent_form_lookup(df_rank: pd.DataFrame, lookback: int = 10) -> dict:
+    """
+    選手ごとの直近調子スコアを計算する
+
+    Returns:
+        {racer_no: form_score} の辞書
+        form_score: 0-1 (rank1=1.0, rank6≈0.167, 平均≈0.583)
+    """
+    if df_rank.empty or "racer_no" not in df_rank.columns or "rank" not in df_rank.columns:
+        return {}
+
+    lookup = {}
+    df_sorted = df_rank.sort_values("date")
+    for racer_no, grp in df_sorted.groupby("racer_no"):
+        recent = grp.tail(lookback)
+        valid = recent[recent["rank"].between(1, 6)]
+        if valid.empty:
+            continue
+        scores = (7 - valid["rank"]) / 6  # rank1→1.0, rank6→0.167
+        lookup[int(racer_no)] = float(scores.mean())
+    return lookup
+
+
 def build_features(
     df_program: pd.DataFrame,
     df_rank: pd.DataFrame,
     df_payout: pd.DataFrame,
     df_beforeinfo: pd.DataFrame = None,
+    recent_form_lookup: dict = None,
 ) -> pd.DataFrame:
     """
     番組表・成績データを結合して特徴量DataFrameを生成する
@@ -172,7 +196,7 @@ def build_features(
         top3 = pd.DataFrame(columns=["date", "venue_code", "race_no", "result_combination", "winner_boat"])
 
     # レースごとに6艇分の特徴量をピボット
-    program_pivot = _pivot_program(df_program)
+    program_pivot = _pivot_program(df_program, recent_form_lookup=recent_form_lookup)
 
     # シリーズ日（初日/最終日）を計算して結合
     series_df = _calculate_series_day(df_program)
@@ -218,7 +242,7 @@ def build_features(
     return df
 
 
-def _pivot_program(df_program: pd.DataFrame) -> pd.DataFrame:
+def _pivot_program(df_program: pd.DataFrame, recent_form_lookup: dict = None) -> pd.DataFrame:
     """
     番組表を「1レース1行」形式に変換する
     各艇番の特徴量をカラムとして展開
@@ -253,6 +277,12 @@ def _pivot_program(df_program: pd.DataFrame) -> pd.DataFrame:
             # 全国3連率は番組データに含まれないため2連率から近似計算
             n2 = float(racer.get("national_2rate", 0.46) or 0.46)
             row[f"boat{bn}_national_3rate"] = round(n2 * 1.30, 2)
+            # 直近調子スコア（過去N走の着順から計算）
+            racer_no = int(racer.get("racer_no", 0) or 0)
+            row[f"boat{bn}_recent_form_score"] = (
+                recent_form_lookup.get(racer_no, 0.583)
+                if recent_form_lookup else 0.583
+            )
         rows.append(row)
 
     return pd.DataFrame(rows)
@@ -292,6 +322,7 @@ def get_feature_columns() -> list[str]:
         "motor_2rate", "boat_2rate",
         "age", "weight", "grade_num",
         "exhibition_time", "exhibition_st",
+        "recent_form_score",
     ]
     cols = []
     for bn in range(1, 7):
