@@ -355,8 +355,8 @@ def get_recommendations(
 
         used = set()
 
-        # ── 中アナ3点: 26〜99倍 ──
-        t0b = pick_tier(by_prob, used, 26.0, 99.0, 3, "中アナ")
+        # ── 小穴3点: 26〜80倍 ──
+        t0b = pick_tier(by_prob, used, 26.0, 80.0, 3, "小穴")
         used.update(t0b["combination"].tolist())
 
         # ── 大アナ2点: 100〜200倍 ──
