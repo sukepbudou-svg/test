@@ -17,8 +17,8 @@ from src.agents.racer_performance import predict_win_probs as racer_win_probs
 from src.agents.motor_form import predict_win_probs as motor_win_probs
 
 # エージェントの重み（合計1.0）
-WEIGHT_ML     = 0.45  # AIモデルエージェント
-WEIGHT_COURSE = 0.20  # コース戦略エージェント
+WEIGHT_ML     = 0.40  # AIモデルエージェント
+WEIGHT_COURSE = 0.25  # コース戦略エージェント（競艇では枠番が最重要）
 WEIGHT_RACER  = 0.20  # 選手成績エージェント
 WEIGHT_MOTOR  = 0.15  # モーター状態エージェント
 
@@ -26,13 +26,10 @@ WEIGHT_MOTOR  = 0.15  # モーター状態エージェント
 TRIFECTA_RETURN_RATE = 0.75
 
 # 推奨する最低期待回収率
-MIN_EXPECTED_ROI = 1.10  # 110%以上のみ推奨
+MIN_EXPECTED_ROI = 1.15  # 115%以上のみ推奨
 
 # 推奨する最低的中確率（これ未満は大穴すぎて除外）
 MIN_PROB = 0.02  # 2%以上のみ推奨
-
-# 推奨する最低的中確率（これ未満は除外）
-# ※オッズは市場の値をそのまま使用し、倍率によるフィルタリングは行わない
 
 MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
 PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
@@ -321,11 +318,11 @@ def _is_race_worth_betting(by_prob: pd.DataFrame) -> tuple[bool, str]:
     signal = top_prob - second_prob
 
     # 合議度が低い → 4エージェントがバラバラに予想 → 混戦・予測困難
-    if avg_agreement < 1.3:
+    if avg_agreement < 2.0:
         return False, f"混戦（合議度{avg_agreement:.1f}/4）"
 
     # シグナルが弱い → どの組み合わせも横一線 → 優位性なし
-    if signal < 0.003:
+    if signal < 0.006:
         return False, "混戦（シグナル弱）"
 
     return True, f"合議{avg_agreement:.1f}/4 シグナル{signal:.4f}"
@@ -373,8 +370,16 @@ def get_recommendations(
                 (pool["odds_value"] >= min_odds) & (pool["odds_value"] <= max_odds)
             ].copy()
             candidates = candidates[~candidates["combination"].isin(exclude_combos)]
-            candidates = candidates.sort_values(["agreement", "expected_roi"], ascending=[False, False])
-            result = candidates.head(n).copy()
+            # 合議数2以上の組み合わせを優先（複数エージェントが認めたものだけ）
+            strong = candidates[candidates["agreement"] >= 2].sort_values(
+                ["agreement", "expected_roi"], ascending=[False, False])
+            result = strong.head(n).copy()
+            # 足りない場合は合議数1以上で補完
+            if len(result) < n:
+                weak = candidates[candidates["agreement"] >= 1]
+                weak = weak[~weak["combination"].isin(result["combination"])]
+                weak = weak.sort_values(["agreement", "expected_roi"], ascending=[False, False])
+                result = pd.concat([result, weak.head(n - len(result))]).reset_index(drop=True)
 
             # 足りない場合はフォールバック範囲で補完
             if len(result) < n and fallback_min is not None:
