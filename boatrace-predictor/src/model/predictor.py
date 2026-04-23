@@ -297,6 +297,40 @@ def predict_race(
     return df
 
 
+def _is_race_worth_betting(by_prob: pd.DataFrame) -> tuple[bool, str]:
+    """
+    このレースで勝負すべきかを判定する
+
+    判定基準:
+    1. エージェント合議度: 4つのAIが上位予想で一致しているか（混戦判定）
+    2. シグナル強度: 1位と2位の確率差が十分あるか（予測の明確さ）
+
+    Returns:
+        (should_bet: bool, skip_reason: str)
+    """
+    if by_prob.empty or len(by_prob) < 6:
+        return False, "データ不足"
+
+    # 上位10組の平均エージェント合議数（0〜4）
+    top10 = by_prob.head(10)
+    avg_agreement = top10["agreement"].mean()
+
+    # 1位と2位の確率差（シグナル強度）
+    top_prob = float(by_prob.iloc[0]["prob"])
+    second_prob = float(by_prob.iloc[1]["prob"])
+    signal = top_prob - second_prob
+
+    # 合議度が低い → 4エージェントがバラバラに予想 → 混戦・予測困難
+    if avg_agreement < 1.3:
+        return False, f"混戦（合議度{avg_agreement:.1f}/4）"
+
+    # シグナルが弱い → どの組み合わせも横一線 → 優位性なし
+    if signal < 0.003:
+        return False, "混戦（シグナル弱）"
+
+    return True, f"合議{avg_agreement:.1f}/4 シグナル{signal:.4f}"
+
+
 def get_recommendations(
     model: lgb.Booster,
     df_today: pd.DataFrame,
@@ -329,6 +363,25 @@ def get_recommendations(
 
         predictions = predict_race(model, race_row, payout_lookup, live_odds, weather, absent_boats)
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
+
+        # ── レース選別フィルター ──
+        should_bet, skip_reason = _is_race_worth_betting(by_prob)
+        if not should_bet:
+            venue_name = race_row.get("venue_name", "")
+            print(f"  → {venue_name} {race_no}R 見送り: {skip_reason}")
+            all_recommendations.append({
+                "date": race_row.get("date", ""),
+                "venue_name": venue_name,
+                "race_no": race_no,
+                "combination": "見送り",
+                "prob": "0%",
+                "odds": "-",
+                "expected_roi": "0%",
+                "confidence": f"見送り({skip_reason})",
+                "odds_source": "-",
+                "tier": "-",
+            })
+            continue
 
         def pick_tier(pool, exclude_combos, min_odds, max_odds, n, tier_name, fallback_min=None, fallback_max=None):
             """指定オッズ範囲からエージェント合議＋ROIで上位n点を選出"""
