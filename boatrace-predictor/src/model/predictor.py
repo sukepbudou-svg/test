@@ -341,11 +341,11 @@ def _is_race_worth_betting(by_prob: pd.DataFrame) -> tuple[bool, str]:
     signal = top_prob - second_prob
 
     # 合議度が低い → 4エージェントがバラバラに予想 → 混戦・予測困難
-    if avg_agreement < 2.0:
+    if avg_agreement < 1.5:
         return False, f"混戦（合議度{avg_agreement:.1f}/4）"
 
     # シグナルが弱い → どの組み合わせも横一線 → 優位性なし
-    if signal < 0.006:
+    if signal < 0.004:
         return False, "混戦（シグナル弱）"
 
     return True, f"合議{avg_agreement:.1f}/4 シグナル{signal:.4f}"
