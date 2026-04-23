@@ -241,6 +241,12 @@ def predict_race(
     combinations = list(permutations(range(1, 7), 3))
     combo_probs = []
 
+    # 各艇のグレード（2着・3着格上絡み判定用）
+    grade_by_boat = {
+        bn: int(race_features.get(f"boat{bn}_grade_num", 2) or 2)
+        for bn in range(1, 7)
+    }
+
     for b1, b2, b3 in combinations:
         p1 = win_probs[b1 - 1]
         rem1 = np.array([win_probs[i] for i in range(6) if i != b1 - 1])
@@ -248,7 +254,13 @@ def predict_race(
         rem2 = np.array([win_probs[i] for i in range(6) if i not in (b1 - 1, b2 - 1)])
         p3 = win_probs[b3 - 1] / rem2.sum() if rem2.sum() > 0 else 0
         prob = p1 * p2 * p3
-        combo_probs.append((f"{b1}-{b2}-{b3}", b1, b2, b3, prob))
+
+        # 2着・3着の格上スコア（A1=4点, A2=3点, B1=2点, B2=1点 を合算して正規化）
+        g2 = grade_by_boat.get(b2, 2)
+        g3 = grade_by_boat.get(b3, 2)
+        grade_anchor = (g2 + g3) / 8.0  # 最大1.0（両方A1）, 平均0.5（両方B1）
+
+        combo_probs.append((f"{b1}-{b2}-{b3}", b1, b2, b3, prob, grade_anchor))
 
     # 確率の高い順に並べて人気順位を付与
     combo_probs.sort(key=lambda x: x[4], reverse=True)
@@ -256,7 +268,7 @@ def predict_race(
     using_live = bool(live_odds)
 
     results = []
-    for rank, (combination, b1, b2, b3, prob) in enumerate(combo_probs, start=1):
+    for rank, (combination, b1, b2, b3, prob, grade_anchor) in enumerate(combo_probs, start=1):
         if using_live and combination in live_odds:
             # 市場オッズをそのまま使用（フィルタなし）
             actual_odds = live_odds[combination]
@@ -287,6 +299,7 @@ def predict_race(
             "expected_roi": round(expected_roi, 4),
             "odds_source": odds_source,
             "agreement": agreement,
+            "grade_anchor": round(grade_anchor, 3),
         })
 
     df = pd.DataFrame(results).sort_values("expected_roi", ascending=False).reset_index(drop=True)
@@ -365,13 +378,16 @@ def get_recommendations(
         should_bet, _ = _is_race_worth_betting(by_prob)
 
         def pick_tier(pool, exclude_combos, min_odds, max_odds, n, tier_name, fallback_min=None, fallback_max=None):
-            """指定オッズ範囲からエージェント合議＋ROIで上位n点を選出"""
+            """指定オッズ範囲からエージェント合議＋格上絡み＋ROIで上位n点を選出"""
             candidates = pool[
                 (pool["odds_value"] >= min_odds) & (pool["odds_value"] <= max_odds)
             ].copy()
             candidates = candidates[~candidates["combination"].isin(exclude_combos)]
-            # 合議数→期待ROIの順（高合議が自然に優先される）
-            candidates = candidates.sort_values(["agreement", "expected_roi"], ascending=[False, False])
+            # 合議数 → 格上絡みスコア → 期待ROIの順で優先
+            candidates = candidates.sort_values(
+                ["agreement", "grade_anchor", "expected_roi"],
+                ascending=[False, False, False]
+            )
             result = candidates.head(n).copy()
 
             # 足りない場合はフォールバック範囲で補完
@@ -381,7 +397,10 @@ def get_recommendations(
                 ].copy()
                 fb = fb[~fb["combination"].isin(exclude_combos)]
                 fb = fb[~fb["combination"].isin(result["combination"])]
-                fb = fb.sort_values(["agreement", "expected_roi"], ascending=[False, False])
+                fb = fb.sort_values(
+                    ["agreement", "grade_anchor", "expected_roi"],
+                    ascending=[False, False, False]
+                )
                 extra = fb.head(n - len(result)).copy()
                 result = pd.concat([result, extra]).reset_index(drop=True)
 
