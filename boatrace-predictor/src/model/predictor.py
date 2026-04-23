@@ -303,6 +303,16 @@ def predict_race(
         })
 
     df = pd.DataFrame(results).sort_values("expected_roi", ascending=False).reset_index(drop=True)
+
+    # 欠場艇を含む組み合わせをプールから完全除去（確率0でも残るため明示的に削除）
+    if absent_boats:
+        absent_set = set(absent_boats)
+        df = df[
+            ~df["boat1"].isin(absent_set) &
+            ~df["boat2"].isin(absent_set) &
+            ~df["boat3"].isin(absent_set)
+        ].reset_index(drop=True)
+
     df["rank"] = df.index + 1
     return df
 
