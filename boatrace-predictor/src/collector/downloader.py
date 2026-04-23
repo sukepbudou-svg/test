@@ -90,7 +90,7 @@ def download_today() -> tuple[Path | None, Path | None]:
 
 def extract_lzh(lzh_path: Path) -> Path | None:
     """
-    LZHファイルを解凍してテキストファイルを返す
+    LZHファイルを解凍してテキストファイルを返す（Windows/Linux両対応）
 
     Args:
         lzh_path: LZHファイルパス
@@ -99,28 +99,41 @@ def extract_lzh(lzh_path: Path) -> Path | None:
         解凍したテキストファイルパス（失敗時はNone）
     """
     import subprocess
+    import sys
     import tempfile
 
-    seven_zip = r"C:\Program Files\7-Zip\7z.exe"
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            result = subprocess.run(
-                [seven_zip, "e", str(lzh_path), f"-o{tmpdir}", "-y"],
-                capture_output=True, text=True
-            )
+            if sys.platform == "win32":
+                # Windows: 7-Zip を使用
+                seven_zip = r"C:\Program Files\7-Zip\7z.exe"
+                result = subprocess.run(
+                    [seven_zip, "e", str(lzh_path), f"-o{tmpdir}", "-y"],
+                    capture_output=True, text=True
+                )
+            else:
+                # Linux/Mac: lhasa を使用
+                result = subprocess.run(
+                    ["lhasa", "ef", str(lzh_path)],
+                    capture_output=True, text=True, cwd=tmpdir
+                )
+
             if result.returncode != 0:
                 print(f"[ERROR] 解凍失敗: {result.stderr}")
                 return None
+
             extracted = sorted(Path(tmpdir).iterdir())
             if not extracted:
                 print(f"[ERROR] 解凍結果が空: {lzh_path}")
                 return None
+
             # 複数ファイルをすべて結合して1つのテキストファイルに
             txt_path = lzh_path.with_suffix(".txt")
             combined = b""
             for f in extracted:
                 combined += f.read_bytes()
             txt_path.write_bytes(combined)
+
         print(f"[OK] 解凍完了: {txt_path.name} ({len(extracted)}場分)")
         return txt_path
     except Exception as e:

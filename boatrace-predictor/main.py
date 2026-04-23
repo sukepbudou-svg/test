@@ -69,7 +69,7 @@ def cmd_train():
     """モデル学習"""
     import pandas as pd
     from src.collector.parser import parse_all_programs, parse_all_results
-    from src.features.builder import build_features
+    from src.features.builder import build_features, compute_recent_form_lookup, compute_border_lookup
     from src.model.trainer import train_model, load_model
     from src.model.predictor import build_payout_lookup
 
@@ -83,8 +83,18 @@ def cmd_train():
 
     print(f"番組表: {len(df_program)}行, 競走成績: {len(df_rank)}行")
 
+    # 直近調子・昇降級ボーダー判定の事前計算
+    print("=== 直近調子・ボーダー判定を計算中 ===")
+    recent_form_lookup = compute_recent_form_lookup(df_rank, lookback=10)
+    # 学習データの最新日を基準に評価期間を決定
+    latest_date = df_rank["date"].max() if "date" in df_rank.columns else ""
+    border_lookup = compute_border_lookup(df_rank, latest_date) if latest_date else {}
+    print(f"  直近調子: {len(recent_form_lookup)}選手 / ボーダー判定: {len(border_lookup)}選手")
+
     print("=== 特徴量生成中 ===")
-    df_features = build_features(df_program, df_rank, df_payout)
+    df_features = build_features(df_program, df_rank, df_payout,
+                                 recent_form_lookup=recent_form_lookup,
+                                 border_lookup=border_lookup)
     print(f"特徴量: {len(df_features)}レース分")
 
     print("=== モデル学習中 ===")
@@ -164,11 +174,12 @@ def _filter_upcoming_races(df_program: "pd.DataFrame", df_features: "pd.DataFram
 
 def cmd_predict(venue: str = None, race_no: int = None):
     """本日の予想生成"""
-    from src.collector.downloader import download_file, extract_lzh
-    from src.collector.parser import parse_program
+    from src.collector.downloader import download_file, extract_lzh, download_range, extract_all
+    from src.collector.parser import parse_program, parse_all_results
     from src.collector.odds import fetch_odds_for_races
     from src.collector.beforeinfo import fetch_beforeinfo_for_races
-    from src.features.builder import build_features, add_course_advantage, get_feature_columns
+    from src.features.builder import (build_features, add_course_advantage, get_feature_columns,
+                                       compute_recent_form_lookup, compute_border_lookup)
     from src.model.trainer import load_model
     from src.model.predictor import get_recommendations
     from src.output.sheets import write_predictions
@@ -192,18 +203,36 @@ def cmd_predict(venue: str = None, race_no: int = None):
         print("[ERROR] 番組表のパースに失敗しました")
         return
 
-    # 直前情報（展示タイム）取得 - レース直前のみ利用可能
+    # 直近KファイルをDLして直近調子・ボーダー判定を計算
     import pandas as pd
+    print("=== 直近成績データ取得・計算中 ===")
+    k_start = today - timedelta(days=60)
+    k_end = today - timedelta(days=1)
+    download_range("K", k_start, k_end, interval=1.0)
+    extract_all("K")
+    k_raw_dir = RAW_DIR / "K"
+    df_rank_hist, _ = parse_all_results(k_raw_dir) if k_raw_dir.exists() else (pd.DataFrame(), pd.DataFrame())
+    if not df_rank_hist.empty:
+        recent_form_lookup = compute_recent_form_lookup(df_rank_hist)
+        border_lookup = compute_border_lookup(df_rank_hist, today.strftime("%Y-%m-%d"))
+        print(f"  直近調子: {len(recent_form_lookup)}選手 / ボーダー判定: {len(border_lookup)}選手")
+    else:
+        recent_form_lookup, border_lookup = {}, {}
+
+    # 直前情報（展示タイム）取得
     print("=== 直前情報（展示タイム）取得中 ===")
-    # まず番組表のみで仮の特徴量を生成してレース一覧を取得
-    df_features_tmp = build_features(df_program, pd.DataFrame(), pd.DataFrame())
+    df_features_tmp = build_features(df_program, pd.DataFrame(), pd.DataFrame(),
+                                     recent_form_lookup=recent_form_lookup,
+                                     border_lookup=border_lookup)
     df_beforeinfo_raw = fetch_beforeinfo_for_races(df_features_tmp, today)
 
     # 直前情報をDataFrame形式に変換
     df_beforeinfo = _convert_beforeinfo(df_beforeinfo_raw)
 
     # 特徴量生成（展示タイム込み）
-    df_features = build_features(df_program, pd.DataFrame(), pd.DataFrame(), df_beforeinfo)
+    df_features = build_features(df_program, pd.DataFrame(), pd.DataFrame(), df_beforeinfo,
+                                 recent_form_lookup=recent_form_lookup,
+                                 border_lookup=border_lookup)
 
     # 未発走レースのみに絞り込む（競艇場・レース番号の指定がない場合）
     if venue is None and race_no is None:
