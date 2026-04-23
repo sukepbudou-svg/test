@@ -250,6 +250,9 @@ def _pivot_program(df_program: pd.DataFrame) -> pd.DataFrame:
             bn = int(racer["boat_no"])
             for col in all_feature_cols:
                 row[f"boat{bn}_{col}"] = racer[col]
+            # 全国3連率は番組データに含まれないため2連率から近似計算
+            n2 = float(racer.get("national_2rate", 0.46) or 0.46)
+            row[f"boat{bn}_national_3rate"] = round(n2 * 1.30, 2)
         rows.append(row)
 
     return pd.DataFrame(rows)

@@ -15,6 +15,9 @@ BASELINE_NATIONAL_WIN  = 0.30  # 全国勝率の平均
 BASELINE_LOCAL_WIN     = 0.28  # 当地勝率の平均
 BASELINE_MOTOR_2RATE   = 0.35  # モーター2連率の平均
 BASELINE_NATIONAL_2    = 0.46  # 全国2連率の平均
+BASELINE_LOCAL_2       = 0.45  # 当地2連率の平均
+BASELINE_BOAT_2        = 0.30  # 艇2連率の平均
+BASELINE_NATIONAL_3    = 0.60  # 全国3連率の平均（2連率から近似）
 # ─── 枠番別展示ST基準値 ───
 # 外枠ほど積極的なスタートを狙う傾向がある
 BASELINE_ST_BY_LANE = {1: 0.155, 2: 0.152, 3: 0.150, 4: 0.148, 5: 0.145, 6: 0.142}
@@ -23,10 +26,13 @@ BASELINE_ST_BY_LANE = {1: 0.155, 2: 0.152, 3: 0.150, 4: 0.148, 5: 0.145, 6: 0.14
 EXHTIME_RANK_FACTOR = {1: 1.12, 2: 1.06, 3: 1.02, 4: 0.98, 5: 0.94, 6: 0.88}
 
 # ─── 各指標の重み ───
-W_NATIONAL_WIN  = 0.28
-W_LOCAL_WIN     = 0.22
-W_MOTOR_2RATE   = 0.18
-W_NATIONAL_2    = 0.12
+W_NATIONAL_WIN  = 0.20
+W_LOCAL_WIN     = 0.15
+W_MOTOR_2RATE   = 0.12
+W_NATIONAL_2    = 0.13
+W_LOCAL_2       = 0.10  # 当地2連率（新規追加）
+W_BOAT_2        = 0.05  # 艇2連率（新規追加）
+W_NATIONAL_3    = 0.05  # 全国3連率（近似値・新規追加）
 W_ST            = 0.10  # 展示ST重み
 W_EXHTIME       = 0.10  # 展示タイムランク重み
 
@@ -65,6 +71,9 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
         lw  = float(race_row.get(f"boat{boat}_local_win_rate",    BASELINE_LOCAL_WIN)    or BASELINE_LOCAL_WIN)
         m2  = float(race_row.get(f"boat{boat}_motor_2rate",       BASELINE_MOTOR_2RATE)  or BASELINE_MOTOR_2RATE)
         n2  = float(race_row.get(f"boat{boat}_national_2rate",    BASELINE_NATIONAL_2)   or BASELINE_NATIONAL_2)
+        l2  = float(race_row.get(f"boat{boat}_local_2rate",       BASELINE_LOCAL_2)      or BASELINE_LOCAL_2)
+        b2  = float(race_row.get(f"boat{boat}_boat_2rate",        BASELINE_BOAT_2)       or BASELINE_BOAT_2)
+        n3  = float(race_row.get(f"boat{boat}_national_3rate",    BASELINE_NATIONAL_3)   or BASELINE_NATIONAL_3)
         gn  = int(race_row.get(f"boat{boat}_grade_num", 2) or 2)
 
         # 各指標を基準値からの比率でスコア化
@@ -72,7 +81,10 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
             W_NATIONAL_WIN * (nw / BASELINE_NATIONAL_WIN) +
             W_LOCAL_WIN    * (lw / BASELINE_LOCAL_WIN)    +
             W_MOTOR_2RATE  * (m2 / BASELINE_MOTOR_2RATE)  +
-            W_NATIONAL_2   * (n2 / BASELINE_NATIONAL_2)
+            W_NATIONAL_2   * (n2 / BASELINE_NATIONAL_2)   +
+            W_LOCAL_2      * (l2 / BASELINE_LOCAL_2)      +
+            W_BOAT_2       * (b2 / BASELINE_BOAT_2)       +
+            W_NATIONAL_3   * (n3 / BASELINE_NATIONAL_3)
         )
 
         # グレード補正
