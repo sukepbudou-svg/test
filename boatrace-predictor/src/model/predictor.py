@@ -367,15 +367,11 @@ def get_recommendations(
         t2 = pick_tier(by_prob, used, 151.0, 250.0, 3, "大アナ151～", 130.0, 270.0)
         used.update(t2["combination"].tolist())
 
-        # ── 大大大アナ2点: 301〜500倍 ──
-        t3 = pick_tier(by_prob, used, 301.0, 500.0, 2, "大大大アナ", 260.0, 550.0)
+        # ── 超大穴251～3点: 251倍以上 ──
+        t3 = pick_tier(by_prob, used, 251.0, 99999.0, 3, "超大穴251～", 220.0, 99999.0)
         used.update(t3["combination"].tolist())
 
-        # ── 特大アナ4点: 501倍以上 ──
-        t4 = pick_tier(by_prob, used, 501.0, 99999.0, 4, "特大アナ", 400.0, 99999.0)
-        used.update(t4["combination"].tolist())
-
-        recommended = pd.concat([t0b, t1, t2, t3, t4]).reset_index(drop=True)
+        recommended = pd.concat([t0b, t1, t2, t3]).reset_index(drop=True)
 
         if recommended.empty:
             all_recommendations.append({
