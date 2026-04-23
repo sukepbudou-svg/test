@@ -94,6 +94,10 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
         # グレード補正
         score *= GRADE_FACTOR.get(gn, 1.0)
 
+        # 持ちpt・昇降級ボーダー接近によるモチベーション補正
+        motivation = float(race_row.get(f"boat{boat}_motivation_factor", 1.0) or 1.0)
+        score *= motivation
+
         # 展示ST補正（枠番別基準値と比較）
         exh_st = race_row.get(f"boat{boat}_exhibition_st")
         if exh_st is not None and not (isinstance(exh_st, float) and np.isnan(exh_st)):

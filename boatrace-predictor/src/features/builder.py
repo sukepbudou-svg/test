@@ -110,6 +110,55 @@ def _estimate_series_day_from_files(venue_code: str, date_str: str, raw_dir: Pat
     return series_day, is_final
 
 
+# 着順ポイント（ボートレース公式）
+_RANK_POINTS = {1: 10, 2: 8, 3: 6, 4: 4, 5: 2, 6: 1}
+# グレード昇降級ボーダー（勝率スケール 0-10）
+_GRADE_BORDERS = [3.30, 4.30, 5.50]  # B2/B1境界, B1/A2境界, A2/A1境界
+
+
+def _get_evaluation_period(date_str: str) -> tuple[str, str]:
+    """評価期間の開始・終了日を返す（上期:5-10月 / 下期:11-4月）"""
+    from datetime import datetime as _dt
+    d = _dt.strptime(date_str, "%Y-%m-%d")
+    if 5 <= d.month <= 10:
+        return f"{d.year}-05-01", f"{d.year}-10-31"
+    elif d.month <= 4:
+        return f"{d.year - 1}-11-01", f"{d.year}-04-30"
+    else:
+        return f"{d.year}-11-01", f"{d.year + 1}-04-30"
+
+
+def compute_border_lookup(df_rank: pd.DataFrame, race_date: str) -> dict:
+    """
+    評価期間内の期別勝率を計算し、昇降級ボーダー接近度からモチベーション係数を返す
+
+    Returns:
+        {racer_no: motivation_factor} の辞書
+        1.0=中立, >1.0=ボーダー接近で意欲↑ (最大1.05)
+    """
+    if df_rank.empty or "racer_no" not in df_rank.columns or "rank" not in df_rank.columns:
+        return {}
+
+    period_start, period_end = _get_evaluation_period(race_date)
+    period_df = df_rank[
+        (df_rank["date"] >= period_start) & (df_rank["date"] <= period_end)
+    ]
+    if period_df.empty:
+        return {}
+
+    lookup = {}
+    for racer_no, grp in period_df.groupby("racer_no"):
+        valid = grp[grp["rank"].between(1, 6)]
+        if len(valid) < 3:
+            continue
+        period_rate = valid["rank"].map(_RANK_POINTS).sum() / len(valid)
+        min_dist = min(abs(period_rate - b) for b in _GRADE_BORDERS)
+        # ボーダー0.5pt以内は意欲↑（近いほど最大1.05）
+        motivation = 1.0 + max(0.0, (0.5 - min_dist) * 0.10) if min_dist <= 0.5 else 1.0
+        lookup[int(racer_no)] = motivation
+    return lookup
+
+
 def compute_recent_form_lookup(df_rank: pd.DataFrame, lookback: int = 10) -> dict:
     """
     選手ごとの直近調子スコアを計算する
@@ -139,6 +188,7 @@ def build_features(
     df_payout: pd.DataFrame,
     df_beforeinfo: pd.DataFrame = None,
     recent_form_lookup: dict = None,
+    border_lookup: dict = None,
 ) -> pd.DataFrame:
     """
     番組表・成績データを結合して特徴量DataFrameを生成する
@@ -196,7 +246,8 @@ def build_features(
         top3 = pd.DataFrame(columns=["date", "venue_code", "race_no", "result_combination", "winner_boat"])
 
     # レースごとに6艇分の特徴量をピボット
-    program_pivot = _pivot_program(df_program, recent_form_lookup=recent_form_lookup)
+    program_pivot = _pivot_program(df_program, recent_form_lookup=recent_form_lookup,
+                                   border_lookup=border_lookup)
 
     # シリーズ日（初日/最終日）を計算して結合
     series_df = _calculate_series_day(df_program)
@@ -242,7 +293,8 @@ def build_features(
     return df
 
 
-def _pivot_program(df_program: pd.DataFrame, recent_form_lookup: dict = None) -> pd.DataFrame:
+def _pivot_program(df_program: pd.DataFrame, recent_form_lookup: dict = None,
+                   border_lookup: dict = None) -> pd.DataFrame:
     """
     番組表を「1レース1行」形式に変換する
     各艇番の特徴量をカラムとして展開
@@ -283,6 +335,11 @@ def _pivot_program(df_program: pd.DataFrame, recent_form_lookup: dict = None) ->
                 recent_form_lookup.get(racer_no, 0.583)
                 if recent_form_lookup else 0.583
             )
+            # 持ちpt・昇降級ボーダー接近度によるモチベーション係数
+            row[f"boat{bn}_motivation_factor"] = (
+                border_lookup.get(racer_no, 1.0)
+                if border_lookup else 1.0
+            )
         rows.append(row)
 
     return pd.DataFrame(rows)
@@ -322,7 +379,7 @@ def get_feature_columns() -> list[str]:
         "motor_2rate", "boat_2rate",
         "age", "weight", "grade_num",
         "exhibition_time", "exhibition_st",
-        "recent_form_score",
+        "recent_form_score", "motivation_factor",
     ]
     cols = []
     for bn in range(1, 7):

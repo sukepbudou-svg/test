@@ -22,7 +22,8 @@ MAX_RESULT_RETRIES = 10  # 12分後から2分おき×10回 = 最大32分後ま�
 LOOP_INTERVAL_SEC = 30
 
 
-def _run_all_at_once(df_program, model, payout_lookup, today, spreadsheet_id, credentials_path, recent_form_lookup=None):
+def _run_all_at_once(df_program, model, payout_lookup, today, spreadsheet_id, credentials_path,
+                     recent_form_lookup=None, border_lookup=None):
     """
     発走時刻不明時のフォールバック: 全レースをまとめて予想してスプレッドシートに書き込む
     結果取得は翌日以降の手動バックテストで対応
@@ -38,7 +39,8 @@ def _run_all_at_once(df_program, model, payout_lookup, today, spreadsheet_id, cr
 
     # 展示タイム取得
     df_features_tmp = build_features(df_program, pd.DataFrame(), pd.DataFrame(),
-                                     recent_form_lookup=recent_form_lookup)
+                                     recent_form_lookup=recent_form_lookup,
+                                     border_lookup=border_lookup)
     beforeinfo_raw = fetch_beforeinfo_for_races(df_features_tmp, today)
     records = []
     for (vc, rn), boats in beforeinfo_raw.items():
@@ -53,7 +55,8 @@ def _run_all_at_once(df_program, model, payout_lookup, today, spreadsheet_id, cr
 
     df_features = build_features(df_program, pd.DataFrame(), pd.DataFrame(),
                                  df_beforeinfo if not df_beforeinfo.empty else None,
-                                 recent_form_lookup=recent_form_lookup)
+                                 recent_form_lookup=recent_form_lookup,
+                                 border_lookup=border_lookup)
 
     # リアルタイムオッズ取得
     all_live_odds = fetch_odds_for_races(df_features, today)
@@ -141,22 +144,23 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
     print("  停止するには Ctrl+C を押してください\n")
 
     # 直近K（競走成績）ファイルをダウンロードして選手の直近調子を計算
+    from src.collector.downloader import extract_all as _extract_all_k
     from src.collector.parser import parse_all_results
-    from src.features.builder import compute_recent_form_lookup
-    k_start = today - timedelta(days=30)
+    from src.features.builder import compute_recent_form_lookup, compute_border_lookup
+    k_start = today - timedelta(days=60)  # ボーダー判定には評価期間全体が必要
     k_end = today - timedelta(days=1)
-    print("  直近30日分の競走成績を取得中（既取得分はスキップ）...")
-    k_paths = download_range("K", k_start, k_end, interval=1.0)
-    extract_all_lzh = None
-    try:
-        from src.collector.downloader import extract_all as extract_all_k
-        extract_all_k("K")
-    except Exception:
-        pass
+    print("  直近成績データ取得中（既取得分はスキップ）...")
+    download_range("K", k_start, k_end, interval=1.0)
+    _extract_all_k("K")
     k_raw_dir = Path(__file__).parent.parent.parent / "data" / "raw" / "K"
-    df_rank_hist, _ = parse_all_results(k_raw_dir) if k_raw_dir.exists() else (pd.DataFrame(), None)
-    recent_form_lookup = compute_recent_form_lookup(df_rank_hist) if not df_rank_hist.empty else {}
-    print(f"  直近調子データ: {len(recent_form_lookup)}選手分を計算済み\n")
+    df_rank_hist, _ = parse_all_results(k_raw_dir) if k_raw_dir.exists() else (pd.DataFrame(), pd.DataFrame())
+    if not df_rank_hist.empty:
+        recent_form_lookup = compute_recent_form_lookup(df_rank_hist)
+        border_lookup = compute_border_lookup(df_rank_hist, today.strftime("%Y-%m-%d"))
+    else:
+        recent_form_lookup = {}
+        border_lookup = {}
+    print(f"  直近調子: {len(recent_form_lookup)}選手 / ボーダー判定: {len(border_lookup)}選手\n")
 
     # 番組表ダウンロード
     b_path = download_file("B", today)
@@ -188,6 +192,7 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
             df_program, model, payout_lookup, today,
             spreadsheet_id, credentials_path,
             recent_form_lookup=recent_form_lookup,
+            border_lookup=border_lookup,
         )
         return
 
@@ -234,6 +239,7 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                         build_features, get_recommendations, append_prediction_row,
                         daily_race_count=daily_race_count,
                         recent_form_lookup=recent_form_lookup,
+                        border_lookup=border_lookup,
                     )
                     race["pred_rows"] = pred_rows or []
                     race["daily_race_count"] = daily_race_count
@@ -286,6 +292,7 @@ def _predict_one_race(
     build_features, get_recommendations, append_prediction_row,
     daily_race_count: int = None,
     recent_form_lookup: dict = None,
+    border_lookup: dict = None,
 ) -> list:
     """1レース分の予想を実行してスプレッドシートに書き込む。予想行リストを返す（メモリキャッシュ用）"""
     import pandas as pd
@@ -323,7 +330,8 @@ def _predict_one_race(
     # 特徴量生成
     df_features = build_features(df_prog_race, pd.DataFrame(), pd.DataFrame(),
                                  df_beforeinfo if not df_beforeinfo.empty else None,
-                                 recent_form_lookup=recent_form_lookup)
+                                 recent_form_lookup=recent_form_lookup,
+                                 border_lookup=border_lookup)
     if df_features.empty:
         print(f"  [WARN] 特徴量生成失敗: {venue_name} {race_no}R")
         return
