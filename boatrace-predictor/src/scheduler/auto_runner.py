@@ -358,14 +358,17 @@ def _predict_one_race(
         append_prediction_row(spreadsheet_id, row_dict, credentials_path=credentials_path,
                               race_count=daily_race_count)
         print(f"  → {rec['combination']} 確率:{rec['prob']} 期待回収率:{rec['expected_roi']}")
-        # 成績2シートの列名に合わせてキャッシュ用dictを作成
+        # 成績4シートの列名に合わせてキャッシュ用dictを作成
         pred_rows.append({
             "日付": date_str,
             "競艇場": venue_name,
             "レース": str(race_no),
+            "狙い": rec.get("tier", "-"),
             "買い目（3連単）": rec.get("combination", ""),
             "的中確率": rec.get("prob", "-"),
             "期待回収率": rec.get("expected_roi", "-"),
+            "信頼度": rec.get("confidence", "-"),
+            "勝負推奨": rec.get("bet_label", ""),
         })
 
     if recs[recs["combination"] != "見送り"].empty:
