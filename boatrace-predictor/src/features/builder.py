@@ -377,9 +377,8 @@ def get_feature_columns() -> list[str]:
         "national_win_rate", "national_2rate",
         "local_win_rate", "local_2rate",
         "motor_2rate", "boat_2rate",
-        "age", "weight", "grade_num",
+        "grade_num",
         "exhibition_time", "exhibition_st",
-        "recent_form_score", "motivation_factor",
     ]
     cols = []
     for bn in range(1, 7):
