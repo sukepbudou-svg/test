@@ -350,12 +350,30 @@ def _is_race_worth_betting(by_prob: pd.DataFrame, race_row: pd.Series = None) ->
     if not (top5["agreement"] >= 2).any():
         return False, f"優位性なし（最高合議{int(top5['agreement'].max())}/4）"
 
+    # ── 展示タイムチェック: 予想1着艇が全艇中TOP3以内か ──
+    if race_row is not None and not by_prob.empty:
+        top_b1 = int(str(by_prob.iloc[0]["combination"]).split("-")[0])
+        et_vals = {}
+        for bn in range(1, 7):
+            v = race_row.get(f"boat{bn}_exhibition_time")
+            try:
+                t = float(v)
+                if t > 0:
+                    et_vals[bn] = t
+            except (TypeError, ValueError):
+                pass
+        if len(et_vals) >= 4:
+            sorted_times = sorted(et_vals.values())
+            top3_threshold = sorted_times[2]
+            b1_time = et_vals.get(top_b1)
+            if b1_time is not None and b1_time > top3_threshold:
+                return False, f"展示タイム不利（{b1_time}s / TOP3={top3_threshold}s）"
+
     # ── シグナル強度 ──
     top_prob = float(by_prob.iloc[0]["prob"])
     second_prob = float(by_prob.iloc[1]["prob"])
     signal = top_prob - second_prob
 
-    # シグナルが弱い → どの組み合わせも横一線 → 優位性なし
     if signal < 0.004:
         return False, "混戦（シグナル弱）"
 
@@ -478,7 +496,7 @@ def get_recommendations(
                 src = rec.get("odds_source", "history")
                 odds_display = f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)"
                 tier = rec.get("tier", "")
-                if should_bet and tier in ("小穴", "大穴100～", "大アナ151～", "超大穴251～"):
+                if should_bet and tier == "小穴":
                     bet_label = "激熱"
                 else:
                     bet_label = ""
