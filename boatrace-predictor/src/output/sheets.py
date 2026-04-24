@@ -495,222 +495,343 @@ def apply_colors_to_results_sheet(
         print(f"[OK] 成績シート色付け完了: {len(all_rows)-1}行")
 
 
-def update_summary_sheet(
-    spreadsheet_id: str,
-    credentials_path: str = None,
-) -> None:
-    """
-    「成績3」シートを集計して「サマリー3」シートを更新する
-    的中率（レースベース）・回収率・会場別高配当出現率を自動計算する
-    """
-    client = get_client(credentials_path)
-    spreadsheet = client.open_by_key(spreadsheet_id)
-
-    # 成績3シート読み込み（リトライ付き）
-    try:
-        r_sheet = spreadsheet.worksheet("成績3")
-    except gspread.WorksheetNotFound:
-        print("[WARN] 成績3シートが見つかりません")
-        return
-    try:
-        records = _retry_get_records(r_sheet)
-    except Exception:
-        print("[WARN] 成績3シートの読み込みに失敗しました（APIエラー）")
-        return
-
-    if not records:
-        return
-
+def _compute_tier_stats(records: list, tier_check) -> dict:
+    """指定tierのレコードから集計統計を計算する"""
     total_bets = 0
-    total_hits = 0
     total_return = 0
     predicted_race_keys: set = set()
     hit_race_keys: set = set()
     daily: dict = {}
-    venue_stats: dict = {}
 
     for rec in records:
         combination = rec.get("予想買い目", "")
         if combination in ("", "（予想なし）", "見送り", "-"):
             continue
+        if not tier_check(str(rec.get("狙い", ""))):
+            continue
+
         d = str(rec.get("日付", ""))
         v = str(rec.get("競艇場", ""))
         rn = str(rec.get("レース", ""))
         race_key = (d, v, rn)
-
         predicted_race_keys.add(race_key)
 
         if d not in daily:
             daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
-        if v not in venue_stats:
-            venue_stats[v] = {
-                "race_keys": set(),
-                "high_payout_keys": set(),
-                "hit_race_keys": set(),
-                "bets": 0,
-                "ret": 0,
-                "race_payouts": {},   # race_key → actual_payout
-            }
-
         total_bets += 100
         daily[d]["bets"] += 100
         daily[d]["race_keys"].add(race_key)
-        venue_stats[v]["race_keys"].add(race_key)
-        venue_stats[v]["bets"] += 100
-
-        # 実際の払戻を記録（倍率帯・高配当集計に使用）
-        try:
-            actual_payout = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
-            venue_stats[v]["race_payouts"][race_key] = actual_payout
-            if actual_payout >= _HIGH_PAYOUT_THRESHOLD:
-                venue_stats[v]["high_payout_keys"].add(race_key)
-        except (ValueError, TypeError):
-            pass
 
         if rec.get("的中", "") == "○":
-            total_hits += 1
             hit_race_keys.add(race_key)
             daily[d]["hit_race_keys"].add(race_key)
-            venue_stats[v]["hit_race_keys"].add(race_key)
             try:
-                payout_val = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
-                total_return += payout_val
-                daily[d]["ret"] += payout_val
-                venue_stats[v]["ret"] += payout_val
+                payout = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+                total_return += payout
+                daily[d]["ret"] += payout
             except (ValueError, TypeError):
                 pass
 
-    total_pred_points = total_bets // 100
-    pred_races = len(predicted_race_keys)
-    hit_races = len(hit_race_keys)
-    race_hit_rate = f"{hit_races / pred_races * 100:.1f}%" if pred_races > 0 else "0.0%"
-    roi = f"{total_return / total_bets * 100:.1f}%" if total_bets > 0 else "0.0%"
-    profit = total_return - total_bets
+    return {
+        "total_bets": total_bets,
+        "total_return": total_return,
+        "pred_races": len(predicted_race_keys),
+        "hit_races": len(hit_race_keys),
+        "daily": daily,
+    }
+
+
+def _compute_venue_tier_stats(records: list, tier_check) -> dict:
+    """指定tierの会場別集計を計算する"""
+    venue: dict = {}
+    for rec in records:
+        combination = rec.get("予想買い目", "")
+        if combination in ("", "（予想なし）", "見送り", "-"):
+            continue
+        if not tier_check(str(rec.get("狙い", ""))):
+            continue
+
+        vn = str(rec.get("競艇場", ""))
+        d = str(rec.get("日付", ""))
+        rn = str(rec.get("レース", ""))
+        race_key = (d, vn, rn)
+
+        if vn not in venue:
+            venue[vn] = {"race_keys": set(), "hit_race_keys": set(), "bets": 0, "ret": 0}
+        venue[vn]["race_keys"].add(race_key)
+        venue[vn]["bets"] += 100
+
+        if rec.get("的中", "") == "○":
+            venue[vn]["hit_race_keys"].add(race_key)
+            try:
+                payout = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+                venue[vn]["ret"] += payout
+            except (ValueError, TypeError):
+                pass
+    return venue
+
+
+def update_summary_sheet(
+    spreadsheet_id: str,
+    credentials_path: str = None,
+) -> None:
+    """
+    RESULT_SHEETを集計してSUMMARY_SHEETを更新する
+    小穴・大穴を分けた表構成、倍率帯別出現率を含む
+    """
+    client = get_client(credentials_path)
+    spreadsheet = client.open_by_key(spreadsheet_id)
 
     try:
-        s_sheet = spreadsheet.worksheet("サマリー3")
+        r_sheet = spreadsheet.worksheet(RESULT_SHEET)
     except gspread.WorksheetNotFound:
-        s_sheet = spreadsheet.add_worksheet(title="サマリー3", rows=400, cols=7)
+        print(f"[WARN] {RESULT_SHEET}シートが見つかりません")
+        return
+    try:
+        records = _retry_get_records(r_sheet)
+    except Exception:
+        print(f"[WARN] {RESULT_SHEET}シートの読み込みに失敗しました（APIエラー）")
+        return
 
-    # 会場リスト（高配当出現率降順）
-    venue_list = []
-    for vn, vs in venue_stats.items():
-        vr = len(vs["race_keys"])
-        vh = len(vs["high_payout_keys"])
-        vrate = vh / vr if vr > 0 else 0.0
-        venue_list.append((vn, vs, vrate))
-    venue_list.sort(key=lambda x: x[2], reverse=True)
+    if not records:
+        return
+
+    def is_koana(t: str) -> bool:
+        return t == "小穴"
+
+    def is_oana(t: str) -> bool:
+        return t in OANA_TIERS
+
+    koana_stats = _compute_tier_stats(records, is_koana)
+    oana_stats = _compute_tier_stats(records, is_oana)
+    koana_venue = _compute_venue_tier_stats(records, is_koana)
+    oana_venue = _compute_venue_tier_stats(records, is_oana)
+
+    # 倍率帯集計用: 全tierの実際の払戻を会場別に収集
+    venue_payouts: dict = {}
+    for rec in records:
+        combination = rec.get("予想買い目", "")
+        if combination in ("", "（予想なし）", "見送り", "-"):
+            continue
+        vn = str(rec.get("競艇場", ""))
+        d = str(rec.get("日付", ""))
+        rn = str(rec.get("レース", ""))
+        race_key = (d, vn, rn)
+        if vn not in venue_payouts:
+            venue_payouts[vn] = {}
+        try:
+            payout = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+            venue_payouts[vn][race_key] = payout
+        except (ValueError, TypeError):
+            pass
+
+    all_venues = sorted(set(list(koana_venue.keys()) + list(oana_venue.keys()) + list(venue_payouts.keys())))
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    rows = [
-        ["【予想成績サマリー】", "", "", "", "", "", ""],
-        ["集計日時", now, "", "", "", "", ""],
-        ["", "", "", "", "", "", ""],
-        ["■ 全期間合計", "", "", "", "", "", ""],
-        ["予想点数", "予想レース数", "的中数（レース）", "的中率（レース）", "総払戻", "回収率", "収支"],
-        [total_pred_points, pred_races, hit_races, race_hit_rate,
-         f"¥{total_return:,}", roi, f"¥{profit:,}"],
-        ["", "", "", "", "", "", ""],
-        ["■ 日付別内訳", "", "", "", "", "", ""],
-        ["日付", "予想点数", "予想レース数", "的中数", "的中率", "払戻合計", "収支"],
-    ]
-    for d in sorted(daily.keys()):
-        dd = daily[d]
+    NUM_COLS = 9
+
+    def _r(*args):
+        lst = list(args)
+        return lst + [""] * (NUM_COLS - len(lst))
+
+    rows = []
+    section_header_rows = []
+    col_header_rows = []
+    summary_data_rows = []   # (row_idx, profit)
+    venue_color_rows = []    # (row_idx, venue_name) for venue sections
+    odds_venue_rows = []
+
+    rows.append(_r("【予想成績サマリー】"))
+    rows.append(_r("集計日時", now))
+    rows.append(_r())
+
+    # ── 小穴セクション ──
+    section_header_rows.append(len(rows))
+    rows.append(_r("■ 小穴 全期間合計"))
+    col_header_rows.append(len(rows))
+    rows.append(_r("予想点数", "予想レース数", "的中数（レース）", "的中率", "総払戻", "回収率", "収支"))
+
+    k_bets = koana_stats["total_bets"]
+    k_ret = koana_stats["total_return"]
+    k_pr = koana_stats["pred_races"]
+    k_hr = koana_stats["hit_races"]
+    k_pp = k_bets // 100
+    k_hitr = f"{k_hr / k_pr * 100:.1f}%" if k_pr > 0 else "0.0%"
+    k_roi = f"{k_ret / k_bets * 100:.1f}%" if k_bets > 0 else "0.0%"
+    k_profit = k_ret - k_bets
+    summary_data_rows.append((len(rows), k_profit))
+    rows.append(_r(k_pp, k_pr, k_hr, k_hitr, f"¥{k_ret:,}", k_roi, f"¥{k_profit:,}"))
+
+    rows.append(_r())
+    section_header_rows.append(len(rows))
+    rows.append(_r("■ 小穴 日付別内訳"))
+    col_header_rows.append(len(rows))
+    rows.append(_r("日付", "予想点数", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
+    for d in sorted(koana_stats["daily"].keys()):
+        dd = koana_stats["daily"][d]
         n = dd["bets"] // 100
         pr = len(dd["race_keys"])
         h = len(dd["hit_race_keys"])
         r = dd["ret"]
         dr = f"{h / pr * 100:.1f}%" if pr > 0 else "0.0%"
         dp = r - dd["bets"]
-        rows.append([d, n, pr, h, dr, f"¥{r:,}", f"¥{dp:,}"])
+        rows.append(_r(d, n, pr, h, dr, f"¥{r:,}", f"¥{dp:,}"))
 
-    # ── 会場別高配当出現率 ──
-    rows.append(["", "", "", "", "", "", ""])
-    rows.append(["", "", "", "", "", "", ""])
-    rows.append(["", "", "", "", "", "", ""])
-    rows.append(["■ 会場別高配当出現率（払戻10,000円以上）", "", "", "", "", "", ""])
-    rows.append(["会場", "予想レース数", "高配当レース数", "高配当出現率", "", "", ""])
-    high_payout_venue_rows = []
-    for vn, vs, _ in venue_list:
-        vr = len(vs["race_keys"])
-        vh = len(vs["high_payout_keys"])
-        vrate = vh / vr if vr > 0 else 0.0
-        high_payout_venue_rows.append((len(rows), vn))
-        rows.append([vn, vr, vh, f"{vrate * 100:.1f}%", "", "", ""])
+    rows.append(_r())
+    rows.append(_r())
 
-    # ── 会場別収支・勝率 ──
-    rows.append(["", "", "", "", "", "", ""])
-    rows.append(["", "", "", "", "", "", ""])
-    rows.append(["■ 会場別収支・勝率", "", "", "", "", "", ""])
-    rows.append(["会場", "予想R数", "的中数", "的中率", "収支", "回収率", ""])
-    profit_venue_rows = []
-    for vn, vs, _ in venue_list:
-        vr = len(vs["race_keys"])
-        v_hit = len(vs["hit_race_keys"])
-        v_bet = vs["bets"]
-        v_ret = vs["ret"]
-        v_hit_rate = f"{v_hit / vr * 100:.1f}%" if vr > 0 else "0.0%"
-        v_profit = v_ret - v_bet
-        v_roi = f"{v_ret / v_bet * 100:.1f}%" if v_bet > 0 else "0.0%"
-        profit_venue_rows.append((len(rows), vn))
-        rows.append([vn, vr, v_hit, v_hit_rate, f"¥{v_profit:,}", v_roi, ""])
+    # ── 大穴セクション ──
+    section_header_rows.append(len(rows))
+    rows.append(_r("■ 大穴 全期間合計"))
+    col_header_rows.append(len(rows))
+    rows.append(_r("予想点数", "予想レース数", "的中数（レース）", "的中率", "総払戻", "回収率", "収支"))
+
+    o_bets = oana_stats["total_bets"]
+    o_ret = oana_stats["total_return"]
+    o_pr = oana_stats["pred_races"]
+    o_hr = oana_stats["hit_races"]
+    o_pp = o_bets // 100
+    o_hitr = f"{o_hr / o_pr * 100:.1f}%" if o_pr > 0 else "0.0%"
+    o_roi = f"{o_ret / o_bets * 100:.1f}%" if o_bets > 0 else "0.0%"
+    o_profit = o_ret - o_bets
+    summary_data_rows.append((len(rows), o_profit))
+    rows.append(_r(o_pp, o_pr, o_hr, o_hitr, f"¥{o_ret:,}", o_roi, f"¥{o_profit:,}"))
+
+    rows.append(_r())
+    section_header_rows.append(len(rows))
+    rows.append(_r("■ 大穴 日付別内訳"))
+    col_header_rows.append(len(rows))
+    rows.append(_r("日付", "予想点数", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
+    for d in sorted(oana_stats["daily"].keys()):
+        dd = oana_stats["daily"][d]
+        n = dd["bets"] // 100
+        pr = len(dd["race_keys"])
+        h = len(dd["hit_race_keys"])
+        r = dd["ret"]
+        dr = f"{h / pr * 100:.1f}%" if pr > 0 else "0.0%"
+        dp = r - dd["bets"]
+        rows.append(_r(d, n, pr, h, dr, f"¥{r:,}", f"¥{dp:,}"))
+
+    rows.append(_r())
+    rows.append(_r())
+
+    # ── 会場別収支・勝率（小穴・大穴を分けた列） ──
+    section_header_rows.append(len(rows))
+    rows.append(_r("■ 会場別収支・勝率"))
+    col_header_rows.append(len(rows))
+    rows.append(["会場", "小穴R数", "小穴的中", "小穴的中率", "小穴収支",
+                 "大穴R数", "大穴的中", "大穴的中率", "大穴収支"])
+    for vn in all_venues:
+        kv = koana_venue.get(vn, {})
+        ov = oana_venue.get(vn, {})
+        k_r = len(kv.get("race_keys", set()))
+        k_h = len(kv.get("hit_race_keys", set()))
+        k_b = kv.get("bets", 0)
+        k_rv = kv.get("ret", 0)
+        k_rate = f"{k_h / k_r * 100:.1f}%" if k_r > 0 else "-"
+        k_vp = f"¥{k_rv - k_b:,}" if k_r > 0 else "-"
+        o_r = len(ov.get("race_keys", set()))
+        o_h = len(ov.get("hit_race_keys", set()))
+        o_b = ov.get("bets", 0)
+        o_rv = ov.get("ret", 0)
+        o_rate = f"{o_h / o_r * 100:.1f}%" if o_r > 0 else "-"
+        o_vp = f"¥{o_rv - o_b:,}" if o_r > 0 else "-"
+        venue_color_rows.append((len(rows), vn))
+        rows.append([vn,
+                     k_r if k_r > 0 else "-", k_h if k_r > 0 else "-", k_rate, k_vp,
+                     o_r if o_r > 0 else "-", o_h if o_r > 0 else "-", o_rate, o_vp])
+
+    rows.append(_r())
+    rows.append(_r())
 
     # ── 倍率帯別出現率 ──
-    rows.append(["", "", "", "", "", "", ""])
-    rows.append(["", "", "", "", "", "", ""])
-    rows.append(["■ 倍率帯別出現率", "", "", "", "", "", ""])
+    section_header_rows.append(len(rows))
+    rows.append(_r("■ 倍率帯別出現率"))
+    col_header_rows.append(len(rows))
     rows.append(["会場", "〜25倍(回)", "〜25倍(%)", "26〜100倍(回)", "26〜100倍(%)",
-                 "101倍〜(回)", "101倍〜(%)"])
-    odds_range_venue_rows = []
-    for vn, vs, _ in venue_list:
-        payouts = list(vs["race_payouts"].values())
+                 "101倍〜(回)", "101倍〜(%)", "", ""])
+    for vn in all_venues:
+        payouts = list(venue_payouts.get(vn, {}).values())
         total_p = len(payouts)
+        if total_p == 0:
+            continue
         r1 = sum(1 for p in payouts if p <= 2500)
         r2 = sum(1 for p in payouts if 2501 <= p <= 10000)
         r3 = sum(1 for p in payouts if p >= 10001)
-        r1p = f"{r1 / total_p * 100:.1f}%" if total_p > 0 else "-"
-        r2p = f"{r2 / total_p * 100:.1f}%" if total_p > 0 else "-"
-        r3p = f"{r3 / total_p * 100:.1f}%" if total_p > 0 else "-"
-        odds_range_venue_rows.append((len(rows), vn))
-        rows.append([vn, r1, r1p, r2, r2p, r3, r3p])
+        r1p = f"{r1 / total_p * 100:.1f}%"
+        r2p = f"{r2 / total_p * 100:.1f}%"
+        r3p = f"{r3 / total_p * 100:.1f}%"
+        odds_venue_rows.append((len(rows), vn))
+        rows.append([vn, r1, r1p, r2, r2p, r3, r3p, "", ""])
+
+    # シートへ書き込み
+    try:
+        s_sheet = spreadsheet.worksheet(SUMMARY_SHEET)
+    except gspread.WorksheetNotFound:
+        s_sheet = spreadsheet.add_worksheet(title=SUMMARY_SHEET, rows=500, cols=NUM_COLS)
 
     s_sheet.clear()
     s_sheet.update("A1", rows)
 
-    # フォーマット
+    # フォーマット適用
     try:
         sid = s_sheet.id
-        s_sheet.format("A5:G5", {
-            "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
-            "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True},
-        })
-        s_sheet.format("A9:G9", {
-            "backgroundColor": {"red": 0.85, "green": 0.85, "blue": 0.85},
-            "textFormat": {"bold": True},
-        })
-        profit_color = (
-            {"red": 0.8, "green": 0.95, "blue": 0.8} if profit >= 0
-            else {"red": 0.95, "green": 0.8, "blue": 0.8}
-        )
-        s_sheet.format("G6", {"backgroundColor": profit_color, "textFormat": {"bold": True}})
-
-        # 全会場セクションに会場カラーを適用（7列分）
         color_requests = []
-        for row_idx, vn in (high_payout_venue_rows + profit_venue_rows + odds_range_venue_rows):
+
+        for ri in section_header_rows:
+            color_requests.append({"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": ri, "endRowIndex": ri + 1,
+                          "startColumnIndex": 0, "endColumnIndex": NUM_COLS},
+                "cell": {"userEnteredFormat": {
+                    "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
+                    "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True},
+                }},
+                "fields": "userEnteredFormat(backgroundColor,textFormat)",
+            }})
+
+        for ri in col_header_rows:
+            color_requests.append({"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": ri, "endRowIndex": ri + 1,
+                          "startColumnIndex": 0, "endColumnIndex": NUM_COLS},
+                "cell": {"userEnteredFormat": {
+                    "backgroundColor": {"red": 0.85, "green": 0.85, "blue": 0.85},
+                    "textFormat": {"bold": True},
+                }},
+                "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
+            }})
+
+        for ri, pft in summary_data_rows:
+            pft_color = (
+                {"red": 0.8, "green": 0.95, "blue": 0.8} if pft >= 0
+                else {"red": 0.95, "green": 0.8, "blue": 0.8}
+            )
+            color_requests.append({"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": ri, "endRowIndex": ri + 1,
+                          "startColumnIndex": 6, "endColumnIndex": 7},
+                "cell": {"userEnteredFormat": {
+                    "backgroundColor": pft_color,
+                    "textFormat": {"bold": True},
+                }},
+                "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
+            }})
+
+        for ri, vn in (venue_color_rows + odds_venue_rows):
             bg = _VENUE_BG_COLORS.get(vn, _DEFAULT_BG)
             color_requests.append({"repeatCell": {
-                "range": {"sheetId": sid,
-                          "startRowIndex": row_idx, "endRowIndex": row_idx + 1,
-                          "startColumnIndex": 0, "endColumnIndex": 7},
+                "range": {"sheetId": sid, "startRowIndex": ri, "endRowIndex": ri + 1,
+                          "startColumnIndex": 0, "endColumnIndex": NUM_COLS},
                 "cell": {"userEnteredFormat": {"backgroundColor": bg}},
                 "fields": "userEnteredFormat.backgroundColor",
             }})
+
         if color_requests:
             spreadsheet.batch_update({"requests": color_requests})
     except Exception:
         pass
 
-    print(f"[OK] サマリー3更新: 予想{pred_races}レース 的中率={race_hit_rate} 回収率={roi} 収支=¥{profit:,}")
+    k_msg = f"小穴{k_pr}R 的中率={k_hitr} ROI={k_roi}" if k_pr > 0 else "小穴0R"
+    o_msg = f"大穴{o_pr}R 的中率={o_hitr} ROI={o_roi}" if o_pr > 0 else "大穴0R"
+    print(f"[OK] {SUMMARY_SHEET}更新: {k_msg} / {o_msg}")
 
 
 def analyze_nirentan(
