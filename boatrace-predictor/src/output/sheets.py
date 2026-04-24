@@ -321,10 +321,10 @@ def update_result_row(
     race_count: int = None,
 ) -> None:
     """
-    「成績3」シートに1レース分の結果を記録・的中判定を更新する
+    RESULT_SHEETに1レース分の結果を記録・的中判定を更新する
 
     成績シートの列構成:
-    日付 | 競艇場 | レース | 予想買い目 | 的中確率 | 期待回収率 |
+    日付 | 競艇場 | レース | 狙い | 予想買い目 | 的中確率 | 期待回収率 |
     実際の結果 | 実際の払戻 | 的中 | 収支
     """
     client = get_client(credentials_path)
@@ -856,15 +856,14 @@ def analyze_nirentan(
         print(f"[ERROR] 予想シートの読み込みに失敗しました")
         return
 
-    # 成績3から実際の結果を読み込み
     try:
-        result_sheet = spreadsheet.worksheet("成績3")
+        result_sheet = spreadsheet.worksheet(RESULT_SHEET)
         result_records = _retry_get_records(result_sheet)
     except gspread.WorksheetNotFound:
-        print(f"[ERROR] 成績3シートが見つかりません")
+        print(f"[ERROR] {RESULT_SHEET}シートが見つかりません")
         return
     except Exception:
-        print(f"[ERROR] 成績3シートの読み込みに失敗しました")
+        print(f"[ERROR] {RESULT_SHEET}シートの読み込みに失敗しました")
         return
 
     # ド本命・小穴のみ抽出
@@ -1093,9 +1092,9 @@ def write_backtest_summary(
     spreadsheet = client.open_by_key(spreadsheet_id)
 
     try:
-        sheet = spreadsheet.worksheet("サマリー3")
+        sheet = spreadsheet.worksheet(SUMMARY_SHEET)
     except gspread.WorksheetNotFound:
-        sheet = spreadsheet.add_worksheet(title="サマリー3", rows=50, cols=5)
+        sheet = spreadsheet.add_worksheet(title=SUMMARY_SHEET, rows=50, cols=5)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     rows = [
