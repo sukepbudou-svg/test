@@ -13,7 +13,7 @@ import pandas as pd
 
 
 # 発走何分前に予想を実行するか
-PREDICT_BEFORE_MIN = 6
+PREDICT_BEFORE_MIN = 10
 # 発走後何分後に結果を取得するか
 RESULT_AFTER_MIN = 12
 # 結果取得の最大リトライ回数（超えたら諦めてスキップ）
