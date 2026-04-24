@@ -376,10 +376,10 @@ def _is_race_worth_betting(by_prob: pd.DataFrame, race_row: pd.Series = None) ->
                 pass
         if len(et_vals) >= 4:
             sorted_times = sorted(et_vals.values())
-            top3_threshold = sorted_times[2]
+            top4_threshold = sorted_times[3]
             b1_time = et_vals.get(top_b1)
-            if b1_time is not None and b1_time > top3_threshold:
-                return False, f"展示タイム不利（{b1_time}s / TOP3={top3_threshold}s）"
+            if b1_time is not None and b1_time > top4_threshold:
+                return False, f"展示タイム不利（{b1_time}s / TOP4={top4_threshold}s）"
 
     # ── シグナル強度 ──
     top_prob = float(by_prob.iloc[0]["prob"])
