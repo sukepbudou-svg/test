@@ -428,6 +428,18 @@ def get_recommendations(
         # ── レース選別フィルター（見送りでも予想は出す・L列に判定を記入）──
         should_bet, _ = _is_race_worth_betting(by_prob, race_row)
 
+        # 灼熱用: STデータ有無を個別確認（大穴は b1_votes 条件を課さない）
+        st_count = 0
+        if race_row is not None:
+            for bn in range(1, 7):
+                v = race_row.get(f"boat{bn}_exhibition_st")
+                try:
+                    if v is not None and float(v) > 0:
+                        st_count += 1
+                except (TypeError, ValueError):
+                    pass
+        has_st = st_count >= 3
+
         def pick_tier(pool, exclude_combos, min_odds, max_odds, n, tier_name, fallback_min=None, fallback_max=None):
             """
             指定オッズ範囲から複合スコアで上位n点を選出
@@ -510,6 +522,11 @@ def get_recommendations(
                 tier = rec.get("tier", "")
                 if should_bet and tier == "小穴":
                     bet_label = "激熱"
+                elif (has_st
+                      and tier in ("大穴100～", "大アナ151～", "超大穴251～")
+                      and int(rec.get("agreement", 0)) >= 2
+                      and float(rec.get("expected_roi", 0)) >= 1.20):
+                    bet_label = "灼熱"
                 else:
                     bet_label = ""
                 all_recommendations.append({

@@ -260,7 +260,7 @@ def append_prediction_row(
                 }},
                 "fields": "userEnteredFormat.backgroundColor",
             }})
-        # 激熱ラベルのときはL列を薄いオレンジで色付け・太字
+        # 激熱ラベル: L列をオレンジで色付け・太字
         if row.get("bet_label") == "激熱":
             reqs.append({"repeatCell": {
                 "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
@@ -270,6 +270,18 @@ def append_prediction_row(
                     "textFormat": {"bold": True},
                 }},
                 "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
+            }})
+        # 灼熱ラベル: L列をクリムゾン赤で色付け・太字
+        elif row.get("bet_label") == "灼熱":
+            reqs.append({"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
+                          "startColumnIndex": 11, "endColumnIndex": 12},
+                "cell": {"userEnteredFormat": {
+                    "backgroundColor": {"red": 0.95, "green": 0.35, "blue": 0.35},
+                    "textFormat": {"bold": True,
+                                   "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
+                }},
+                "fields": "userEnteredFormat(backgroundColor,textFormat)",
             }})
         spreadsheet.batch_update({"requests": reqs})
     except Exception:
