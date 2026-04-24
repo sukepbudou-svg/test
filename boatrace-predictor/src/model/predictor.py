@@ -317,13 +317,14 @@ def predict_race(
     return df
 
 
-def _is_race_worth_betting(by_prob: pd.DataFrame) -> tuple[bool, str]:
+def _is_race_worth_betting(by_prob: pd.DataFrame, race_row: pd.Series = None) -> tuple[bool, str]:
     """
     このレースで勝負すべきかを判定する
 
     判定基準:
-    1. エージェント合議度: 4つのAIが上位予想で一致しているか（混戦判定）
-    2. シグナル強度: 1位と2位の確率差が十分あるか（予測の明確さ）
+    1. 展示STデータが取れているか（当日情報の有無）
+    2. エージェント合議度: 上位5組に合議2以上が1組以上あるか
+    3. シグナル強度: 1位と2位の確率差が十分あるか
 
     Returns:
         (should_bet: bool, skip_reason: str)
@@ -331,24 +332,34 @@ def _is_race_worth_betting(by_prob: pd.DataFrame) -> tuple[bool, str]:
     if by_prob.empty or len(by_prob) < 6:
         return False, "データ不足"
 
-    # 上位10組の平均エージェント合議数（0〜4）
-    top10 = by_prob.head(10)
-    avg_agreement = top10["agreement"].mean()
+    # ── 展示STデータチェック ──
+    if race_row is not None:
+        st_count = 0
+        for bn in range(1, 7):
+            v = race_row.get(f"boat{bn}_exhibition_st")
+            try:
+                if v is not None and float(v) > 0:
+                    st_count += 1
+            except (TypeError, ValueError):
+                pass
+        if st_count < 3:
+            return False, f"展示STデータ不足（{st_count}/6艇）"
 
-    # 1位と2位の確率差（シグナル強度）
+    # ── 優位性チェック: 上位5組に合議2以上が1組以上あるか ──
+    top5 = by_prob.head(5)
+    if not (top5["agreement"] >= 2).any():
+        return False, f"優位性なし（最高合議{int(top5['agreement'].max())}/4）"
+
+    # ── シグナル強度 ──
     top_prob = float(by_prob.iloc[0]["prob"])
     second_prob = float(by_prob.iloc[1]["prob"])
     signal = top_prob - second_prob
-
-    # 合議度が低い → 4エージェントがバラバラに予想 → 混戦・予測困難
-    if avg_agreement < 1.5:
-        return False, f"混戦（合議度{avg_agreement:.1f}/4）"
 
     # シグナルが弱い → どの組み合わせも横一線 → 優位性なし
     if signal < 0.004:
         return False, "混戦（シグナル弱）"
 
-    return True, f"合議{avg_agreement:.1f}/4 シグナル{signal:.4f}"
+    return True, f"合議{int(top5['agreement'].max())}/4 シグナル{signal:.4f}"
 
 
 def get_recommendations(
@@ -385,7 +396,7 @@ def get_recommendations(
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
 
         # ── レース選別フィルター（見送りでも予想は出す・L列に判定を記入）──
-        should_bet, _ = _is_race_worth_betting(by_prob)
+        should_bet, _ = _is_race_worth_betting(by_prob, race_row)
 
         def pick_tier(pool, exclude_combos, min_odds, max_odds, n, tier_name, fallback_min=None, fallback_max=None):
             """
