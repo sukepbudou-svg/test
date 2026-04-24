@@ -20,6 +20,10 @@ SCOPES = [
 # 高配当しきい値（100円換算で100倍以上 = 10,000円以上）
 _HIGH_PAYOUT_THRESHOLD = 10000
 
+OANA_TIERS = {"大穴100～", "大アナ151～", "超大穴251～"}
+RESULT_SHEET = "成績4"
+SUMMARY_SHEET = "サマリー4"
+
 
 def _retry_get_records(sheet, max_attempts: int = 3) -> list:
     """API エラー時にリトライして records を取得する"""
@@ -272,21 +276,20 @@ def append_prediction_row(
         pass
 
 
-def _color_result_row(spreadsheet, sheet, row_no: int, venue_name: str, hit: str) -> None:
+def _color_result_row(spreadsheet, sheet, row_no: int, venue_name: str, hit: str,
+                      num_cols: int = 12, hit_col_idx: int = 9) -> None:
     """成績シートの1行に会場色＋的中色をリアルタイムで適用する"""
     try:
         sid = sheet.id
         bg = _VENUE_BG_COLORS.get(venue_name, _DEFAULT_BG)
         requests = [
-            # 行全体に会場カラー
             {"repeatCell": {
                 "range": {"sheetId": sid, "startRowIndex": row_no - 1, "endRowIndex": row_no,
-                          "startColumnIndex": 0, "endColumnIndex": 10},
+                          "startColumnIndex": 0, "endColumnIndex": num_cols},
                 "cell": {"userEnteredFormat": {"backgroundColor": bg}},
                 "fields": "userEnteredFormat.backgroundColor",
             }}
         ]
-        # 的中セル（I列=index8）に色付け
         if hit in ("○", "×"):
             hit_bg = (
                 {"red": 0.7, "green": 0.95, "blue": 0.7} if hit == "○"
@@ -294,7 +297,7 @@ def _color_result_row(spreadsheet, sheet, row_no: int, venue_name: str, hit: str
             )
             requests.append({"repeatCell": {
                 "range": {"sheetId": sid, "startRowIndex": row_no - 1, "endRowIndex": row_no,
-                          "startColumnIndex": 8, "endColumnIndex": 9},
+                          "startColumnIndex": hit_col_idx, "endColumnIndex": hit_col_idx + 1},
                 "cell": {"userEnteredFormat": {
                     "backgroundColor": hit_bg,
                     "textFormat": {"bold": True},
@@ -303,7 +306,7 @@ def _color_result_row(spreadsheet, sheet, row_no: int, venue_name: str, hit: str
             }})
         spreadsheet.batch_update({"requests": requests})
     except Exception:
-        pass  # 色付け失敗は無視（データは書き込み済み）
+        pass
 
 
 def update_result_row(
@@ -327,19 +330,17 @@ def update_result_row(
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
 
-    RESULT_SHEET = "成績3"
-    RESULT_HEADERS = ["日付", "競艇場", "レース", "予想買い目", "的中確率", "期待回収率",
+    RESULT_HEADERS = ["日付", "競艇場", "レース", "狙い", "予想買い目", "的中確率", "期待回収率",
                       "実際の結果", "実際の払戻", "的中", "収支（円）", "本日レース数"]
     try:
         r_sheet = spreadsheet.worksheet(RESULT_SHEET)
-        # クリア後など空の場合はヘッダーを再作成
         if not r_sheet.get_all_values():
             r_sheet.update("A1", [RESULT_HEADERS])
-            _format_header(spreadsheet, r_sheet, num_cols=11)
+            _format_header(spreadsheet, r_sheet, num_cols=12)
     except gspread.WorksheetNotFound:
         r_sheet = spreadsheet.add_worksheet(title=RESULT_SHEET, rows=2000, cols=12)
         r_sheet.update("A1", [RESULT_HEADERS])
-        _format_header(spreadsheet, r_sheet, num_cols=11)
+        _format_header(spreadsheet, r_sheet, num_cols=12)
 
     # メモリキャッシュ（auto_runner から渡された場合）を優先使用
     # → Google Sheets API 503 エラーを回避するため
@@ -401,9 +402,8 @@ def update_result_row(
     rc = race_count if race_count is not None else "-"
 
     if not race_preds:
-        # 予想なしの場合でも結果だけ記録
         r_sheet.append_row(
-            [date, venue_name, race_no, "（予想なし）", "-", "-",
+            [date, venue_name, race_no, "-", "（予想なし）", "-", "-",
              actual_combination, actual_payout, "-", 0, rc],
             value_input_option="RAW"
         )
@@ -412,12 +412,13 @@ def update_result_row(
 
     for pred in race_preds:
         combination = pred.get("買い目（3連単）", "")
+        tier = pred.get("狙い", "-")
         hit = "○" if combination == actual_combination else "×"
         payout = actual_payout if hit == "○" else 0
-        profit = payout - 100  # 100円賭け基準
+        profit = payout - 100
 
         r_sheet.append_row(
-            [date, venue_name, race_no, combination,
+            [date, venue_name, race_no, tier, combination,
              pred.get("的中確率", "-"), pred.get("期待回収率", "-"),
              actual_combination, actual_payout, hit, profit, rc],
             value_input_option="RAW"
@@ -436,7 +437,7 @@ def apply_colors_to_results_sheet(
     spreadsheet = client.open_by_key(spreadsheet_id)
 
     try:
-        r_sheet = spreadsheet.worksheet("成績3")
+        r_sheet = spreadsheet.worksheet(RESULT_SHEET)
     except gspread.WorksheetNotFound:
         return
 
@@ -447,13 +448,12 @@ def apply_colors_to_results_sheet(
     fmt_requests = []
     sheet_id = r_sheet.id
 
-    for i, row in enumerate(all_rows[1:], start=2):  # 2行目からデータ行
+    for i, row in enumerate(all_rows[1:], start=2):
         venue_name = row[1] if len(row) > 1 else ""
-        hit = row[8] if len(row) > 8 else ""
+        hit = row[9] if len(row) > 9 else ""  # 狙い列追加で的中はindex9
 
         bg = _VENUE_BG_COLORS.get(venue_name, _DEFAULT_BG)
 
-        # 行全体に競艇場カラー
         fmt_requests.append({
             "repeatCell": {
                 "range": {
@@ -461,14 +461,13 @@ def apply_colors_to_results_sheet(
                     "startRowIndex": i - 1,
                     "endRowIndex": i,
                     "startColumnIndex": 0,
-                    "endColumnIndex": 10,
+                    "endColumnIndex": 12,
                 },
                 "cell": {"userEnteredFormat": {"backgroundColor": bg}},
                 "fields": "userEnteredFormat.backgroundColor",
             }
         })
 
-        # 的中セル（I列=index8）: ○は緑、×は薄赤
         if hit in ("○", "×"):
             hit_bg = (
                 {"red": 0.7, "green": 0.95, "blue": 0.7} if hit == "○"
@@ -480,8 +479,8 @@ def apply_colors_to_results_sheet(
                         "sheetId": sheet_id,
                         "startRowIndex": i - 1,
                         "endRowIndex": i,
-                        "startColumnIndex": 8,
-                        "endColumnIndex": 9,
+                        "startColumnIndex": 9,
+                        "endColumnIndex": 10,
                     },
                     "cell": {"userEnteredFormat": {
                         "backgroundColor": hit_bg,
