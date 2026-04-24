@@ -237,6 +237,14 @@ def predict_race(
     rp_top5 = _top5(rp_probs)
     mt_top5 = _top5(mt_probs)
 
+    # 各エージェントが単独で1着に予想する艇（argmax）
+    agent_top_boats = [
+        int(np.argmax(ml_probs)) + 1,
+        int(np.argmax(cs_probs)) + 1,
+        int(np.argmax(rp_probs)) + 1,
+        int(np.argmax(mt_probs)) + 1,
+    ]
+
     # 全120通りの確率を計算
     combinations = list(permutations(range(1, 7), 3))
     combo_probs = []
@@ -282,13 +290,16 @@ def predict_race(
             expected_roi = prob * odds_value
             odds_source = "history"
 
-        # エージェント合議数（0〜4）
+        # エージェント合議数（0〜4）: この3連単がエージェントのtop5に入っている数
         agreement = sum([
             combination in ml_top5,
             combination in cs_top5,
             combination in rp_top5,
             combination in mt_top5,
         ])
+
+        # 1着艇への票数: 各エージェントがb1を1着に予想している数
+        b1_votes = sum(1 for t in agent_top_boats if t == b1)
 
         results.append({
             "combination": combination,
@@ -299,6 +310,7 @@ def predict_race(
             "expected_roi": round(expected_roi, 4),
             "odds_source": odds_source,
             "agreement": agreement,
+            "b1_votes": b1_votes,
             "grade_anchor": round(grade_anchor, 3),
         })
 
@@ -345,10 +357,10 @@ def _is_race_worth_betting(by_prob: pd.DataFrame, race_row: pd.Series = None) ->
         if st_count < 3:
             return False, f"展示STデータ不足（{st_count}/6艇）"
 
-    # ── 優位性チェック: 上位5組に合議2以上が1組以上あるか ──
-    top5 = by_prob.head(5)
-    if not (top5["agreement"] >= 2).any():
-        return False, f"優位性なし（最高合議{int(top5['agreement'].max())}/4）"
+    # ── 1着合議チェック: 予想1着艇が3/4エージェント以上で一致しているか ──
+    b1_votes = int(by_prob.iloc[0].get("b1_votes", 0))
+    if b1_votes < 3:
+        return False, f"1着合議不足（{b1_votes}/4エージェント）"
 
     # ── 展示タイムチェック: 予想1着艇が全艇中TOP3以内か ──
     if race_row is not None and not by_prob.empty:
