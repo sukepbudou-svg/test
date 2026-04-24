@@ -428,8 +428,8 @@ def get_recommendations(
 
         used = set()
 
-        # ── 小穴3点: 30〜80倍（足りなければ25〜90倍に拡張）──
-        t0b = pick_tier(by_prob, used, 30.0, 80.0, 3, "小穴", 25.0, 90.0)
+        # ── 小穴3点: 40〜90倍（足りなければ35〜100倍に拡張）──
+        t0b = pick_tier(by_prob, used, 40.0, 90.0, 3, "小穴", 35.0, 100.0)
         used.update(t0b["combination"].tolist())
 
         # ── 大穴100～2点: 100〜150倍 ──
