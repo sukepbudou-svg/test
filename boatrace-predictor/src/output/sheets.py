@@ -331,16 +331,16 @@ def update_result_row(
     spreadsheet = client.open_by_key(spreadsheet_id)
 
     RESULT_HEADERS = ["日付", "競艇場", "レース", "狙い", "予想買い目", "的中確率", "期待回収率",
-                      "実際の結果", "実際の払戻", "的中", "収支（円）", "本日レース数"]
+                      "実際の結果", "実際の払戻", "的中", "収支（円）", "本日レース数", "信頼度", "勝負推奨"]
     try:
         r_sheet = spreadsheet.worksheet(RESULT_SHEET)
         if not r_sheet.get_all_values():
             r_sheet.update("A1", [RESULT_HEADERS])
-            _format_header(spreadsheet, r_sheet, num_cols=12)
+            _format_header(spreadsheet, r_sheet, num_cols=14)
     except gspread.WorksheetNotFound:
-        r_sheet = spreadsheet.add_worksheet(title=RESULT_SHEET, rows=2000, cols=12)
+        r_sheet = spreadsheet.add_worksheet(title=RESULT_SHEET, rows=2000, cols=14)
         r_sheet.update("A1", [RESULT_HEADERS])
-        _format_header(spreadsheet, r_sheet, num_cols=12)
+        _format_header(spreadsheet, r_sheet, num_cols=14)
 
     # メモリキャッシュ（auto_runner から渡された場合）を優先使用
     # → Google Sheets API 503 エラーを回避するため
@@ -404,15 +404,18 @@ def update_result_row(
     if not race_preds:
         r_sheet.append_row(
             [date, venue_name, race_no, "-", "（予想なし）", "-", "-",
-             actual_combination, actual_payout, "-", 0, rc],
+             actual_combination, actual_payout, "-", 0, rc, "-", ""],
             value_input_option="RAW"
         )
-        _color_result_row(spreadsheet, r_sheet, len(r_sheet.get_all_values()), venue_name, "-")
+        _color_result_row(spreadsheet, r_sheet, len(r_sheet.get_all_values()), venue_name, "-",
+                          num_cols=14)
         return
 
     for pred in race_preds:
         combination = pred.get("買い目（3連単）", "")
         tier = pred.get("狙い", "-")
+        confidence = pred.get("信頼度", "-")
+        bet_label = pred.get("勝負推奨", "")
         hit = "○" if combination == actual_combination else "×"
         payout = actual_payout if hit == "○" else 0
         profit = payout - 100
@@ -420,10 +423,11 @@ def update_result_row(
         r_sheet.append_row(
             [date, venue_name, race_no, tier, combination,
              pred.get("的中確率", "-"), pred.get("期待回収率", "-"),
-             actual_combination, actual_payout, hit, profit, rc],
+             actual_combination, actual_payout, hit, profit, rc, confidence, bet_label],
             value_input_option="RAW"
         )
-        _color_result_row(spreadsheet, r_sheet, len(r_sheet.get_all_values()), venue_name, hit)
+        _color_result_row(spreadsheet, r_sheet, len(r_sheet.get_all_values()), venue_name, hit,
+                          num_cols=14)
 
     print(f"[OK] 成績記録: {venue_name} {race_no}R 結果={actual_combination} 払戻={actual_payout}円")
 
@@ -461,7 +465,7 @@ def apply_colors_to_results_sheet(
                     "startRowIndex": i - 1,
                     "endRowIndex": i,
                     "startColumnIndex": 0,
-                    "endColumnIndex": 12,
+                    "endColumnIndex": 14,
                 },
                 "cell": {"userEnteredFormat": {"backgroundColor": bg}},
                 "fields": "userEnteredFormat.backgroundColor",
@@ -507,7 +511,7 @@ def _compute_tier_stats(records: list, tier_check) -> dict:
         combination = rec.get("予想買い目", "")
         if combination in ("", "（予想なし）", "見送り", "-"):
             continue
-        if not tier_check(str(rec.get("狙い", ""))):
+        if not tier_check(rec):
             continue
 
         d = str(rec.get("日付", ""))
@@ -548,7 +552,7 @@ def _compute_venue_tier_stats(records: list, tier_check) -> dict:
         combination = rec.get("予想買い目", "")
         if combination in ("", "（予想なし）", "見送り", "-"):
             continue
-        if not tier_check(str(rec.get("狙い", ""))):
+        if not tier_check(rec):
             continue
 
         vn = str(rec.get("競艇場", ""))
@@ -596,14 +600,20 @@ def update_summary_sheet(
     if not records:
         return
 
-    def is_koana(t: str) -> bool:
-        return t == "小穴"
+    def is_koana(rec) -> bool:
+        return str(rec.get("狙い", "")) == "小穴"
 
-    def is_oana(t: str) -> bool:
-        return t in OANA_TIERS
+    def is_oana(rec) -> bool:
+        return str(rec.get("狙い", "")) in OANA_TIERS
+
+    def is_notable(rec) -> bool:
+        confidence = str(rec.get("信頼度", ""))
+        bet_label = str(rec.get("勝負推奨", ""))
+        return confidence in ("★★★★", "★★★☆") or bet_label == "激熱"
 
     koana_stats = _compute_tier_stats(records, is_koana)
     oana_stats = _compute_tier_stats(records, is_oana)
+    notable_stats = _compute_tier_stats(records, is_notable)
     koana_venue = _compute_venue_tier_stats(records, is_koana)
     oana_venue = _compute_venue_tier_stats(records, is_oana)
 
@@ -704,6 +714,41 @@ def update_summary_sheet(
     rows.append(_r("日付", "予想点数", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
     for d in sorted(oana_stats["daily"].keys()):
         dd = oana_stats["daily"][d]
+        n = dd["bets"] // 100
+        pr = len(dd["race_keys"])
+        h = len(dd["hit_race_keys"])
+        r = dd["ret"]
+        dr = f"{h / pr * 100:.1f}%" if pr > 0 else "0.0%"
+        dp = r - dd["bets"]
+        rows.append(_r(d, n, pr, h, dr, f"¥{r:,}", f"¥{dp:,}"))
+
+    rows.append(_r())
+    rows.append(_r())
+
+    # ── 注目レース（★★★☆以上 or 激熱）セクション ──
+    section_header_rows.append(len(rows))
+    rows.append(_r("■ 注目レース（★★★☆以上 or 激熱） 全期間合計"))
+    col_header_rows.append(len(rows))
+    rows.append(_r("予想点数", "予想レース数", "的中数（レース）", "的中率", "総払戻", "回収率", "収支"))
+
+    n_bets = notable_stats["total_bets"]
+    n_ret = notable_stats["total_return"]
+    n_pr = notable_stats["pred_races"]
+    n_hr = notable_stats["hit_races"]
+    n_pp = n_bets // 100
+    n_hitr = f"{n_hr / n_pr * 100:.1f}%" if n_pr > 0 else "0.0%"
+    n_roi = f"{n_ret / n_bets * 100:.1f}%" if n_bets > 0 else "0.0%"
+    n_profit = n_ret - n_bets
+    summary_data_rows.append((len(rows), n_profit))
+    rows.append(_r(n_pp, n_pr, n_hr, n_hitr, f"¥{n_ret:,}", n_roi, f"¥{n_profit:,}"))
+
+    rows.append(_r())
+    section_header_rows.append(len(rows))
+    rows.append(_r("■ 注目レース 日付別内訳"))
+    col_header_rows.append(len(rows))
+    rows.append(_r("日付", "予想点数", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
+    for d in sorted(notable_stats["daily"].keys()):
+        dd = notable_stats["daily"][d]
         n = dd["bets"] // 100
         pr = len(dd["race_keys"])
         h = len(dd["hit_race_keys"])
