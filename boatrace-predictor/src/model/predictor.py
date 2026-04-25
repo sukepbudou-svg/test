@@ -452,22 +452,54 @@ def get_recommendations(
 
         def pick_nirentan(pool, exclude_combos, min_odds, tier_name, n_b3=3):
             """
-            当日情報のエッジで1-2着ペアを選ぶ。
+            当日の実態（展示タイム・ST・グレード）＋エッジで1-2着ペアを選ぶ。
 
-            エッジ = モデルの2連単確率 ÷ 全国平均期待値
-            → 「今日だけ特別に強い」艇のペアが浮かび上がる。
-              展示タイム・ST・グレード・天候が良い艇は
-              モデル確率が過去平均を大きく上回るためエッジが高くなる。
-              1号艇は普段から50%なのでエッジは1.0前後に留まりやすい。
-
-            スコア = エッジ(50%) + b1_votes(30%) + 合議(20%)
+            スコア:
+              当日コンディション 35%  ← 展示タイム順位・ST・グレードを直接使用
+              エッジ             35%  ← モデル予測 ÷ 全国平均（今日だけ特別な艇）
+              b1_votes           20%  ← 独立エージェントの1着合議
+              合議               10%  ← 組み合わせレベルの一致
             """
             candidates = pool[pool["odds_value"] >= min_odds].copy()
             candidates = candidates[~candidates["combination"].isin(exclude_combos)]
             if candidates.empty:
                 return pd.DataFrame()
 
-            # (b1, b2) ペア単位で2連単確率・合議を集計
+            # 展示タイム順位を事前計算（速い順: 1位が最良）
+            et_vals = {}
+            for b in range(1, 7):
+                v = race_row.get(f"boat{b}_exhibition_time")
+                try:
+                    t = float(v)
+                    if t > 0:
+                        et_vals[b] = t
+                except (TypeError, ValueError):
+                    pass
+            et_rank = {}  # 艇番 → 順位(1=最速)
+            for i, bn in enumerate(sorted(et_vals, key=et_vals.get)):
+                et_rank[bn] = i + 1
+
+            def _today(bn: int) -> float:
+                """艇の当日コンディションスコア（0.0〜1.0）"""
+                s = 0.0
+                # 展示タイム順位: 1位=1.0, 2位=0.8, 3位=0.6, 4位=0.4...
+                if et_rank:
+                    rank = et_rank.get(bn, len(et_rank) + 1)
+                    s += 0.50 * max(0.0, 1.0 - (rank - 1) * 0.2)
+                # 展示ST: 良好範囲(0.01〜0.18)で小さいほど良い
+                st_v = race_row.get(f"boat{bn}_exhibition_st")
+                try:
+                    st = float(st_v)
+                    if 0.01 <= st <= 0.18:
+                        s += 0.25 * (1.0 - st / 0.20)
+                except (TypeError, ValueError):
+                    pass
+                # グレード: A1=4 → 1.0, A2=3 → 0.67, B1=2 → 0.33, B2=1 → 0.0
+                grade = int(race_row.get(f"boat{bn}_grade_num", 2) or 2)
+                s += 0.25 * (grade - 1) / 3.0
+                return min(s, 1.0)
+
+            # ペア集計
             pair_stats = {}
             for _, row in candidates.iterrows():
                 b1, b2 = int(row["boat1"]), int(row["boat2"])
@@ -483,7 +515,6 @@ def get_recommendations(
                     pair_stats[pair]["max_agreement"], int(row.get("agreement", 0))
                 )
 
-            # エッジ = 今日のモデル予測 ÷ 全国平均期待値
             pair_edge = {
                 pair: s["ni_prob"] / max(_base_ni_prob(*pair), 0.001)
                 for pair, s in pair_stats.items()
@@ -493,14 +524,15 @@ def get_recommendations(
             best_pair = max(
                 pair_stats.items(),
                 key=lambda x: (
-                    0.50 * (pair_edge[x[0]] / max_edge) +
-                    0.30 * (x[1]["b1_votes"] / 4.0) +
-                    0.20 * (x[1]["max_agreement"] / 4.0)
+                    0.35 * (pair_edge[x[0]] / max_edge) +
+                    0.35 * (0.70 * _today(x[0][0]) + 0.30 * _today(x[0][1])) +
+                    0.20 * (x[1]["b1_votes"] / 4.0) +
+                    0.10 * (x[1]["max_agreement"] / 4.0)
                 )
             )[0]
             best_b1, best_b2 = best_pair
 
-            # 正順・逆順それぞれ3着上位3艇に流す（無条件で両方追加）
+            # 正順・逆順それぞれ3着上位n_b3艇に流す
             results = []
             for b1, b2 in [(best_b1, best_b2), (best_b2, best_b1)]:
                 same_12 = pool[
@@ -519,11 +551,11 @@ def get_recommendations(
 
         used = set()
 
-        # ── 小穴: 2連単的思考で1-2着を選び3着3艇流し・裏目込み6点（25倍以上）──
+        # ── 小穴: 当日コンディション+エッジで1-2着を選び3着3艇流し・裏目込み6点 ──
         t0b = pick_nirentan(by_prob, used, 25.0, "小穴", n_b3=3)
         used.update(t0b["combination"].tolist())
 
-        # ── 大穴100～2点: 100〜150倍 ──
+        # ── 大穴100～: 同ロジックで1-2着選択 ──
         t1 = pick_nirentan(by_prob, used, 100.0, "大穴100～", n_b3=1)
         used.update(t1["combination"].tolist())
 
