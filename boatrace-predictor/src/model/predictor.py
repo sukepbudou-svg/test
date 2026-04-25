@@ -389,7 +389,7 @@ def _is_race_worth_betting(by_prob: pd.DataFrame, race_row: pd.Series = None) ->
     if signal < 0.004:
         return False, "混戦（シグナル弱）"
 
-    return True, f"合議{int(top5['agreement'].max())}/4 シグナル{signal:.4f}"
+    return True, f"合議{int(by_prob.head(5)['agreement'].max())}/4 シグナル{signal:.4f}"
 
 
 def get_recommendations(
