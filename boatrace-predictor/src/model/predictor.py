@@ -31,9 +31,15 @@ MIN_EXPECTED_ROI = 1.15  # 115%以上のみ推奨
 # 推奨する最低的中確率（これ未満は大穴すぎて除外）
 MIN_PROB = 0.02  # 2%以上のみ推奨
 
-# 全国平均1着率（コース位置別・過去統計）
-# エッジ計算の基準値として使用
+# 全国平均1着率（コース位置別・過去統計）エッジ計算の基準値
 _BASE_WIN_RATE = {1: 0.50, 2: 0.16, 3: 0.12, 4: 0.09, 5: 0.08, 6: 0.05}
+
+
+def _base_ni_prob(b1: int, b2: int) -> float:
+    """全国平均統計から期待される2連単確率（b1→b2）"""
+    p1 = _BASE_WIN_RATE.get(b1, 0.10)
+    p2_cond = _BASE_WIN_RATE.get(b2, 0.10) / max(1.0 - p1, 0.01)
+    return p1 * p2_cond
 
 MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
 PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
@@ -444,12 +450,6 @@ def get_recommendations(
                     pass
         has_st = st_count >= 3
 
-        def _base_ni_prob(b1: int, b2: int) -> float:
-            """全国平均統計から期待される2連単確率（b1→b2）"""
-            p1 = _BASE_WIN_RATE.get(b1, 0.10)
-            p2_cond = _BASE_WIN_RATE.get(b2, 0.10) / max(1.0 - p1, 0.01)
-            return p1 * p2_cond
-
         def pick_nirentan(pool, exclude_combos, min_odds, tier_name, n_b3=3):
             """
             当日情報のエッジで1-2着ペアを選ぶ。
@@ -558,7 +558,15 @@ def get_recommendations(
                 src = rec.get("odds_source", "history")
                 odds_display = f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)"
                 tier = rec.get("tier", "")
-                if should_bet and tier == "小穴":
+                b1 = int(rec.get("boat1", 0))
+                b2 = int(rec.get("boat2", 0))
+                b1_votes_rec = int(rec.get("b1_votes", 0))
+                ni_prob = float(by_prob[
+                    (by_prob["boat1"] == b1) & (by_prob["boat2"] == b2)
+                ]["prob"].sum())
+                edge = ni_prob / max(_base_ni_prob(b1, b2), 0.001)
+
+                if edge >= 1.5 and b1_votes_rec >= 2:
                     bet_label = "激熱"
                 elif (has_st
                       and tier in ("大穴100～", "大アナ151～", "超大穴251～")
