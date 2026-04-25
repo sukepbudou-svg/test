@@ -475,41 +475,49 @@ def get_recommendations(
         def pick_koana_fixed_12(pool, exclude_combos, min_odds, max_odds, tier_name,
                                 fallback_min=None, fallback_max=None, n_b3=3):
             """
-            小穴用: 1-2着ペアをペア単位の平均複合スコアで決定し、
-            正順・逆順それぞれ3着上位3艇に流す（計6点）
-            ペア単位集計でb3の影響を排除し、真の1-2着の良さで判断する
+            小穴用: 1着を3〜6号艇に限定して1-2着ペアを決定し3着3艇流し
+            - 1着は3〜6号艇のみ（1・2号艇1着は本命圏のため除外）
+            - 裏目は2着も3〜6号艇のときだけ追加（2着が1・2号艇なら裏目は低オッズのため不要）
             """
-            candidates = pool[
-                (pool["odds_value"] >= min_odds) & (pool["odds_value"] <= max_odds)
-            ].copy()
-            candidates = candidates[~candidates["combination"].isin(exclude_combos)]
-
-            if candidates.empty and fallback_min is not None:
-                candidates = pool[
-                    (pool["odds_value"] >= fallback_min) & (pool["odds_value"] <= fallback_max)
+            def _get_candidates(min_o, max_o):
+                c = pool[
+                    (pool["odds_value"] >= min_o) & (pool["odds_value"] <= max_o) &
+                    (pool["boat1"] >= 3)  # 1着は3〜6号艇のみ
                 ].copy()
-                candidates = candidates[~candidates["combination"].isin(exclude_combos)]
+                return c[~c["combination"].isin(exclude_combos)]
 
+            candidates = _get_candidates(min_odds, max_odds)
+            if candidates.empty and fallback_min is not None:
+                candidates = _get_candidates(fallback_min, fallback_max)
             if candidates.empty:
                 return pd.DataFrame()
 
-            # b3の影響を排除するためペア(b1,b2)単位で複合スコアを平均して最良ペアを決定
+            # ペア(b1,b2)単位の平均複合スコアで最良ペアを決定（b3の影響を排除）
             scored = _score(candidates)
             pair_mean = scored.groupby(["boat1", "boat2"])["_composite"].mean()
             best_b1, best_b2 = pair_mean.idxmax()
 
-            # 正順(b1→b2)・逆順(b2→b1)それぞれ3着上位3艇に流す
+            # 正順(b1→b2)3着流し
             results = []
-            for b1, b2 in [(best_b1, best_b2), (best_b2, best_b1)]:
-                same_12 = pool[
-                    (pool["boat1"] == b1) & (pool["boat2"] == b2)
-                ].copy()
-                same_12 = same_12[~same_12["combination"].isin(exclude_combos)]
-                if same_12.empty:
-                    continue
+            same_12 = pool[
+                (pool["boat1"] == best_b1) & (pool["boat2"] == best_b2)
+            ].copy()
+            same_12 = same_12[~same_12["combination"].isin(exclude_combos)]
+            if not same_12.empty:
                 top3 = same_12.sort_values("prob", ascending=False).head(n_b3).copy()
                 top3["tier"] = tier_name
                 results.append(top3)
+
+            # 逆順(b2→b1)3着流し: b2が3〜6号艇のときのみ追加
+            if best_b2 >= 3:
+                rev_12 = pool[
+                    (pool["boat1"] == best_b2) & (pool["boat2"] == best_b1)
+                ].copy()
+                rev_12 = rev_12[~rev_12["combination"].isin(exclude_combos)]
+                if not rev_12.empty:
+                    top3r = rev_12.sort_values("prob", ascending=False).head(n_b3).copy()
+                    top3r["tier"] = tier_name
+                    results.append(top3r)
 
             if not results:
                 return pd.DataFrame()
