@@ -31,6 +31,10 @@ MIN_EXPECTED_ROI = 1.15  # 115%以上のみ推奨
 # 推奨する最低的中確率（これ未満は大穴すぎて除外）
 MIN_PROB = 0.02  # 2%以上のみ推奨
 
+# 全国平均1着率（コース位置別・過去統計）
+# エッジ計算の基準値として使用
+_BASE_WIN_RATE = {1: 0.50, 2: 0.16, 3: 0.12, 4: 0.09, 5: 0.08, 6: 0.05}
+
 MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
 PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
 
@@ -440,21 +444,30 @@ def get_recommendations(
                     pass
         has_st = st_count >= 3
 
+        def _base_ni_prob(b1: int, b2: int) -> float:
+            """全国平均統計から期待される2連単確率（b1→b2）"""
+            p1 = _BASE_WIN_RATE.get(b1, 0.10)
+            p2_cond = _BASE_WIN_RATE.get(b2, 0.10) / max(1.0 - p1, 0.01)
+            return p1 * p2_cond
+
         def pick_nirentan(pool, exclude_combos, min_odds, tier_name, n_b3=3):
             """
-            2連単的思考で最良の1-2着ペアを選び、3着を確率上位3艇に流す。
-            正順・逆順の両方を無条件で追加（計6点）。
+            当日情報のエッジで1-2着ペアを選ぶ。
 
-            スコア（b3の影響を完全排除したペア単位評価）:
-              b1_votes 50% + 2連単確率 30% + 合議 20%
+            エッジ = モデルの2連単確率 ÷ 全国平均期待値
+            → 「今日だけ特別に強い」艇のペアが浮かび上がる。
+              展示タイム・ST・グレード・天候が良い艇は
+              モデル確率が過去平均を大きく上回るためエッジが高くなる。
+              1号艇は普段から50%なのでエッジは1.0前後に留まりやすい。
+
+            スコア = エッジ(50%) + b1_votes(30%) + 合議(20%)
             """
-            # 25倍以上の全組み合わせを対象にペア集計
             candidates = pool[pool["odds_value"] >= min_odds].copy()
             candidates = candidates[~candidates["combination"].isin(exclude_combos)]
             if candidates.empty:
                 return pd.DataFrame()
 
-            # (b1, b2) ペア単位で2連単的スコアを集計
+            # (b1, b2) ペア単位で2連単確率・合議を集計
             pair_stats = {}
             for _, row in candidates.iterrows():
                 b1, b2 = int(row["boat1"]), int(row["boat2"])
@@ -470,12 +483,18 @@ def get_recommendations(
                     pair_stats[pair]["max_agreement"], int(row.get("agreement", 0))
                 )
 
-            max_ni = max(d["ni_prob"] for d in pair_stats.values()) or 1e-9
+            # エッジ = 今日のモデル予測 ÷ 全国平均期待値
+            pair_edge = {
+                pair: s["ni_prob"] / max(_base_ni_prob(*pair), 0.001)
+                for pair, s in pair_stats.items()
+            }
+            max_edge = max(pair_edge.values()) or 1e-9
+
             best_pair = max(
                 pair_stats.items(),
                 key=lambda x: (
-                    0.50 * (x[1]["b1_votes"] / 4.0) +
-                    0.30 * (x[1]["ni_prob"] / max_ni) +
+                    0.50 * (pair_edge[x[0]] / max_edge) +
+                    0.30 * (x[1]["b1_votes"] / 4.0) +
                     0.20 * (x[1]["max_agreement"] / 4.0)
                 )
             )[0]
