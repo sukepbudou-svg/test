@@ -440,33 +440,26 @@ def get_recommendations(
                     pass
         has_st = st_count >= 3
 
+        def _score(df):
+            df = df.copy()
+            max_prob = df["prob"].max()
+            max_roi  = df["expected_roi"].clip(upper=5.0).max()
+            df["_composite"] = (
+                0.35 * (df["agreement"] / 4.0) +
+                0.35 * (df["expected_roi"].clip(upper=5.0) / max(max_roi, 0.01)) +
+                0.20 * df["grade_anchor"] +
+                0.10 * (df["prob"] / max(max_prob, 1e-9))
+            )
+            return df.sort_values("_composite", ascending=False)
+
         def pick_tier(pool, exclude_combos, min_odds, max_odds, n, tier_name, fallback_min=None, fallback_max=None):
-            """
-            指定オッズ範囲から複合スコアで上位n点を選出
-
-            複合スコア（全要素をバランスよく評価）:
-              合議度(35%) + 期待ROI(35%) + 格上絡み(20%) + 的中確率(10%)
-            どれか1つが突出して強くなることを防ぎ、あらゆる角度から総合判断する
-            """
-            def _score(df):
-                df = df.copy()
-                max_prob = df["prob"].max()
-                max_roi  = df["expected_roi"].clip(upper=5.0).max()
-                df["_composite"] = (
-                    0.35 * (df["agreement"] / 4.0) +
-                    0.35 * (df["expected_roi"].clip(upper=5.0) / max(max_roi, 0.01)) +
-                    0.20 * df["grade_anchor"] +
-                    0.10 * (df["prob"] / max(max_prob, 1e-9))
-                )
-                return df.sort_values("_composite", ascending=False)
-
+            """指定オッズ範囲から複合スコアで上位n点を選出"""
             candidates = pool[
                 (pool["odds_value"] >= min_odds) & (pool["odds_value"] <= max_odds)
             ].copy()
             candidates = candidates[~candidates["combination"].isin(exclude_combos)]
             result = _score(candidates).head(n).copy()
 
-            # 足りない場合はフォールバック範囲で補完
             if len(result) < n and fallback_min is not None:
                 fb = pool[
                     (pool["odds_value"] >= fallback_min) & (pool["odds_value"] <= fallback_max)
@@ -479,10 +472,44 @@ def get_recommendations(
             result["tier"] = tier_name
             return result
 
+        def pick_koana_fixed_12(pool, exclude_combos, min_odds, max_odds, tier_name,
+                                fallback_min=None, fallback_max=None, n_b3=3):
+            """
+            小穴用: 1-2着を複合スコアで1点に絞り、3着を確率上位3艇に流す
+            → 1-2着が合えば3点中1点は必ず当たる構造
+            """
+            candidates = pool[
+                (pool["odds_value"] >= min_odds) & (pool["odds_value"] <= max_odds)
+            ].copy()
+            candidates = candidates[~candidates["combination"].isin(exclude_combos)]
+
+            if candidates.empty and fallback_min is not None:
+                candidates = pool[
+                    (pool["odds_value"] >= fallback_min) & (pool["odds_value"] <= fallback_max)
+                ].copy()
+                candidates = candidates[~candidates["combination"].isin(exclude_combos)]
+
+            if candidates.empty:
+                return pd.DataFrame()
+
+            # 最良の1-2着を複合スコアで決定
+            best = _score(candidates).iloc[0]
+            best_b1 = int(best["boat1"])
+            best_b2 = int(best["boat2"])
+
+            # 同じ1-2着を持つ全組み合わせを取得して3着を確率順に展開
+            same_12 = pool[
+                (pool["boat1"] == best_b1) & (pool["boat2"] == best_b2)
+            ].copy()
+            same_12 = same_12[~same_12["combination"].isin(exclude_combos)]
+            result = same_12.sort_values("prob", ascending=False).head(n_b3).copy()
+            result["tier"] = tier_name
+            return result
+
         used = set()
 
-        # ── 小穴3点: 40〜90倍（足りなければ35〜100倍に拡張）──
-        t0b = pick_tier(by_prob, used, 40.0, 90.0, 3, "小穴", 35.0, 100.0)
+        # ── 小穴3点: 1-2着固定・3着流し（40〜90倍で最良1-2着を決定）──
+        t0b = pick_koana_fixed_12(by_prob, used, 40.0, 90.0, "小穴", 35.0, 100.0, n_b3=3)
         used.update(t0b["combination"].tolist())
 
         # ── 大穴100～2点: 100〜150倍 ──
