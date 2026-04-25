@@ -475,8 +475,9 @@ def get_recommendations(
         def pick_koana_fixed_12(pool, exclude_combos, min_odds, max_odds, tier_name,
                                 fallback_min=None, fallback_max=None, n_b3=3):
             """
-            小穴用: 1-2着を複合スコアで1点に絞り、3着を確率上位3艇に流す
-            → 1-2着が合えば3点中1点は必ず当たる構造
+            小穴用: 1-2着ペアをペア単位の平均複合スコアで決定し、
+            正順・逆順それぞれ3着上位3艇に流す（計6点）
+            ペア単位集計でb3の影響を排除し、真の1-2着の良さで判断する
             """
             candidates = pool[
                 (pool["odds_value"] >= min_odds) & (pool["odds_value"] <= max_odds)
@@ -492,23 +493,31 @@ def get_recommendations(
             if candidates.empty:
                 return pd.DataFrame()
 
-            # 最良の1-2着を複合スコアで決定
-            best = _score(candidates).iloc[0]
-            best_b1 = int(best["boat1"])
-            best_b2 = int(best["boat2"])
+            # b3の影響を排除するためペア(b1,b2)単位で複合スコアを平均して最良ペアを決定
+            scored = _score(candidates)
+            pair_mean = scored.groupby(["boat1", "boat2"])["_composite"].mean()
+            best_b1, best_b2 = pair_mean.idxmax()
 
-            # 同じ1-2着を持つ全組み合わせを取得して3着を確率順に展開
-            same_12 = pool[
-                (pool["boat1"] == best_b1) & (pool["boat2"] == best_b2)
-            ].copy()
-            same_12 = same_12[~same_12["combination"].isin(exclude_combos)]
-            result = same_12.sort_values("prob", ascending=False).head(n_b3).copy()
-            result["tier"] = tier_name
-            return result
+            # 正順(b1→b2)・逆順(b2→b1)それぞれ3着上位3艇に流す
+            results = []
+            for b1, b2 in [(best_b1, best_b2), (best_b2, best_b1)]:
+                same_12 = pool[
+                    (pool["boat1"] == b1) & (pool["boat2"] == b2)
+                ].copy()
+                same_12 = same_12[~same_12["combination"].isin(exclude_combos)]
+                if same_12.empty:
+                    continue
+                top3 = same_12.sort_values("prob", ascending=False).head(n_b3).copy()
+                top3["tier"] = tier_name
+                results.append(top3)
+
+            if not results:
+                return pd.DataFrame()
+            return pd.concat(results).reset_index(drop=True)
 
         used = set()
 
-        # ── 小穴3点: 1-2着固定・3着流し（40〜90倍で最良1-2着を決定）──
+        # ── 小穴6点: 1-2着固定・裏表・3着3艇流し（40〜90倍で最良1-2着ペアを決定）──
         t0b = pick_koana_fixed_12(by_prob, used, 40.0, 90.0, "小穴", 35.0, 100.0, n_b3=3)
         used.update(t0b["combination"].tolist())
 
