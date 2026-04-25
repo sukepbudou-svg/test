@@ -551,23 +551,8 @@ def get_recommendations(
 
         used = set()
 
-        # ── 小穴: 当日コンディション+エッジで1-2着を選び3着3艇流し・裏目込み6点 ──
-        t0b = pick_nirentan(by_prob, used, 25.0, "小穴", n_b3=3)
-        used.update(t0b["combination"].tolist())
-
-        # ── 大穴100～: 同ロジックで1-2着選択 ──
-        t1 = pick_nirentan(by_prob, used, 100.0, "大穴100～", n_b3=1)
-        used.update(t1["combination"].tolist())
-
-        # ── 大アナ151～1点: 151〜250倍 ──
-        t2 = pick_nirentan(by_prob, used, 151.0, "大アナ151～", n_b3=1)
-        used.update(t2["combination"].tolist())
-
-        # ── 超大穴251～1点: 251倍以上 ──
-        t3 = pick_nirentan(by_prob, used, 251.0, "超大穴251～", n_b3=1)
-        used.update(t3["combination"].tolist())
-
-        recommended = pd.concat([t0b, t1, t2, t3]).reset_index(drop=True)
+        # ── 小穴6点のみ: 当日コンディション+エッジで1-2着を選び3着3艇流し・裏目込み ──
+        recommended = pick_nirentan(by_prob, used, 25.0, "小穴", n_b3=3).reset_index(drop=True)
 
         if recommended.empty:
             all_recommendations.append({
