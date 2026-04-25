@@ -440,84 +440,59 @@ def get_recommendations(
                     pass
         has_st = st_count >= 3
 
-        def _score(df):
-            df = df.copy()
-            max_prob = df["prob"].max()
-            max_roi  = df["expected_roi"].clip(upper=5.0).max()
-            df["_composite"] = (
-                0.35 * (df["agreement"] / 4.0) +
-                0.35 * (df["expected_roi"].clip(upper=5.0) / max(max_roi, 0.01)) +
-                0.20 * df["grade_anchor"] +
-                0.10 * (df["prob"] / max(max_prob, 1e-9))
-            )
-            return df.sort_values("_composite", ascending=False)
+        def pick_nirentan(pool, exclude_combos, min_odds, tier_name, n_b3=3):
+            """
+            2連単的思考で最良の1-2着ペアを選び、3着を確率上位3艇に流す。
+            正順・逆順の両方を無条件で追加（計6点）。
 
-        def pick_tier(pool, exclude_combos, min_odds, max_odds, n, tier_name, fallback_min=None, fallback_max=None):
-            """指定オッズ範囲から複合スコアで上位n点を選出"""
-            candidates = pool[
-                (pool["odds_value"] >= min_odds) & (pool["odds_value"] <= max_odds)
-            ].copy()
+            スコア（b3の影響を完全排除したペア単位評価）:
+              b1_votes 50% + 2連単確率 30% + 合議 20%
+            """
+            # 25倍以上の全組み合わせを対象にペア集計
+            candidates = pool[pool["odds_value"] >= min_odds].copy()
             candidates = candidates[~candidates["combination"].isin(exclude_combos)]
-            result = _score(candidates).head(n).copy()
-
-            if len(result) < n and fallback_min is not None:
-                fb = pool[
-                    (pool["odds_value"] >= fallback_min) & (pool["odds_value"] <= fallback_max)
-                ].copy()
-                fb = fb[~fb["combination"].isin(exclude_combos)]
-                fb = fb[~fb["combination"].isin(result["combination"])]
-                extra = _score(fb).head(n - len(result)).copy()
-                result = pd.concat([result, extra]).reset_index(drop=True)
-
-            result["tier"] = tier_name
-            return result
-
-        def pick_koana_fixed_12(pool, exclude_combos, min_odds, max_odds, tier_name,
-                                fallback_min=None, fallback_max=None, n_b3=3):
-            """
-            小穴用: 1着を3〜6号艇に限定して1-2着ペアを決定し3着3艇流し
-            - 1着は3〜6号艇のみ（1・2号艇1着は本命圏のため除外）
-            - 裏目は2着も3〜6号艇のときだけ追加（2着が1・2号艇なら裏目は低オッズのため不要）
-            """
-            def _get_candidates(min_o, max_o):
-                c = pool[
-                    (pool["odds_value"] >= min_o) & (pool["odds_value"] <= max_o) &
-                    (pool["boat1"] >= 3)  # 1着は3〜6号艇のみ
-                ].copy()
-                return c[~c["combination"].isin(exclude_combos)]
-
-            candidates = _get_candidates(min_odds, max_odds)
-            if candidates.empty and fallback_min is not None:
-                candidates = _get_candidates(fallback_min, fallback_max)
             if candidates.empty:
                 return pd.DataFrame()
 
-            # ペア(b1,b2)単位の平均複合スコアで最良ペアを決定（b3の影響を排除）
-            scored = _score(candidates)
-            pair_mean = scored.groupby(["boat1", "boat2"])["_composite"].mean()
-            best_b1, best_b2 = pair_mean.idxmax()
+            # (b1, b2) ペア単位で2連単的スコアを集計
+            pair_stats = {}
+            for _, row in candidates.iterrows():
+                b1, b2 = int(row["boat1"]), int(row["boat2"])
+                pair = (b1, b2)
+                if pair not in pair_stats:
+                    pair_stats[pair] = {
+                        "ni_prob": 0.0,
+                        "b1_votes": int(row.get("b1_votes", 0)),
+                        "max_agreement": 0,
+                    }
+                pair_stats[pair]["ni_prob"] += float(row["prob"])
+                pair_stats[pair]["max_agreement"] = max(
+                    pair_stats[pair]["max_agreement"], int(row.get("agreement", 0))
+                )
 
-            # 正順(b1→b2)3着流し
+            max_ni = max(d["ni_prob"] for d in pair_stats.values()) or 1e-9
+            best_pair = max(
+                pair_stats.items(),
+                key=lambda x: (
+                    0.50 * (x[1]["b1_votes"] / 4.0) +
+                    0.30 * (x[1]["ni_prob"] / max_ni) +
+                    0.20 * (x[1]["max_agreement"] / 4.0)
+                )
+            )[0]
+            best_b1, best_b2 = best_pair
+
+            # 正順・逆順それぞれ3着上位3艇に流す（無条件で両方追加）
             results = []
-            same_12 = pool[
-                (pool["boat1"] == best_b1) & (pool["boat2"] == best_b2)
-            ].copy()
-            same_12 = same_12[~same_12["combination"].isin(exclude_combos)]
-            if not same_12.empty:
+            for b1, b2 in [(best_b1, best_b2), (best_b2, best_b1)]:
+                same_12 = pool[
+                    (pool["boat1"] == b1) & (pool["boat2"] == b2)
+                ].copy()
+                same_12 = same_12[~same_12["combination"].isin(exclude_combos)]
+                if same_12.empty:
+                    continue
                 top3 = same_12.sort_values("prob", ascending=False).head(n_b3).copy()
                 top3["tier"] = tier_name
                 results.append(top3)
-
-            # 逆順(b2→b1)3着流し: b2が3〜6号艇のときのみ追加
-            if best_b2 >= 3:
-                rev_12 = pool[
-                    (pool["boat1"] == best_b2) & (pool["boat2"] == best_b1)
-                ].copy()
-                rev_12 = rev_12[~rev_12["combination"].isin(exclude_combos)]
-                if not rev_12.empty:
-                    top3r = rev_12.sort_values("prob", ascending=False).head(n_b3).copy()
-                    top3r["tier"] = tier_name
-                    results.append(top3r)
 
             if not results:
                 return pd.DataFrame()
@@ -525,20 +500,20 @@ def get_recommendations(
 
         used = set()
 
-        # ── 小穴6点: 1-2着固定・裏表・3着3艇流し（40〜90倍で最良1-2着ペアを決定）──
-        t0b = pick_koana_fixed_12(by_prob, used, 40.0, 90.0, "小穴", 35.0, 100.0, n_b3=3)
+        # ── 小穴: 2連単的思考で1-2着を選び3着3艇流し・裏目込み6点（25倍以上）──
+        t0b = pick_nirentan(by_prob, used, 25.0, "小穴", n_b3=3)
         used.update(t0b["combination"].tolist())
 
         # ── 大穴100～2点: 100〜150倍 ──
-        t1 = pick_tier(by_prob, used, 100.0, 150.0, 2, "大穴100～", 81.0, 170.0)
+        t1 = pick_nirentan(by_prob, used, 100.0, "大穴100～", n_b3=1)
         used.update(t1["combination"].tolist())
 
         # ── 大アナ151～1点: 151〜250倍 ──
-        t2 = pick_tier(by_prob, used, 151.0, 250.0, 1, "大アナ151～", 130.0, 270.0)
+        t2 = pick_nirentan(by_prob, used, 151.0, "大アナ151～", n_b3=1)
         used.update(t2["combination"].tolist())
 
         # ── 超大穴251～1点: 251倍以上 ──
-        t3 = pick_tier(by_prob, used, 251.0, 99999.0, 1, "超大穴251～", 220.0, 99999.0)
+        t3 = pick_nirentan(by_prob, used, 251.0, "超大穴251～", n_b3=1)
         used.update(t3["combination"].tolist())
 
         recommended = pd.concat([t0b, t1, t2, t3]).reset_index(drop=True)
