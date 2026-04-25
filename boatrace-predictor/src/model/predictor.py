@@ -583,13 +583,8 @@ def get_recommendations(
                 ]["prob"].sum())
                 edge = ni_prob / max(_base_ni_prob(b1, b2), 0.001)
 
-                if edge >= 1.5 and b1_votes_rec >= 2:
+                if edge >= 1.3 and b1_votes_rec >= 2:
                     bet_label = "激熱"
-                elif (has_st
-                      and tier in ("大穴100～", "大アナ151～", "超大穴251～")
-                      and int(rec.get("agreement", 0)) >= 2
-                      and float(rec.get("expected_roi", 0)) >= 1.20):
-                    bet_label = "灼熱"
                 else:
                     bet_label = ""
                 all_recommendations.append({
