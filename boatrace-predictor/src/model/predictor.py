@@ -545,7 +545,7 @@ def get_recommendations(
             return pd.concat(results).reset_index(drop=True), star_level, is_confident
 
         # ── 6点: 1号艇1着固定, 2〜6号艇から全力で2着を1艇選択, 正順3点+裏目3点 ──
-        recommended, race_star_level, race_is_hot = pick_star_boat(by_prob, "小穴", n_b3=3)
+        recommended, race_star_level, race_is_hot = pick_star_boat(by_prob, "小穴", n_b3=4)
         recommended = recommended.reset_index(drop=True)
 
         if recommended.empty:
