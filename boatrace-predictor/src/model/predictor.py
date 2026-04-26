@@ -452,19 +452,15 @@ def get_recommendations(
 
         def pick_star_boat(pool, tier_name, n_b3=3):
             """
-            2〜6号艇の中から最も勝ちそうな1艇（star_bn）を全力で選び、
-            その艇を1着に据えた3連単を組む。オッズ制限なし。
+            2〜6号艇の中から全力で2着を1艇選び、1号艇-選んだ艇-3着3艇流しの3点を組む。
 
-            star_bn選択基準:
-              モデル1着確率  40%  ← pool内でboat1==bnの確率合計
-              当日コンディション 40%  ← 展示タイム・ST・グレード直接使用
-              エッジ         20%  ← モデル確率 ÷ 全国平均（今日の特別感）
-
-            買い目:
-              正順: star_bn - best_b2 - 3着3艇流し（3点）
-              裏目: best_b2 - star_bn - 3着3艇流し（3点）
-              計6点
+            2着選択基準:
+              モデル2連単確率 P(1→bn)  40%
+              当日コンディション        40%  ← 展示タイム・ST・グレード直接使用
+              エッジ                   20%  ← P(1→bn) ÷ 全国平均
             """
+            b1_fixed = 1
+
             # 展示タイム順位を事前計算（速い順: 1位が最良）
             et_vals = {}
             for b in range(1, 7):
@@ -496,66 +492,38 @@ def get_recommendations(
                 s += 0.25 * (grade - 1) / 3.0
                 return min(s, 1.0)
 
-            # ── STEP1: 2〜6号艇から主役を1艇選ぶ ──
-            star_candidates = {}
-            for bn in range(2, 7):
-                win_prob = float(pool[pool["boat1"] == bn]["prob"].sum())
-                base_rate = _BASE_WIN_RATE.get(bn, 0.10)
-                edge = win_prob / max(base_rate, 0.001)
-                star_candidates[bn] = {"win_prob": win_prob, "edge": edge, "cond": _today(bn)}
-
-            max_wp = max(c["win_prob"] for c in star_candidates.values()) or 1e-9
-            max_edge = max(c["edge"] for c in star_candidates.values()) or 1e-9
-
-            star_bn = max(
-                star_candidates.items(),
-                key=lambda x: (
-                    0.40 * (x[1]["win_prob"] / max_wp) +
-                    0.40 * x[1]["cond"] +
-                    0.20 * (x[1]["edge"] / max_edge)
-                )
-            )[0]
-
-            # ── STEP2: 残り5艇から2着を1艇選ぶ ──
+            # 2〜6号艇の中から2着を1艇選ぶ
             b2_candidates = {}
-            for bn in range(1, 7):
-                if bn == star_bn:
-                    continue
+            for bn in range(2, 7):
                 ni_prob = float(pool[
-                    (pool["boat1"] == star_bn) & (pool["boat2"] == bn)
+                    (pool["boat1"] == b1_fixed) & (pool["boat2"] == bn)
                 ]["prob"].sum())
-                base = _base_ni_prob(star_bn, bn)
-                edge2 = ni_prob / max(base, 0.001)
-                b2_candidates[bn] = {"ni_prob": ni_prob, "edge": edge2, "cond": _today(bn)}
+                base = _base_ni_prob(b1_fixed, bn)
+                edge = ni_prob / max(base, 0.001)
+                b2_candidates[bn] = {"ni_prob": ni_prob, "edge": edge, "cond": _today(bn)}
 
             max_ni = max(c["ni_prob"] for c in b2_candidates.values()) or 1e-9
-            max_edge2 = max(c["edge"] for c in b2_candidates.values()) or 1e-9
+            max_edge = max(c["edge"] for c in b2_candidates.values()) or 1e-9
 
             best_b2 = max(
                 b2_candidates.items(),
                 key=lambda x: (
                     0.40 * (x[1]["ni_prob"] / max_ni) +
                     0.40 * x[1]["cond"] +
-                    0.20 * (x[1]["edge"] / max_edge2)
+                    0.20 * (x[1]["edge"] / max_edge)
                 )
             )[0]
 
-            # ── STEP3: 正順・裏目それぞれ3着3艇流し ──
-            results = []
-            for b1, b2 in [(star_bn, best_b2), (best_b2, star_bn)]:
-                subset = pool[
-                    (pool["boat1"] == b1) & (pool["boat2"] == b2)
-                ].sort_values("prob", ascending=False).head(n_b3).copy()
-                if subset.empty:
-                    continue
-                subset["tier"] = tier_name
-                results.append(subset)
-
-            if not results:
+            # 1号艇-best_b2-3着3艇流し（3点）
+            subset = pool[
+                (pool["boat1"] == b1_fixed) & (pool["boat2"] == best_b2)
+            ].sort_values("prob", ascending=False).head(n_b3).copy()
+            if subset.empty:
                 return pd.DataFrame()
-            return pd.concat(results).reset_index(drop=True)
+            subset["tier"] = tier_name
+            return subset.reset_index(drop=True)
 
-        # ── 6点: 2〜6号艇から主役を全力選択, 3着3艇流し+裏目込み ──
+        # ── 3点: 1号艇1着固定, 2〜6号艇から全力で2着を1艇選択, 3着3艇流し ──
         recommended = pick_star_boat(by_prob, "小穴", n_b3=3).reset_index(drop=True)
 
         if recommended.empty:
