@@ -505,14 +505,20 @@ def get_recommendations(
             max_ni = max(c["ni_prob"] for c in b2_candidates.values()) or 1e-9
             max_edge = max(c["edge"] for c in b2_candidates.values()) or 1e-9
 
-            best_b2 = max(
-                b2_candidates.items(),
-                key=lambda x: (
-                    0.40 * (x[1]["ni_prob"] / max_ni) +
-                    0.40 * x[1]["cond"] +
-                    0.20 * (x[1]["edge"] / max_edge)
+            scores = {
+                bn: (
+                    0.40 * (c["ni_prob"] / max_ni) +
+                    0.40 * c["cond"] +
+                    0.20 * (c["edge"] / max_edge)
                 )
-            )[0]
+                for bn, c in b2_candidates.items()
+            }
+            sorted_scores = sorted(scores.values(), reverse=True)
+            best_b2 = max(scores, key=scores.get)
+            # 1位と2位のスコア差で自信度を測る
+            top_score = sorted_scores[0]
+            second_score = sorted_scores[1] if len(sorted_scores) > 1 else 0
+            is_confident = top_score >= second_score * 1.35
 
             # 正順: 1号艇-best_b2-3着3艇流し（3点）＋裏目: best_b2-1号艇-3着3艇流し（3点）
             results = []
@@ -526,26 +532,12 @@ def get_recommendations(
                 results.append(subset)
 
             if not results:
-                return pd.DataFrame()
-            return pd.concat(results).reset_index(drop=True)
+                return pd.DataFrame(), False
+            return pd.concat(results).reset_index(drop=True), is_confident
 
         # ── 6点: 1号艇1着固定, 2〜6号艇から全力で2着を1艇選択, 正順3点+裏目3点 ──
-        recommended = pick_star_boat(by_prob, "小穴", n_b3=3).reset_index(drop=True)
-
-        # ── 激熱判定: 選んだ艇（best_b2）が1着か2着に来る自信をレース単位で計算 ──
-        race_is_hot = False
-        if not recommended.empty:
-            fwd = recommended[recommended["boat1"] == 1]
-            if not fwd.empty:
-                selected_b2 = int(fwd.iloc[0]["boat2"])
-                # 1→selected_b2 の2連単確率とエッジ
-                star_ni_prob = float(by_prob[
-                    (by_prob["boat1"] == 1) & (by_prob["boat2"] == selected_b2)
-                ]["prob"].sum())
-                star_edge = star_ni_prob / max(_base_ni_prob(1, selected_b2), 0.001)
-                # 1号艇が1着と予想するエージェント数
-                b1_votes_val = int(by_prob[by_prob["boat1"] == 1].iloc[0].get("b1_votes", 0))
-                race_is_hot = star_edge >= 1.3 and b1_votes_val >= 2
+        recommended, race_is_hot = pick_star_boat(by_prob, "小穴", n_b3=3)
+        recommended = recommended.reset_index(drop=True)
 
         if recommended.empty:
             all_recommendations.append({
