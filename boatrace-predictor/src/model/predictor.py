@@ -450,20 +450,17 @@ def get_recommendations(
                     pass
         has_st = st_count >= 3
 
-        def pick_nirentan(pool, exclude_combos, min_odds, tier_name, n_b3=3):
+        def pick_with_fixed_b1(pool, exclude_combos, min_odds, tier_name, n_b3=3):
             """
-            当日の実態（展示タイム・ST・グレード）＋エッジで1-2着ペアを選ぶ。
+            1号艇を1着に固定し、2〜6号艇の中から最良の2着を全力で1艇選ぶ。
+            3着は残り4艇から確率上位n_b3艇流し。裏目（best_b2-1-X3）も追加して計6点。
 
-            スコア:
-              当日コンディション 35%  ← 展示タイム順位・ST・グレードを直接使用
-              エッジ             35%  ← モデル予測 ÷ 全国平均（今日だけ特別な艇）
-              b1_votes           20%  ← 独立エージェントの1着合議
-              合議               10%  ← 組み合わせレベルの一致
+            2着選択基準:
+              2連単確率  40%  ← モデルが P(1→bn) をどう見ているか
+              当日コンディション 40%  ← 展示タイム・ST・グレードを直接使用
+              エッジ     20%  ← P(1→bn) ÷ 全国平均（今日だけ特別かどうか）
             """
-            candidates = pool[pool["odds_value"] >= min_odds].copy()
-            candidates = candidates[~candidates["combination"].isin(exclude_combos)]
-            if candidates.empty:
-                return pd.DataFrame()
+            b1_fixed = 1
 
             # 展示タイム順位を事前計算（速い順: 1位が最良）
             et_vals = {}
@@ -475,18 +472,16 @@ def get_recommendations(
                         et_vals[b] = t
                 except (TypeError, ValueError):
                     pass
-            et_rank = {}  # 艇番 → 順位(1=最速)
+            et_rank = {}
             for i, bn in enumerate(sorted(et_vals, key=et_vals.get)):
                 et_rank[bn] = i + 1
 
             def _today(bn: int) -> float:
                 """艇の当日コンディションスコア（0.0〜1.0）"""
                 s = 0.0
-                # 展示タイム順位: 1位=1.0, 2位=0.8, 3位=0.6, 4位=0.4...
                 if et_rank:
                     rank = et_rank.get(bn, len(et_rank) + 1)
                     s += 0.50 * max(0.0, 1.0 - (rank - 1) * 0.2)
-                # 展示ST: 良好範囲(0.01〜0.18)で小さいほど良い
                 st_v = race_row.get(f"boat{bn}_exhibition_st")
                 try:
                     st = float(st_v)
@@ -494,56 +489,44 @@ def get_recommendations(
                         s += 0.25 * (1.0 - st / 0.20)
                 except (TypeError, ValueError):
                     pass
-                # グレード: A1=4 → 1.0, A2=3 → 0.67, B1=2 → 0.33, B2=1 → 0.0
                 grade = int(race_row.get(f"boat{bn}_grade_num", 2) or 2)
                 s += 0.25 * (grade - 1) / 3.0
                 return min(s, 1.0)
 
-            # ペア集計
-            pair_stats = {}
-            for _, row in candidates.iterrows():
-                b1, b2 = int(row["boat1"]), int(row["boat2"])
-                pair = (b1, b2)
-                if pair not in pair_stats:
-                    pair_stats[pair] = {
-                        "ni_prob": 0.0,
-                        "b1_votes": int(row.get("b1_votes", 0)),
-                        "max_agreement": 0,
-                    }
-                pair_stats[pair]["ni_prob"] += float(row["prob"])
-                pair_stats[pair]["max_agreement"] = max(
-                    pair_stats[pair]["max_agreement"], int(row.get("agreement", 0))
-                )
+            # 2〜6号艇を2着候補として評価
+            candidates_b2 = {}
+            for bn in range(2, 7):
+                ni_prob = float(pool[
+                    (pool["boat1"] == b1_fixed) & (pool["boat2"] == bn)
+                ]["prob"].sum())
+                base = _base_ni_prob(b1_fixed, bn)
+                edge = ni_prob / max(base, 0.001)
+                candidates_b2[bn] = {"ni_prob": ni_prob, "edge": edge, "cond": _today(bn)}
 
-            pair_edge = {
-                pair: s["ni_prob"] / max(_base_ni_prob(*pair), 0.001)
-                for pair, s in pair_stats.items()
-            }
-            max_edge = max(pair_edge.values()) or 1e-9
+            max_ni = max(c["ni_prob"] for c in candidates_b2.values()) or 1e-9
+            max_edge = max(c["edge"] for c in candidates_b2.values()) or 1e-9
 
-            best_pair = max(
-                pair_stats.items(),
+            best_b2 = max(
+                candidates_b2.items(),
                 key=lambda x: (
-                    0.35 * (pair_edge[x[0]] / max_edge) +
-                    0.35 * (0.70 * _today(x[0][0]) + 0.30 * _today(x[0][1])) +
-                    0.20 * (x[1]["b1_votes"] / 4.0) +
-                    0.10 * (x[1]["max_agreement"] / 4.0)
+                    0.40 * (x[1]["ni_prob"] / max_ni) +
+                    0.40 * x[1]["cond"] +
+                    0.20 * (x[1]["edge"] / max_edge)
                 )
             )[0]
-            best_b1, best_b2 = best_pair
 
-            # 正順・逆順それぞれ3着上位n_b3艇に流す
             results = []
-            for b1, b2 in [(best_b1, best_b2), (best_b2, best_b1)]:
-                same_12 = pool[
-                    (pool["boat1"] == b1) & (pool["boat2"] == b2)
+            for b1, b2 in [(b1_fixed, best_b2), (best_b2, b1_fixed)]:
+                subset = pool[
+                    (pool["boat1"] == b1) & (pool["boat2"] == b2) &
+                    (pool["odds_value"] >= min_odds)
                 ].copy()
-                same_12 = same_12[~same_12["combination"].isin(exclude_combos)]
-                if same_12.empty:
+                subset = subset[~subset["combination"].isin(exclude_combos)]
+                if subset.empty:
                     continue
-                top3 = same_12.sort_values("prob", ascending=False).head(n_b3).copy()
-                top3["tier"] = tier_name
-                results.append(top3)
+                top_n = subset.sort_values("prob", ascending=False).head(n_b3).copy()
+                top_n["tier"] = tier_name
+                results.append(top_n)
 
             if not results:
                 return pd.DataFrame()
@@ -551,8 +534,8 @@ def get_recommendations(
 
         used = set()
 
-        # ── 小穴6点のみ: 当日コンディション+エッジで1-2着を選び3着3艇流し・裏目込み ──
-        recommended = pick_nirentan(by_prob, used, 25.0, "小穴", n_b3=3).reset_index(drop=True)
+        # ── 小穴6点: 1号艇1着固定, 2〜6号艇から最良2着, 3着3艇流し+裏目込み ──
+        recommended = pick_with_fixed_b1(by_prob, used, 25.0, "小穴", n_b3=3).reset_index(drop=True)
 
         if recommended.empty:
             all_recommendations.append({
