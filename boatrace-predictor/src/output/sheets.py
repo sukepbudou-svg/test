@@ -21,8 +21,8 @@ SCOPES = [
 _HIGH_PAYOUT_THRESHOLD = 10000
 
 OANA_TIERS = {"大穴100～", "大アナ151～", "超大穴251～"}
-RESULT_SHEET = "成績4"
-SUMMARY_SHEET = "サマリー4"
+RESULT_SHEET = "成績5"
+SUMMARY_SHEET = "サマリー5"
 
 
 def _retry_get_records(sheet, max_attempts: int = 3) -> list:
@@ -593,7 +593,7 @@ def update_summary_sheet(
 ) -> None:
     """
     RESULT_SHEETを集計してSUMMARY_SHEETを更新する
-    小穴・大穴を分けた表構成、倍率帯別出現率を含む
+    小穴・2着5or6・2着2〜4・注目レースの4セクション構成
     """
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
@@ -615,8 +615,19 @@ def update_summary_sheet(
     def is_koana(rec) -> bool:
         return str(rec.get("狙い", "")) == "小穴"
 
-    def is_oana(rec) -> bool:
-        return str(rec.get("狙い", "")) in OANA_TIERS
+    def is_b2_56(rec) -> bool:
+        parts = str(rec.get("予想買い目", "")).split("-")
+        try:
+            return len(parts) >= 2 and int(parts[1]) in (5, 6)
+        except ValueError:
+            return False
+
+    def is_b2_234(rec) -> bool:
+        parts = str(rec.get("予想買い目", "")).split("-")
+        try:
+            return len(parts) >= 2 and int(parts[1]) in (2, 3, 4)
+        except ValueError:
+            return False
 
     def is_notable(rec) -> bool:
         confidence = str(rec.get("信頼度", ""))
@@ -624,30 +635,9 @@ def update_summary_sheet(
         return confidence in ("★★★★", "★★★☆") or bet_label == "激熱"
 
     koana_stats = _compute_tier_stats(records, is_koana)
-    oana_stats = _compute_tier_stats(records, is_oana)
+    b56_stats = _compute_tier_stats(records, is_b2_56)
+    b234_stats = _compute_tier_stats(records, is_b2_234)
     notable_stats = _compute_tier_stats(records, is_notable)
-    koana_venue = _compute_venue_tier_stats(records, is_koana)
-    oana_venue = _compute_venue_tier_stats(records, is_oana)
-
-    # 倍率帯集計用: 全tierの実際の払戻を会場別に収集
-    venue_payouts: dict = {}
-    for rec in records:
-        combination = rec.get("予想買い目", "")
-        if combination in ("", "（予想なし）", "見送り", "-"):
-            continue
-        vn = str(rec.get("競艇場", ""))
-        d = str(rec.get("日付", ""))
-        rn = str(rec.get("レース", ""))
-        race_key = (d, vn, rn)
-        if vn not in venue_payouts:
-            venue_payouts[vn] = {}
-        try:
-            payout = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
-            venue_payouts[vn][race_key] = payout
-        except (ValueError, TypeError):
-            pass
-
-    all_venues = sorted(set(list(koana_venue.keys()) + list(oana_venue.keys()) + list(venue_payouts.keys())))
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     NUM_COLS = 9
@@ -656,170 +646,68 @@ def update_summary_sheet(
         lst = list(args)
         return lst + [""] * (NUM_COLS - len(lst))
 
+    def _section(stats, title_total, title_daily):
+        """セクション（全期間合計＋日付別内訳）の行リストを返す"""
+        sec_rows = []
+        sec_headers = []
+        sec_col_headers = []
+        sec_data = []
+
+        sec_headers.append(len(rows) + len(sec_rows))
+        sec_rows.append(_r(f"■ {title_total} 全期間合計"))
+        sec_col_headers.append(len(rows) + len(sec_rows))
+        sec_rows.append(_r("予想点数", "予想レース数", "的中数（レース）", "的中率", "総払戻", "回収率", "収支"))
+
+        bets = stats["total_bets"]
+        ret = stats["total_return"]
+        pr = stats["pred_races"]
+        hr = stats["hit_races"]
+        pp = bets // 100
+        hitr = f"{hr / pr * 100:.1f}%" if pr > 0 else "0.0%"
+        roi = f"{ret / bets * 100:.1f}%" if bets > 0 else "0.0%"
+        profit = ret - bets
+        sec_data.append((len(rows) + len(sec_rows), profit))
+        sec_rows.append(_r(pp, pr, hr, hitr, f"¥{ret:,}", roi, f"¥{profit:,}"))
+
+        sec_rows.append(_r())
+        sec_headers.append(len(rows) + len(sec_rows))
+        sec_rows.append(_r(f"■ {title_daily} 日付別内訳"))
+        sec_col_headers.append(len(rows) + len(sec_rows))
+        sec_rows.append(_r("日付", "予想点数", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
+        for d in sorted(stats["daily"].keys()):
+            dd = stats["daily"][d]
+            n = dd["bets"] // 100
+            dpr = len(dd["race_keys"])
+            h = len(dd["hit_race_keys"])
+            r = dd["ret"]
+            dr = f"{h / dpr * 100:.1f}%" if dpr > 0 else "0.0%"
+            dp = r - dd["bets"]
+            sec_rows.append(_r(d, n, dpr, h, dr, f"¥{r:,}", f"¥{dp:,}"))
+
+        sec_rows.append(_r())
+        sec_rows.append(_r())
+        return sec_rows, sec_headers, sec_col_headers, sec_data
+
     rows = []
     section_header_rows = []
     col_header_rows = []
-    summary_data_rows = []   # (row_idx, profit)
-    venue_color_rows = []    # (row_idx, venue_name) for venue sections
-    odds_venue_rows = []
+    summary_data_rows = []
 
     rows.append(_r("【予想成績サマリー】"))
     rows.append(_r("集計日時", now))
     rows.append(_r())
 
-    # ── 小穴セクション ──
-    section_header_rows.append(len(rows))
-    rows.append(_r("■ 小穴 全期間合計"))
-    col_header_rows.append(len(rows))
-    rows.append(_r("予想点数", "予想レース数", "的中数（レース）", "的中率", "総払戻", "回収率", "収支"))
-
-    k_bets = koana_stats["total_bets"]
-    k_ret = koana_stats["total_return"]
-    k_pr = koana_stats["pred_races"]
-    k_hr = koana_stats["hit_races"]
-    k_pp = k_bets // 100
-    k_hitr = f"{k_hr / k_pr * 100:.1f}%" if k_pr > 0 else "0.0%"
-    k_roi = f"{k_ret / k_bets * 100:.1f}%" if k_bets > 0 else "0.0%"
-    k_profit = k_ret - k_bets
-    summary_data_rows.append((len(rows), k_profit))
-    rows.append(_r(k_pp, k_pr, k_hr, k_hitr, f"¥{k_ret:,}", k_roi, f"¥{k_profit:,}"))
-
-    rows.append(_r())
-    section_header_rows.append(len(rows))
-    rows.append(_r("■ 小穴 日付別内訳"))
-    col_header_rows.append(len(rows))
-    rows.append(_r("日付", "予想点数", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
-    for d in sorted(koana_stats["daily"].keys()):
-        dd = koana_stats["daily"][d]
-        n = dd["bets"] // 100
-        pr = len(dd["race_keys"])
-        h = len(dd["hit_race_keys"])
-        r = dd["ret"]
-        dr = f"{h / pr * 100:.1f}%" if pr > 0 else "0.0%"
-        dp = r - dd["bets"]
-        rows.append(_r(d, n, pr, h, dr, f"¥{r:,}", f"¥{dp:,}"))
-
-    rows.append(_r())
-    rows.append(_r())
-
-    # ── 大穴セクション ──
-    section_header_rows.append(len(rows))
-    rows.append(_r("■ 大穴 全期間合計"))
-    col_header_rows.append(len(rows))
-    rows.append(_r("予想点数", "予想レース数", "的中数（レース）", "的中率", "総払戻", "回収率", "収支"))
-
-    o_bets = oana_stats["total_bets"]
-    o_ret = oana_stats["total_return"]
-    o_pr = oana_stats["pred_races"]
-    o_hr = oana_stats["hit_races"]
-    o_pp = o_bets // 100
-    o_hitr = f"{o_hr / o_pr * 100:.1f}%" if o_pr > 0 else "0.0%"
-    o_roi = f"{o_ret / o_bets * 100:.1f}%" if o_bets > 0 else "0.0%"
-    o_profit = o_ret - o_bets
-    summary_data_rows.append((len(rows), o_profit))
-    rows.append(_r(o_pp, o_pr, o_hr, o_hitr, f"¥{o_ret:,}", o_roi, f"¥{o_profit:,}"))
-
-    rows.append(_r())
-    section_header_rows.append(len(rows))
-    rows.append(_r("■ 大穴 日付別内訳"))
-    col_header_rows.append(len(rows))
-    rows.append(_r("日付", "予想点数", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
-    for d in sorted(oana_stats["daily"].keys()):
-        dd = oana_stats["daily"][d]
-        n = dd["bets"] // 100
-        pr = len(dd["race_keys"])
-        h = len(dd["hit_race_keys"])
-        r = dd["ret"]
-        dr = f"{h / pr * 100:.1f}%" if pr > 0 else "0.0%"
-        dp = r - dd["bets"]
-        rows.append(_r(d, n, pr, h, dr, f"¥{r:,}", f"¥{dp:,}"))
-
-    rows.append(_r())
-    rows.append(_r())
-
-    # ── 注目レース（★★★☆以上 or 激熱）セクション ──
-    section_header_rows.append(len(rows))
-    rows.append(_r("■ 注目レース（★★★☆以上 or 激熱） 全期間合計"))
-    col_header_rows.append(len(rows))
-    rows.append(_r("予想点数", "予想レース数", "的中数（レース）", "的中率", "総払戻", "回収率", "収支"))
-
-    n_bets = notable_stats["total_bets"]
-    n_ret = notable_stats["total_return"]
-    n_pr = notable_stats["pred_races"]
-    n_hr = notable_stats["hit_races"]
-    n_pp = n_bets // 100
-    n_hitr = f"{n_hr / n_pr * 100:.1f}%" if n_pr > 0 else "0.0%"
-    n_roi = f"{n_ret / n_bets * 100:.1f}%" if n_bets > 0 else "0.0%"
-    n_profit = n_ret - n_bets
-    summary_data_rows.append((len(rows), n_profit))
-    rows.append(_r(n_pp, n_pr, n_hr, n_hitr, f"¥{n_ret:,}", n_roi, f"¥{n_profit:,}"))
-
-    rows.append(_r())
-    section_header_rows.append(len(rows))
-    rows.append(_r("■ 注目レース 日付別内訳"))
-    col_header_rows.append(len(rows))
-    rows.append(_r("日付", "予想点数", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
-    for d in sorted(notable_stats["daily"].keys()):
-        dd = notable_stats["daily"][d]
-        n = dd["bets"] // 100
-        pr = len(dd["race_keys"])
-        h = len(dd["hit_race_keys"])
-        r = dd["ret"]
-        dr = f"{h / pr * 100:.1f}%" if pr > 0 else "0.0%"
-        dp = r - dd["bets"]
-        rows.append(_r(d, n, pr, h, dr, f"¥{r:,}", f"¥{dp:,}"))
-
-    rows.append(_r())
-    rows.append(_r())
-
-    # ── 会場別収支・勝率（小穴・大穴を分けた列） ──
-    section_header_rows.append(len(rows))
-    rows.append(_r("■ 会場別収支・勝率"))
-    col_header_rows.append(len(rows))
-    rows.append(["会場", "小穴R数", "小穴的中", "小穴的中率", "小穴収支",
-                 "大穴R数", "大穴的中", "大穴的中率", "大穴収支"])
-    for vn in all_venues:
-        kv = koana_venue.get(vn, {})
-        ov = oana_venue.get(vn, {})
-        k_r = len(kv.get("race_keys", set()))
-        k_h = len(kv.get("hit_race_keys", set()))
-        k_b = kv.get("bets", 0)
-        k_rv = kv.get("ret", 0)
-        k_rate = f"{k_h / k_r * 100:.1f}%" if k_r > 0 else "-"
-        k_vp = f"¥{k_rv - k_b:,}" if k_r > 0 else "-"
-        o_r = len(ov.get("race_keys", set()))
-        o_h = len(ov.get("hit_race_keys", set()))
-        o_b = ov.get("bets", 0)
-        o_rv = ov.get("ret", 0)
-        o_rate = f"{o_h / o_r * 100:.1f}%" if o_r > 0 else "-"
-        o_vp = f"¥{o_rv - o_b:,}" if o_r > 0 else "-"
-        venue_color_rows.append((len(rows), vn))
-        rows.append([vn,
-                     k_r if k_r > 0 else "-", k_h if k_r > 0 else "-", k_rate, k_vp,
-                     o_r if o_r > 0 else "-", o_h if o_r > 0 else "-", o_rate, o_vp])
-
-    rows.append(_r())
-    rows.append(_r())
-
-    # ── 倍率帯別出現率 ──
-    section_header_rows.append(len(rows))
-    rows.append(_r("■ 倍率帯別出現率"))
-    col_header_rows.append(len(rows))
-    rows.append(["会場", "〜25倍(回)", "〜25倍(%)", "26〜100倍(回)", "26〜100倍(%)",
-                 "101倍〜(回)", "101倍〜(%)", "", ""])
-    for vn in all_venues:
-        payouts = list(venue_payouts.get(vn, {}).values())
-        total_p = len(payouts)
-        if total_p == 0:
-            continue
-        r1 = sum(1 for p in payouts if p <= 2500)
-        r2 = sum(1 for p in payouts if 2501 <= p <= 10000)
-        r3 = sum(1 for p in payouts if p >= 10001)
-        r1p = f"{r1 / total_p * 100:.1f}%"
-        r2p = f"{r2 / total_p * 100:.1f}%"
-        r3p = f"{r3 / total_p * 100:.1f}%"
-        odds_venue_rows.append((len(rows), vn))
-        rows.append([vn, r1, r1p, r2, r2p, r3, r3p, "", ""])
+    for stats, t_total, t_daily in [
+        (koana_stats,   "小穴",          "小穴"),
+        (b56_stats,     "2着が5・6号艇", "2着が5・6号艇"),
+        (b234_stats,    "2着が2〜4号艇", "2着が2〜4号艇"),
+        (notable_stats, "注目レース（★★★☆以上 or 激熱）", "注目レース"),
+    ]:
+        sec_rows, sec_sh, sec_ch, sec_data = _section(stats, t_total, t_daily)
+        section_header_rows.extend(sec_sh)
+        col_header_rows.extend(sec_ch)
+        summary_data_rows.extend(sec_data)
+        rows.extend(sec_rows)
 
     # シートへ書き込み
     try:
@@ -872,23 +760,16 @@ def update_summary_sheet(
                 "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
             }})
 
-        for ri, vn in (venue_color_rows + odds_venue_rows):
-            bg = _VENUE_BG_COLORS.get(vn, _DEFAULT_BG)
-            color_requests.append({"repeatCell": {
-                "range": {"sheetId": sid, "startRowIndex": ri, "endRowIndex": ri + 1,
-                          "startColumnIndex": 0, "endColumnIndex": NUM_COLS},
-                "cell": {"userEnteredFormat": {"backgroundColor": bg}},
-                "fields": "userEnteredFormat.backgroundColor",
-            }})
-
         if color_requests:
             spreadsheet.batch_update({"requests": color_requests})
     except Exception:
         pass
 
-    k_msg = f"小穴{k_pr}R 的中率={k_hitr} ROI={k_roi}" if k_pr > 0 else "小穴0R"
-    o_msg = f"大穴{o_pr}R 的中率={o_hitr} ROI={o_roi}" if o_pr > 0 else "大穴0R"
-    print(f"[OK] {SUMMARY_SHEET}更新: {k_msg} / {o_msg}")
+    k_pr = koana_stats["pred_races"]
+    k_hitr = (f"{koana_stats['hit_races'] / k_pr * 100:.1f}%" if k_pr > 0 else "0.0%")
+    k_roi = (f"{koana_stats['total_return'] / koana_stats['total_bets'] * 100:.1f}%"
+             if koana_stats["total_bets"] > 0 else "0.0%")
+    print(f"[OK] {SUMMARY_SHEET}更新: 小穴{k_pr}R 的中率={k_hitr} ROI={k_roi}")
 
 
 def analyze_nirentan(
