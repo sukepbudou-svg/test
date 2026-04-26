@@ -532,6 +532,21 @@ def get_recommendations(
         # ── 6点: 1号艇1着固定, 2〜6号艇から全力で2着を1艇選択, 正順3点+裏目3点 ──
         recommended = pick_star_boat(by_prob, "小穴", n_b3=3).reset_index(drop=True)
 
+        # ── 激熱判定: 選んだ艇（best_b2）が1着か2着に来る自信をレース単位で計算 ──
+        race_is_hot = False
+        if not recommended.empty:
+            fwd = recommended[recommended["boat1"] == 1]
+            if not fwd.empty:
+                selected_b2 = int(fwd.iloc[0]["boat2"])
+                # 1→selected_b2 の2連単確率とエッジ
+                star_ni_prob = float(by_prob[
+                    (by_prob["boat1"] == 1) & (by_prob["boat2"] == selected_b2)
+                ]["prob"].sum())
+                star_edge = star_ni_prob / max(_base_ni_prob(1, selected_b2), 0.001)
+                # 1号艇が1着と予想するエージェント数
+                b1_votes_val = int(by_prob[by_prob["boat1"] == 1].iloc[0].get("b1_votes", 0))
+                race_is_hot = star_edge >= 1.3 and b1_votes_val >= 2
+
         if recommended.empty:
             all_recommendations.append({
                 "date": race_row.get("date", ""),
@@ -553,18 +568,7 @@ def get_recommendations(
                 src = rec.get("odds_source", "history")
                 odds_display = f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)"
                 tier = rec.get("tier", "")
-                b1 = int(rec.get("boat1", 0))
-                b2 = int(rec.get("boat2", 0))
-                b1_votes_rec = int(rec.get("b1_votes", 0))
-                ni_prob = float(by_prob[
-                    (by_prob["boat1"] == b1) & (by_prob["boat2"] == b2)
-                ]["prob"].sum())
-                edge = ni_prob / max(_base_ni_prob(b1, b2), 0.001)
-
-                if edge >= 1.3 and b1_votes_rec >= 2:
-                    bet_label = "激熱"
-                else:
-                    bet_label = ""
+                bet_label = "激熱" if race_is_hot else ""
                 all_recommendations.append({
                     "date": race_row.get("date", ""),
                     "venue_name": race_row.get("venue_name", ""),
