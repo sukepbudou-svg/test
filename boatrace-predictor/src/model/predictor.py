@@ -515,10 +515,19 @@ def get_recommendations(
             }
             sorted_scores = sorted(scores.values(), reverse=True)
             best_b2 = max(scores, key=scores.get)
-            # 1位と2位のスコア差で自信度を測る
             top_score = sorted_scores[0]
-            second_score = sorted_scores[1] if len(sorted_scores) > 1 else 0
-            is_confident = top_score >= second_score * 1.35
+            second_score = sorted_scores[1] if len(sorted_scores) > 1 else 1e-9
+            ratio = top_score / max(second_score, 1e-9)
+            # スコア比で★レベルと激熱を決定（1号艇・オッズ無関係）
+            if ratio >= 1.8:
+                star_level = 3   # ★★★★
+            elif ratio >= 1.35:
+                star_level = 2   # ★★★☆（激熱ライン）
+            elif ratio >= 1.15:
+                star_level = 1   # ★★☆☆
+            else:
+                star_level = 0   # ★☆☆☆
+            is_confident = star_level >= 2
 
             # 正順: 1号艇-best_b2-3着3艇流し（3点）＋裏目: best_b2-1号艇-3着3艇流し（3点）
             results = []
@@ -532,11 +541,11 @@ def get_recommendations(
                 results.append(subset)
 
             if not results:
-                return pd.DataFrame(), False
-            return pd.concat(results).reset_index(drop=True), is_confident
+                return pd.DataFrame(), 0, False
+            return pd.concat(results).reset_index(drop=True), star_level, is_confident
 
         # ── 6点: 1号艇1着固定, 2〜6号艇から全力で2着を1艇選択, 正順3点+裏目3点 ──
-        recommended, race_is_hot = pick_star_boat(by_prob, "小穴", n_b3=3)
+        recommended, race_star_level, race_is_hot = pick_star_boat(by_prob, "小穴", n_b3=3)
         recommended = recommended.reset_index(drop=True)
 
         if recommended.empty:
@@ -555,8 +564,7 @@ def get_recommendations(
             })
         else:
             for _, rec in recommended.iterrows():
-                agreement = int(rec.get("agreement", 0))
-                confidence = "★★★★" if agreement >= 4 else "★★★☆" if agreement >= 3 else "★★☆☆" if agreement >= 2 else "★☆☆☆"
+                confidence = "★★★★" if race_star_level >= 3 else "★★★☆" if race_star_level >= 2 else "★★☆☆" if race_star_level >= 1 else "★☆☆☆"
                 src = rec.get("odds_source", "history")
                 odds_display = f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)"
                 tier = rec.get("tier", "")
