@@ -514,16 +514,22 @@ def get_recommendations(
                 )
             )[0]
 
-            # 1号艇-best_b2-3着3艇流し（3点）
-            subset = pool[
-                (pool["boat1"] == b1_fixed) & (pool["boat2"] == best_b2)
-            ].sort_values("prob", ascending=False).head(n_b3).copy()
-            if subset.empty:
-                return pd.DataFrame()
-            subset["tier"] = tier_name
-            return subset.reset_index(drop=True)
+            # 正順: 1号艇-best_b2-3着3艇流し（3点）＋裏目: best_b2-1号艇-3着3艇流し（3点）
+            results = []
+            for b1, b2 in [(b1_fixed, best_b2), (best_b2, b1_fixed)]:
+                subset = pool[
+                    (pool["boat1"] == b1) & (pool["boat2"] == b2)
+                ].sort_values("prob", ascending=False).head(n_b3).copy()
+                if subset.empty:
+                    continue
+                subset["tier"] = tier_name
+                results.append(subset)
 
-        # ── 3点: 1号艇1着固定, 2〜6号艇から全力で2着を1艇選択, 3着3艇流し ──
+            if not results:
+                return pd.DataFrame()
+            return pd.concat(results).reset_index(drop=True)
+
+        # ── 6点: 1号艇1着固定, 2〜6号艇から全力で2着を1艇選択, 正順3点+裏目3点 ──
         recommended = pick_star_boat(by_prob, "小穴", n_b3=3).reset_index(drop=True)
 
         if recommended.empty:
