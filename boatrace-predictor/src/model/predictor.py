@@ -377,14 +377,14 @@ def get_recommendations(
             filtered["edge_score"] = filtered["prob"] * filtered["odds_value"]
             filtered = filtered.sort_values("edge_score", ascending=False).reset_index(drop=True)
             top_edge = float(filtered.iloc[0]["edge_score"])
-            if top_edge >= 1.8:
-                star_level = 3   # ★★★★
+            if top_edge >= 3.0:
+                star_level = 3   # ★★★★ 最強: モデル確率が期待値の3倍超
+            elif top_edge >= 2.0:
+                star_level = 2   # ★★★☆ 激熱: モデル確率が期待値の2倍超
             elif top_edge >= 1.3:
-                star_level = 2   # ★★★☆
-            elif top_edge >= 1.1:
-                star_level = 1   # ★★☆☆
+                star_level = 1   # ★★☆☆ 見送り
             else:
-                star_level = 0   # ★☆☆☆
+                star_level = 0   # ★☆☆☆ 見送り
             is_confident = star_level >= 2
             topN = filtered.head(n).copy()
             topN["tier"] = tier_name
