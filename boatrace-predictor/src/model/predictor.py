@@ -389,8 +389,8 @@ def get_recommendations(
 
         # 小穴2点（全120通りからエッジ上位2点）
         recommended, race_star_level, _, race_second_b2 = pick_by_edge(by_prob, "小穴", n=2)
-        # 大穴3点（30倍以上の組み合わせからエッジ上位3点）
-        oana_recs, oana_star_level, _, _ = pick_by_edge(by_prob, "大穴", n=3, min_odds=30)
+        # 大穴3点（100倍以上の組み合わせからエッジ上位3点）
+        oana_recs, oana_star_level, _, _ = pick_by_edge(by_prob, "大穴", n=3, min_odds=100)
 
         if recommended.empty and oana_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
