@@ -354,12 +354,14 @@ def _predict_one_race(
     has_bet = False
     for _, rec in recs.iterrows():
         row_dict = rec.to_dict()
-        # 見送り含む全行をスプレッドシートに記入
+        # 全行（勝負・見送り問わず）スプレッドシートに記入
         append_prediction_row(spreadsheet_id, row_dict, credentials_path=credentials_path,
                               race_count=daily_race_count)
-        if rec.get("combination") not in ("見送り", "", "-"):
+        label = rec.get("bet_label", "")
+        if label not in ("見送り", ""):
             has_bet = True
-            print(f"  → {rec['combination']} 確率:{rec['prob']} 期待回収率:{rec['expected_roi']}")
+            print(f"  → [{label}] {rec['combination']} 確率:{rec['prob']}")
+            # 成績5への記録対象は実際の勝負行のみ
             pred_rows.append({
                 "日付": date_str,
                 "競艇場": venue_name,
@@ -369,10 +371,10 @@ def _predict_one_race(
                 "的中確率": rec.get("prob", "-"),
                 "期待回収率": rec.get("expected_roi", "-"),
                 "信頼度": rec.get("confidence", "-"),
-                "勝負推奨": rec.get("bet_label", ""),
+                "勝負推奨": label,
             })
     if not has_bet:
-        print(f"  → 見送り")
+        print(f"  → 見送り（参考予想のみ）")
 
     return pred_rows
 

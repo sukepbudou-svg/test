@@ -22,9 +22,6 @@ WEIGHT_COURSE = 0.25  # コース戦略エージェント（競艇では枠番�
 WEIGHT_RACER  = 0.20  # 選手成績エージェント
 WEIGHT_MOTOR  = 0.15  # モーター状態エージェント
 
-# 勝負条件: モデル確率 × オッズ がこの値以上の組み合わせのみ購入
-EDGE_THRESHOLD = 1.3
-
 # 全国平均1着率（コース位置別・過去統計）エッジ計算の基準値
 _BASE_WIN_RATE = {1: 0.50, 2: 0.16, 3: 0.12, 4: 0.09, 5: 0.08, 6: 0.05}
 
@@ -375,14 +372,15 @@ def get_recommendations(
         predictions = predict_race(model, race_row, payout_lookup, live_odds, weather, absent_boats)
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
 
-        def pick_star_boat(pool, tier_name, n_b3=3):
+        def pick_star_boat(pool, tier_name):
             """
-            2〜6号艇の中から全力で2着を1艇選び、1号艇-選んだ艇-3着3艇流しの3点を組む。
+            2〜6号艇の中から全力で2着を1艇選び、正順1点＋裏目1点の計2点を返す。
 
             2着選択基準:
               モデル2連単確率 P(1→bn)  40%
               当日コンディション        40%  ← 展示タイム・ST・グレード直接使用
-              エッジ                   20%  ← P(1→bn) ÷ 全国平均
+              エッジ（vs全国平均）      20%
+            3着は正順・裏目それぞれの最有力1艇のみ。
             """
             b1_fixed = 1
 
@@ -456,19 +454,12 @@ def get_recommendations(
                 star_level = 0   # ★☆☆☆
             is_confident = star_level >= 2
 
-            # ★★★☆未満は見送り（自信不足）
-            if star_level < 2:
-                return pd.DataFrame(), star_level, False, second_b2
-
-            # エッジフィルター: モデル確率 × オッズ >= EDGE_THRESHOLD の組み合わせのみ
+            # 正順・裏目それぞれ最有力3着を1艇選んで2点返す（★レベルに関わらず常に出力）
             results = []
             for b1, b2 in [(b1_fixed, best_b2), (best_b2, b1_fixed)]:
                 subset = pool[
                     (pool["boat1"] == b1) & (pool["boat2"] == b2)
-                ].copy()
-                subset = subset[
-                    subset["prob"] * subset["odds_value"] >= EDGE_THRESHOLD
-                ].sort_values("prob", ascending=False).head(n_b3)
+                ].sort_values("prob", ascending=False).head(1).copy()
                 if subset.empty:
                     continue
                 subset["tier"] = tier_name
@@ -478,49 +469,44 @@ def get_recommendations(
                 return pd.DataFrame(), star_level, is_confident, second_b2
             return pd.concat(results).reset_index(drop=True), star_level, is_confident, second_b2
 
-        # ── 8点: 1号艇1着固定, 2〜6号艇から全力で2着を1艇選択, 正順4点+裏目4点 ──
-        recommended, race_star_level, race_is_hot, race_second_b2 = pick_star_boat(by_prob, "小穴", n_b3=4)
+        # ── 常に2点: 正順1点（1号艇-選択艇-最有力3着）+ 裏目1点（逆順） ──
+        recommended, race_star_level, race_is_hot, race_second_b2 = pick_star_boat(by_prob, "小穴")
         recommended = recommended.reset_index(drop=True)
 
         if recommended.empty:
+            continue  # 欠場艇が多い等でプールにデータなし
+
+        for _, rec in recommended.iterrows():
+            if race_star_level >= 3:
+                confidence = "★★★★"
+                bet_label = "最強"
+            elif race_star_level >= 2:
+                confidence = "★★★☆"
+                bet_label = "激熱"
+            elif race_star_level >= 1:
+                confidence = "★★☆☆"
+                bet_label = "見送り"
+            else:
+                confidence = "★☆☆☆"
+                bet_label = "見送り"
+            src = rec.get("odds_source", "history")
+            odds_display = f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)"
+            edge_val = round(float(rec["prob"]) * float(rec["odds_value"]), 2)
             all_recommendations.append({
                 "date": race_row.get("date", ""),
                 "venue_name": race_row.get("venue_name", ""),
                 "race_no": race_row.get("race_no", ""),
-                "combination": "見送り",
-                "prob": "0%",
-                "odds": "-",
-                "expected_roi": "0%",
-                "confidence": "見送り",
-                "odds_source": "-",
-                "tier": "-",
-                "bet_label": "",
-                "second_pick": "",
-                "edge": "",
+                "combination": rec["combination"],
+                "prob": f"{rec['prob']*100:.2f}%",
+                "odds": odds_display,
+                "expected_roi": f"{rec['expected_roi']*100:.0f}%",
+                "confidence": confidence,
+                "odds_source": "リアルタイム" if src == "live" else "履歴平均",
+                "tier": rec.get("tier", ""),
+                "bet_label": bet_label,
+                "second_pick": race_second_b2 if race_second_b2 is not None else "",
+                "edge": str(edge_val),
             })
-        else:
-            for _, rec in recommended.iterrows():
-                confidence = "★★★★" if race_star_level >= 3 else "★★★☆"
-                src = rec.get("odds_source", "history")
-                odds_display = f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)"
-                tier = rec.get("tier", "")
-                bet_label = "最強" if race_star_level >= 3 else "激熱"
-                edge_val = round(float(rec["prob"]) * float(rec["odds_value"]), 2)
-                all_recommendations.append({
-                    "date": race_row.get("date", ""),
-                    "venue_name": race_row.get("venue_name", ""),
-                    "race_no": race_row.get("race_no", ""),
-                    "combination": rec["combination"],
-                    "prob": f"{rec['prob']*100:.2f}%",
-                    "odds": odds_display,
-                    "expected_roi": f"{rec['expected_roi']*100:.0f}%",
-                    "confidence": confidence,
-                    "odds_source": "リアルタイム" if src == "live" else "履歴平均",
-                    "tier": tier,
-                    "bet_label": bet_label,
-                    "second_pick": race_second_b2 if race_second_b2 is not None else "",
-                    "edge": str(edge_val),
-                })
 
     return pd.DataFrame(all_recommendations)
 

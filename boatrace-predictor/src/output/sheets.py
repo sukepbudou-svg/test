@@ -231,7 +231,7 @@ def append_prediction_row(
     last_row = len(sheet.get_all_values())
     try:
         sid = sheet.id
-        is_skip = str(row.get("combination", "")) == "見送り" or row.get("edge", "") == ""
+        is_skip = row.get("bet_label", "") == "見送り"
 
         # 見送り行: 全体を薄いグレーで目立たなくする
         if is_skip:
@@ -391,6 +391,7 @@ def update_result_row(
         and str(r.get("競艇場", "")) == venue_name
         and str(r.get("レース", "")) == str(race_no)
         and r.get("買い目（3連単）", "") not in ("", "見送り", "-")
+        and str(r.get("勝負推奨", "")) not in ("", "見送り")
     ]
 
     # 列名がずれている場合のフォールバック（旧フォーマット対応）
