@@ -22,16 +22,6 @@ WEIGHT_COURSE = 0.25  # コース戦略エージェント（競艇では枠番�
 WEIGHT_RACER  = 0.20  # 選手成績エージェント
 WEIGHT_MOTOR  = 0.15  # モーター状態エージェント
 
-# 全国平均1着率（コース位置別・過去統計）エッジ計算の基準値
-_BASE_WIN_RATE = {1: 0.50, 2: 0.16, 3: 0.12, 4: 0.09, 5: 0.08, 6: 0.05}
-
-
-def _base_ni_prob(b1: int, b2: int) -> float:
-    """全国平均統計から期待される2連単確率（b1→b2）"""
-    p1 = _BASE_WIN_RATE.get(b1, 0.10)
-    p2_cond = _BASE_WIN_RATE.get(b2, 0.10) / max(1.0 - p1, 0.01)
-    return p1 * p2_cond
-
 MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
 PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
 
@@ -374,96 +364,31 @@ def get_recommendations(
 
         def pick_star_boat(pool, tier_name):
             """
-            2〜6号艇の中から全力で2着を1艇選び、正順1点＋裏目1点の計2点を返す。
-
-            2着選択基準:
-              モデル2連単確率 P(1→bn)  40%
-              当日コンディション        40%  ← 展示タイム・ST・グレード直接使用
-              エッジ（vs全国平均）      20%
-            3着は正順・裏目それぞれの最有力1艇のみ。
+            120通り全組み合わせからエッジ（確率×オッズ）上位2点を選ぶ。
+            1号艇固定なし。モデルが自由に最良の2点を判断する。
             """
-            b1_fixed = 1
+            if pool.empty:
+                return pd.DataFrame(), 0, False, None
 
-            # 展示タイム順位を事前計算（速い順: 1位が最良）
-            et_vals = {}
-            for b in range(1, 7):
-                v = race_row.get(f"boat{b}_exhibition_time")
-                try:
-                    t = float(v)
-                    if t > 0:
-                        et_vals[b] = t
-                except (TypeError, ValueError):
-                    pass
-            et_rank = {}
-            for i, bn in enumerate(sorted(et_vals, key=et_vals.get)):
-                et_rank[bn] = i + 1
+            candidates = pool.copy()
+            candidates["edge_score"] = candidates["prob"] * candidates["odds_value"]
+            candidates = candidates.sort_values("edge_score", ascending=False).reset_index(drop=True)
 
-            def _today(bn: int) -> float:
-                """艇の当日コンディションスコア（0.0〜1.0）"""
-                s = 0.0
-                if et_rank:
-                    rank = et_rank.get(bn, len(et_rank) + 1)
-                    s += 0.50 * max(0.0, 1.0 - (rank - 1) * 0.2)
-                st_v = race_row.get(f"boat{bn}_exhibition_st")
-                try:
-                    st = float(st_v)
-                    if 0.01 <= st <= 0.18:
-                        s += 0.25 * (1.0 - st / 0.20)
-                except (TypeError, ValueError):
-                    pass
-                grade = int(race_row.get(f"boat{bn}_grade_num", 2) or 2)
-                s += 0.25 * (grade - 1) / 3.0
-                return min(s, 1.0)
-
-            # 2〜6号艇の中から2着を1艇選ぶ
-            b2_candidates = {}
-            for bn in range(2, 7):
-                ni_prob = float(pool[
-                    (pool["boat1"] == b1_fixed) & (pool["boat2"] == bn)
-                ]["prob"].sum())
-                base = _base_ni_prob(b1_fixed, bn)
-                edge = ni_prob / max(base, 0.001)
-                b2_candidates[bn] = {"ni_prob": ni_prob, "edge": edge, "cond": _today(bn)}
-
-            max_ni = max(c["ni_prob"] for c in b2_candidates.values()) or 1e-9
-            max_edge = max(c["edge"] for c in b2_candidates.values()) or 1e-9
-
-            scores = {
-                bn: (
-                    0.40 * (c["ni_prob"] / max_ni) +
-                    0.40 * c["cond"] +
-                    0.20 * (c["edge"] / max_edge)
-                )
-                for bn, c in b2_candidates.items()
-            }
-            sorted_boats = sorted(scores, key=scores.get, reverse=True)
-            best_b2 = sorted_boats[0]
-            second_b2 = sorted_boats[1] if len(sorted_boats) > 1 else None
-            sorted_scores = [scores[b] for b in sorted_boats]
-            top_score = sorted_scores[0]
-            second_score = sorted_scores[1] if len(sorted_scores) > 1 else 1e-9
-            ratio = top_score / max(second_score, 1e-9)
-            # スコア比で★レベルと激熱を決定（1号艇・オッズ無関係）
-            if ratio >= 1.8:
+            top_edge = float(candidates.iloc[0]["edge_score"])
+            if top_edge >= 1.8:
                 star_level = 3   # ★★★★
-            elif ratio >= 1.35:
-                star_level = 2   # ★★★☆（激熱ライン）
-            elif ratio >= 1.15:
+            elif top_edge >= 1.3:
+                star_level = 2   # ★★★☆
+            elif top_edge >= 1.1:
                 star_level = 1   # ★★☆☆
             else:
                 star_level = 0   # ★☆☆☆
             is_confident = star_level >= 2
 
-            # 選択艇が絡む全組み合わせ（正順4点+裏目4点=計8通り）をエッジでソートし上位2点
-            candidates = pool[
-                ((pool["boat1"] == b1_fixed) & (pool["boat2"] == best_b2)) |
-                ((pool["boat1"] == best_b2) & (pool["boat2"] == b1_fixed))
-            ].copy()
-            if candidates.empty:
-                return pd.DataFrame(), star_level, is_confident, second_b2
-            candidates["edge_score"] = candidates["prob"] * candidates["odds_value"]
-            top2 = candidates.sort_values("edge_score", ascending=False).head(2).copy()
+            top2 = candidates.head(2).copy()
             top2["tier"] = tier_name
+            # 次点: 3位の組み合わせの2着艇番号
+            second_b2 = int(candidates.iloc[2]["boat2"]) if len(candidates) > 2 else None
             return top2.reset_index(drop=True), star_level, is_confident, second_b2
 
         # ── 常に2点: 正順1点（1号艇-選択艇-最有力3着）+ 裏目1点（逆順） ──
