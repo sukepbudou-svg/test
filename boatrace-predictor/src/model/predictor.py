@@ -573,14 +573,16 @@ def get_recommendations(
                 "odds_source": "-",
                 "tier": "-",
                 "bet_label": "",
+                "edge": "",
             })
         else:
             for _, rec in recommended.iterrows():
-                confidence = "★★★★" if race_star_level >= 3 else "★★★☆" if race_star_level >= 2 else "★★☆☆" if race_star_level >= 1 else "★☆☆☆"
+                confidence = "★★★★" if race_star_level >= 3 else "★★★☆"
                 src = rec.get("odds_source", "history")
                 odds_display = f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)"
                 tier = rec.get("tier", "")
-                bet_label = "激熱" if race_is_hot else ""
+                bet_label = "最強" if race_star_level >= 3 else "激熱"
+                edge_val = round(float(rec["prob"]) * float(rec["odds_value"]), 2)
                 all_recommendations.append({
                     "date": race_row.get("date", ""),
                     "venue_name": race_row.get("venue_name", ""),
@@ -594,6 +596,7 @@ def get_recommendations(
                     "tier": tier,
                     "bet_label": bet_label,
                     "second_pick": race_second_b2 if race_second_b2 is not None else "",
+                    "edge": str(edge_val),
                 })
 
     return pd.DataFrame(all_recommendations)
