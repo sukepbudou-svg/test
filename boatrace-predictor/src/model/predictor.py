@@ -346,7 +346,7 @@ def get_recommendations(
     model: lgb.Booster,
     df_today: pd.DataFrame,
     top_n: int = 5,
-    min_roi: float = MIN_EXPECTED_ROI,
+    min_roi: float = 1.15,
     payout_lookup: dict = None,
     all_live_odds: dict = None,
     all_weather: dict = None,
