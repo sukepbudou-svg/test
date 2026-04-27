@@ -643,7 +643,7 @@ def update_summary_sheet(
     def is_notable(rec) -> bool:
         confidence = str(rec.get("信頼度", ""))
         bet_label = str(rec.get("勝負推奨", ""))
-        return confidence in ("★★★★", "★★★☆") or bet_label == "激熱"
+        return confidence == "★★★★" or bet_label == "最強"
 
     koana_stats = _compute_tier_stats(records, is_koana)
     b56_stats = _compute_tier_stats(records, is_b2_56)
@@ -712,7 +712,7 @@ def update_summary_sheet(
         (koana_stats,   "小穴",          "小穴"),
         (b56_stats,     "2着が5・6号艇", "2着が5・6号艇"),
         (b234_stats,    "2着が2〜4号艇", "2着が2〜4号艇"),
-        (notable_stats, "注目レース（★★★☆以上 or 激熱）", "注目レース"),
+        (notable_stats, "最強レース（★★★★）", "最強レース"),
     ]:
         sec_rows, sec_sh, sec_ch, sec_data = _section(stats, t_total, t_daily)
         section_header_rows.extend(sec_sh)
