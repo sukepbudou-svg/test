@@ -362,12 +362,16 @@ def get_recommendations(
         predictions = predict_race(model, race_row, payout_lookup, live_odds, weather, absent_boats)
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
 
-        def pick_by_edge(pool, tier_name, n=2, min_odds=0):
+        def pick_by_edge(pool, tier_name, n=2, min_odds=0, max_odds=None):
             """
-            指定オッズ以上の組み合わせからエッジ上位n点を返す。
+            指定オッズ範囲の組み合わせからエッジ上位n点を返す。
             1号艇固定なし。モデルが自由に最良の組み合わせを判断する。
             """
-            filtered = pool[pool["odds_value"] >= min_odds].copy() if min_odds > 0 else pool.copy()
+            filtered = pool.copy()
+            if min_odds > 0:
+                filtered = filtered[filtered["odds_value"] >= min_odds]
+            if max_odds is not None:
+                filtered = filtered[filtered["odds_value"] <= max_odds]
             if filtered.empty:
                 return pd.DataFrame(), 0, False, None
             filtered["edge_score"] = filtered["prob"] * filtered["odds_value"]
@@ -387,10 +391,10 @@ def get_recommendations(
             second_b2 = int(filtered.iloc[n]["boat2"]) if len(filtered) > n else None
             return topN.reset_index(drop=True), star_level, is_confident, second_b2
 
-        # 小穴2点（全120通りからエッジ上位2点）
-        recommended, race_star_level, _, race_second_b2 = pick_by_edge(by_prob, "小穴", n=2)
-        # 大穴3点（100倍以上の組み合わせからエッジ上位3点）
-        oana_recs, oana_star_level, _, _ = pick_by_edge(by_prob, "大穴", n=3, min_odds=100)
+        # 小穴2点（オッズ30倍以下の現実的な組み合わせからエッジ上位2点）
+        recommended, race_star_level, _, race_second_b2 = pick_by_edge(by_prob, "小穴", n=2, max_odds=30)
+        # 大穴3点（100〜250倍の組み合わせからエッジ上位3点）
+        oana_recs, oana_star_level, _, _ = pick_by_edge(by_prob, "大穴", n=3, min_odds=100, max_odds=250)
 
         if recommended.empty and oana_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
