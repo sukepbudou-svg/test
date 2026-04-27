@@ -420,3 +420,19 @@ def _next_action_time(schedule: list, now: datetime):
             times.append(race["scheduled_dt"] + timedelta(minutes=RESULT_AFTER_MIN))
     future = [t for t in times if t > now]
     return min(future) if future else None
+
+
+if __name__ == "__main__":
+    _spreadsheet_id = os.environ.get("SPREADSHEET_ID", "")
+    _credentials_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "")
+
+    if not _spreadsheet_id:
+        print("[ERROR] 環境変数 SPREADSHEET_ID が未設定です")
+        print("  例: set SPREADSHEET_ID=your_spreadsheet_id_here")
+        raise SystemExit(1)
+    if not _credentials_path:
+        print("[ERROR] 環境変数 GOOGLE_CREDENTIALS_PATH が未設定です")
+        print("  例: set GOOGLE_CREDENTIALS_PATH=C:\\path\\to\\credentials.json")
+        raise SystemExit(1)
+
+    run_auto(_spreadsheet_id, _credentials_path)
