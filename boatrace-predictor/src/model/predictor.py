@@ -454,20 +454,17 @@ def get_recommendations(
                 star_level = 0   # ★☆☆☆
             is_confident = star_level >= 2
 
-            # 正順・裏目それぞれ最有力3着を1艇選んで2点返す（★レベルに関わらず常に出力）
-            results = []
-            for b1, b2 in [(b1_fixed, best_b2), (best_b2, b1_fixed)]:
-                subset = pool[
-                    (pool["boat1"] == b1) & (pool["boat2"] == b2)
-                ].sort_values("prob", ascending=False).head(1).copy()
-                if subset.empty:
-                    continue
-                subset["tier"] = tier_name
-                results.append(subset)
-
-            if not results:
+            # 選択艇が絡む全組み合わせ（正順4点+裏目4点=計8通り）をエッジでソートし上位2点
+            candidates = pool[
+                ((pool["boat1"] == b1_fixed) & (pool["boat2"] == best_b2)) |
+                ((pool["boat1"] == best_b2) & (pool["boat2"] == b1_fixed))
+            ].copy()
+            if candidates.empty:
                 return pd.DataFrame(), star_level, is_confident, second_b2
-            return pd.concat(results).reset_index(drop=True), star_level, is_confident, second_b2
+            candidates["edge_score"] = candidates["prob"] * candidates["odds_value"]
+            top2 = candidates.sort_values("edge_score", ascending=False).head(2).copy()
+            top2["tier"] = tier_name
+            return top2.reset_index(drop=True), star_level, is_confident, second_b2
 
         # ── 常に2点: 正順1点（1号艇-選択艇-最有力3着）+ 裏目1点（逆順） ──
         recommended, race_star_level, race_is_hot, race_second_b2 = pick_star_boat(by_prob, "小穴")
