@@ -216,17 +216,18 @@ def append_prediction_row(
     try:
         sheet = spreadsheet.worksheet(sheet_name)
     except gspread.WorksheetNotFound:
-        sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=12)
+        sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=13)
         headers = ["日付", "競艇場", "レース", "狙い", "買い目（3連単）", "的中確率",
-                   "オッズ", "期待回収率", "信頼度", "オッズ元", "本日レース数", "勝負推奨"]
+                   "オッズ", "期待回収率", "信頼度", "オッズ元", "本日レース数", "勝負推奨", "次点艇"]
         sheet.update("A1", [headers])
-        _format_header(spreadsheet, sheet, num_cols=12)
+        _format_header(spreadsheet, sheet, num_cols=13)
 
     cols = ["date", "venue_name", "race_no", "tier", "combination", "prob",
             "odds", "expected_roi", "confidence", "odds_source"]
     values = [row.get(c, "-") for c in cols]
     values.append(race_count if race_count is not None else "-")
     values.append(row.get("bet_label", ""))
+    values.append(row.get("second_pick", ""))
     sheet.append_row(values, value_input_option="RAW")
 
     # 会場色 + 信頼度色 + 激熱色を1回のbatch_updateで適用
@@ -236,7 +237,7 @@ def append_prediction_row(
         bg = _VENUE_BG_COLORS.get(str(row.get("venue_name", "")), _DEFAULT_BG)
         reqs = [{"repeatCell": {
             "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                      "startColumnIndex": 0, "endColumnIndex": 12},
+                      "startColumnIndex": 0, "endColumnIndex": 13},
             "cell": {"userEnteredFormat": {"backgroundColor": bg}},
             "fields": "userEnteredFormat.backgroundColor",
         }}]

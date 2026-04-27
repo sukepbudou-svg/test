@@ -513,8 +513,10 @@ def get_recommendations(
                 )
                 for bn, c in b2_candidates.items()
             }
-            sorted_scores = sorted(scores.values(), reverse=True)
-            best_b2 = max(scores, key=scores.get)
+            sorted_boats = sorted(scores, key=scores.get, reverse=True)
+            best_b2 = sorted_boats[0]
+            second_b2 = sorted_boats[1] if len(sorted_boats) > 1 else None
+            sorted_scores = [scores[b] for b in sorted_boats]
             top_score = sorted_scores[0]
             second_score = sorted_scores[1] if len(sorted_scores) > 1 else 1e-9
             ratio = top_score / max(second_score, 1e-9)
@@ -541,11 +543,11 @@ def get_recommendations(
                 results.append(subset)
 
             if not results:
-                return pd.DataFrame(), 0, False
-            return pd.concat(results).reset_index(drop=True), star_level, is_confident
+                return pd.DataFrame(), 0, False, None
+            return pd.concat(results).reset_index(drop=True), star_level, is_confident, second_b2
 
-        # ── 6点: 1号艇1着固定, 2〜6号艇から全力で2着を1艇選択, 正順3点+裏目3点 ──
-        recommended, race_star_level, race_is_hot = pick_star_boat(by_prob, "小穴", n_b3=4)
+        # ── 8点: 1号艇1着固定, 2〜6号艇から全力で2着を1艇選択, 正順4点+裏目4点 ──
+        recommended, race_star_level, race_is_hot, race_second_b2 = pick_star_boat(by_prob, "小穴", n_b3=4)
         recommended = recommended.reset_index(drop=True)
 
         if recommended.empty:
@@ -581,6 +583,7 @@ def get_recommendations(
                     "odds_source": "リアルタイム" if src == "live" else "履歴平均",
                     "tier": tier,
                     "bet_label": bet_label,
+                    "second_pick": race_second_b2 if race_second_b2 is not None else "",
                 })
 
     return pd.DataFrame(all_recommendations)
