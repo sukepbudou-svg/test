@@ -17,10 +17,6 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-# 高配当しきい値（100円換算で100倍以上 = 10,000円以上）
-_HIGH_PAYOUT_THRESHOLD = 10000
-
-OANA_TIERS = {"大穴100～", "大アナ151～", "超大穴251～"}
 RESULT_SHEET = "成績5"
 SUMMARY_SHEET = "サマリー5"
 

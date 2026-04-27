@@ -22,15 +22,6 @@ WEIGHT_COURSE = 0.25  # コース戦略エージェント（競艇では枠番�
 WEIGHT_RACER  = 0.20  # 選手成績エージェント
 WEIGHT_MOTOR  = 0.15  # モーター状態エージェント
 
-# 3連単の控除率（約75%が払い戻し）
-TRIFECTA_RETURN_RATE = 0.75
-
-# 推奨する最低期待回収率
-MIN_EXPECTED_ROI = 1.15  # 115%以上のみ推奨
-
-# 推奨する最低的中確率（これ未満は大穴すぎて除外）
-MIN_PROB = 0.02  # 2%以上のみ推奨
-
 # 勝負条件: モデル確率 × オッズ がこの値以上の組み合わせのみ購入
 EDGE_THRESHOLD = 1.3
 
@@ -232,41 +223,9 @@ def predict_race(
     if weather:
         win_probs = _apply_weather_adjustment(win_probs, weather)
 
-    # 各エージェントの単独トップ5を取得（合議チェック用）
-    def _top5(probs: np.ndarray) -> set:
-        """勝率配列からHarville公式でトップ5の3連単組み合わせを返す"""
-        top = {}
-        for b1, b2, b3 in permutations(range(1, 7), 3):
-            p1 = probs[b1-1]
-            r1 = np.array([probs[i] for i in range(6) if i != b1-1])
-            p2 = probs[b2-1] / r1.sum() if r1.sum() > 0 else 0
-            r2 = np.array([probs[i] for i in range(6) if i not in (b1-1, b2-1)])
-            p3 = probs[b3-1] / r2.sum() if r2.sum() > 0 else 0
-            top[f"{b1}-{b2}-{b3}"] = p1 * p2 * p3
-        return set(sorted(top, key=top.get, reverse=True)[:5])
-
-    ml_top5 = _top5(ml_probs)
-    cs_top5 = _top5(cs_probs)
-    rp_top5 = _top5(rp_probs)
-    mt_top5 = _top5(mt_probs)
-
-    # 各エージェントが単独で1着に予想する艇（argmax）
-    agent_top_boats = [
-        int(np.argmax(ml_probs)) + 1,
-        int(np.argmax(cs_probs)) + 1,
-        int(np.argmax(rp_probs)) + 1,
-        int(np.argmax(mt_probs)) + 1,
-    ]
-
     # 全120通りの確率を計算
     combinations = list(permutations(range(1, 7), 3))
     combo_probs = []
-
-    # 各艇のグレード（2着・3着格上絡み判定用）
-    grade_by_boat = {
-        bn: int(race_features.get(f"boat{bn}_grade_num", 2) or 2)
-        for bn in range(1, 7)
-    }
 
     for b1, b2, b3 in combinations:
         p1 = win_probs[b1 - 1]
@@ -275,13 +234,7 @@ def predict_race(
         rem2 = np.array([win_probs[i] for i in range(6) if i not in (b1 - 1, b2 - 1)])
         p3 = win_probs[b3 - 1] / rem2.sum() if rem2.sum() > 0 else 0
         prob = p1 * p2 * p3
-
-        # 2着・3着の格上スコア（A1=4点, A2=3点, B1=2点, B2=1点 を合算して正規化）
-        g2 = grade_by_boat.get(b2, 2)
-        g3 = grade_by_boat.get(b3, 2)
-        grade_anchor = (g2 + g3) / 8.0  # 最大1.0（両方A1）, 平均0.5（両方B1）
-
-        combo_probs.append((f"{b1}-{b2}-{b3}", b1, b2, b3, prob, grade_anchor))
+        combo_probs.append((f"{b1}-{b2}-{b3}", b1, b2, b3, prob))
 
     # 確率の高い順に並べて人気順位を付与
     combo_probs.sort(key=lambda x: x[4], reverse=True)
@@ -289,30 +242,17 @@ def predict_race(
     using_live = bool(live_odds)
 
     results = []
-    for rank, (combination, b1, b2, b3, prob, grade_anchor) in enumerate(combo_probs, start=1):
+    for rank, (combination, b1, b2, b3, prob) in enumerate(combo_probs, start=1):
         if using_live and combination in live_odds:
-            # 市場オッズをそのまま使用（フィルタなし）
             actual_odds = live_odds[combination]
             odds_value = round(actual_odds, 1)
             expected_roi = prob * actual_odds
             odds_source = "live"
         else:
-            # 履歴ルックアップ使用（払戻円 ÷ 100 = 倍率）
             hist_payout = payout_lookup.get(str(rank), int(300 * (rank ** 0.8)))
             odds_value = round(hist_payout / 100, 1)
             expected_roi = prob * odds_value
             odds_source = "history"
-
-        # エージェント合議数（0〜4）: この3連単がエージェントのtop5に入っている数
-        agreement = sum([
-            combination in ml_top5,
-            combination in cs_top5,
-            combination in rp_top5,
-            combination in mt_top5,
-        ])
-
-        # 1着艇への票数: 各エージェントがb1を1着に予想している数
-        b1_votes = sum(1 for t in agent_top_boats if t == b1)
 
         results.append({
             "combination": combination,
@@ -322,9 +262,6 @@ def predict_race(
             "odds_value": odds_value,
             "expected_roi": round(expected_roi, 4),
             "odds_source": odds_source,
-            "agreement": agreement,
-            "b1_votes": b1_votes,
-            "grade_anchor": round(grade_anchor, 3),
         })
 
     df = pd.DataFrame(results).sort_values("expected_roi", ascending=False).reset_index(drop=True)
@@ -437,21 +374,6 @@ def get_recommendations(
 
         predictions = predict_race(model, race_row, payout_lookup, live_odds, weather, absent_boats)
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
-
-        # ── レース選別フィルター（見送りでも予想は出す・L列に判定を記入）──
-        should_bet, _ = _is_race_worth_betting(by_prob, race_row)
-
-        # 灼熱用: STデータ有無を個別確認（大穴は b1_votes 条件を課さない）
-        st_count = 0
-        if race_row is not None:
-            for bn in range(1, 7):
-                v = race_row.get(f"boat{bn}_exhibition_st")
-                try:
-                    if v is not None and float(v) > 0:
-                        st_count += 1
-                except (TypeError, ValueError):
-                    pass
-        has_st = st_count >= 3
 
         def pick_star_boat(pool, tier_name, n_b3=3):
             """
@@ -573,6 +495,7 @@ def get_recommendations(
                 "odds_source": "-",
                 "tier": "-",
                 "bet_label": "",
+                "second_pick": "",
                 "edge": "",
             })
         else:

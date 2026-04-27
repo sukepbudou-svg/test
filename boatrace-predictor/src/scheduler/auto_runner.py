@@ -351,28 +351,28 @@ def _predict_one_race(
     # スプレッドシートに書き込む＆メモリキャッシュ用にリストを作成
     pred_rows = []
     date_str = today.strftime("%Y-%m-%d")
+    has_bet = False
     for _, rec in recs.iterrows():
-        if rec.get("combination") in ("見送り", "", "-"):
-            continue
         row_dict = rec.to_dict()
+        # 見送り含む全行をスプレッドシートに記入
         append_prediction_row(spreadsheet_id, row_dict, credentials_path=credentials_path,
                               race_count=daily_race_count)
-        print(f"  → {rec['combination']} 確率:{rec['prob']} 期待回収率:{rec['expected_roi']}")
-        # 成績4シートの列名に合わせてキャッシュ用dictを作成
-        pred_rows.append({
-            "日付": date_str,
-            "競艇場": venue_name,
-            "レース": str(race_no),
-            "狙い": rec.get("tier", "-"),
-            "買い目（3連単）": rec.get("combination", ""),
-            "的中確率": rec.get("prob", "-"),
-            "期待回収率": rec.get("expected_roi", "-"),
-            "信頼度": rec.get("confidence", "-"),
-            "勝負推奨": rec.get("bet_label", ""),
-        })
-
-    if recs[recs["combination"] != "見送り"].empty:
-        print(f"  → 見送り（期待回収率が基準未満）")
+        if rec.get("combination") not in ("見送り", "", "-"):
+            has_bet = True
+            print(f"  → {rec['combination']} 確率:{rec['prob']} 期待回収率:{rec['expected_roi']}")
+            pred_rows.append({
+                "日付": date_str,
+                "競艇場": venue_name,
+                "レース": str(race_no),
+                "狙い": rec.get("tier", "-"),
+                "買い目（3連単）": rec.get("combination", ""),
+                "的中確率": rec.get("prob", "-"),
+                "期待回収率": rec.get("expected_roi", "-"),
+                "信頼度": rec.get("confidence", "-"),
+                "勝負推奨": rec.get("bet_label", ""),
+            })
+    if not has_bet:
+        print(f"  → 見送り")
 
     return pred_rows
 
