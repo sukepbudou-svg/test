@@ -31,6 +31,9 @@ MIN_EXPECTED_ROI = 1.15  # 115%以上のみ推奨
 # 推奨する最低的中確率（これ未満は大穴すぎて除外）
 MIN_PROB = 0.02  # 2%以上のみ推奨
 
+# 勝負条件: モデル確率 × オッズ がこの値以上の組み合わせのみ購入
+EDGE_THRESHOLD = 1.3
+
 # 全国平均1着率（コース位置別・過去統計）エッジ計算の基準値
 _BASE_WIN_RATE = {1: 0.50, 2: 0.16, 3: 0.12, 4: 0.09, 5: 0.08, 6: 0.05}
 
@@ -531,19 +534,26 @@ def get_recommendations(
                 star_level = 0   # ★☆☆☆
             is_confident = star_level >= 2
 
-            # 正順: 1号艇-best_b2-3着3艇流し（3点）＋裏目: best_b2-1号艇-3着3艇流し（3点）
+            # ★★★☆未満は見送り（自信不足）
+            if star_level < 2:
+                return pd.DataFrame(), star_level, False, second_b2
+
+            # エッジフィルター: モデル確率 × オッズ >= EDGE_THRESHOLD の組み合わせのみ
             results = []
             for b1, b2 in [(b1_fixed, best_b2), (best_b2, b1_fixed)]:
                 subset = pool[
                     (pool["boat1"] == b1) & (pool["boat2"] == b2)
-                ].sort_values("prob", ascending=False).head(n_b3).copy()
+                ].copy()
+                subset = subset[
+                    subset["prob"] * subset["odds_value"] >= EDGE_THRESHOLD
+                ].sort_values("prob", ascending=False).head(n_b3)
                 if subset.empty:
                     continue
                 subset["tier"] = tier_name
                 results.append(subset)
 
             if not results:
-                return pd.DataFrame(), 0, False, None
+                return pd.DataFrame(), star_level, is_confident, second_b2
             return pd.concat(results).reset_index(drop=True), star_level, is_confident, second_b2
 
         # ── 8点: 1号艇1着固定, 2〜6号艇から全力で2着を1艇選択, 正順4点+裏目4点 ──
