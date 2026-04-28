@@ -384,14 +384,17 @@ def update_result_row(
             print(f"  [WARN] 予想データの読み込みに失敗しました（APIエラー）")
 
     # 該当レースの予想行を抽出
-    # 「買い目（3連単）」列の名前が異なる場合も考慮
+    # 勝負行 + 小穴見送り行（的中チェック対象）を含める
     race_preds = [
         r for r in pred_rows
         if str(r.get("日付", "")) == date
         and str(r.get("競艇場", "")) == venue_name
         and str(r.get("レース", "")) == str(race_no)
         and r.get("買い目（3連単）", "") not in ("", "見送り", "-")
-        and str(r.get("勝負推奨", "")) not in ("", "見送り")
+        and (
+            str(r.get("勝負推奨", "")) not in ("", "見送り")
+            or str(r.get("狙い", "")) == "小穴"
+        )
     ]
 
     # 列名がずれている場合のフォールバック（旧フォーマット対応）

@@ -358,15 +358,19 @@ def _predict_one_race(
         append_prediction_row(spreadsheet_id, row_dict, credentials_path=credentials_path,
                               race_count=daily_race_count)
         label = rec.get("bet_label", "")
+        tier  = rec.get("tier", "")
         if label not in ("見送り", ""):
             has_bet = True
             print(f"  → [{label}] {rec['combination']} 確率:{rec['prob']}")
-            # 成績5への記録対象は実際の勝負行のみ
+        elif tier == "小穴":
+            print(f"  → [見送り/小穴] {rec['combination']} 確率:{rec['prob']}")
+        # 成績6への記録: 勝負行 + 小穴見送り行（的中チェック対象として残す）
+        if label not in ("見送り", "") or tier == "小穴":
             pred_rows.append({
                 "日付": date_str,
                 "競艇場": venue_name,
                 "レース": str(race_no),
-                "狙い": rec.get("tier", "-"),
+                "狙い": tier if tier else "-",
                 "買い目（3連単）": rec.get("combination", ""),
                 "的中確率": rec.get("prob", "-"),
                 "期待回収率": rec.get("expected_roi", "-"),
