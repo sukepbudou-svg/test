@@ -400,14 +400,27 @@ def get_recommendations(
             continue  # 欠場艇が多い等でプールにデータなし
 
         def _make_row(rec, star_lv, second):
-            if star_lv >= 3:
-                confidence, bet_label = "★★★★", "最強"
-            elif star_lv >= 2:
-                confidence, bet_label = "★★★☆", "激熱"
-            elif star_lv >= 1:
-                confidence, bet_label = "★★☆☆", "見送り"
+            tier = rec.get("tier", "")
+            if tier == "大穴":
+                # 大穴は★★★★(灼熱)のみ勝負、それ以外は見送り
+                if star_lv >= 3:
+                    confidence, bet_label = "★★★★", "灼熱"
+                elif star_lv >= 2:
+                    confidence, bet_label = "★★★☆", "見送り"
+                elif star_lv >= 1:
+                    confidence, bet_label = "★★☆☆", "見送り"
+                else:
+                    confidence, bet_label = "★☆☆☆", "見送り"
             else:
-                confidence, bet_label = "★☆☆☆", "見送り"
+                # 小穴
+                if star_lv >= 3:
+                    confidence, bet_label = "★★★★", "灼熱"
+                elif star_lv >= 2:
+                    confidence, bet_label = "★★★☆", "激熱"
+                elif star_lv >= 1:
+                    confidence, bet_label = "★★☆☆", "見送り"
+                else:
+                    confidence, bet_label = "★☆☆☆", "見送り"
             src = rec.get("odds_source", "history")
             edge_val = round(float(rec["prob"]) * float(rec["odds_value"]), 2)
             return {
@@ -420,9 +433,8 @@ def get_recommendations(
                 "expected_roi": f"{rec['expected_roi']*100:.0f}%",
                 "confidence": confidence,
                 "odds_source": "リアルタイム" if src == "live" else "履歴平均",
-                "tier": rec.get("tier", ""),
+                "tier": tier,
                 "bet_label": bet_label,
-                "second_pick": second if second is not None else "",
                 "edge": str(edge_val),
             }
 

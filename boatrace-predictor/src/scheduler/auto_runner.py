@@ -362,10 +362,10 @@ def _predict_one_race(
         if label not in ("見送り", ""):
             has_bet = True
             print(f"  → [{label}] {rec['combination']} 確率:{rec['prob']}")
-        elif tier == "小穴":
-            print(f"  → [見送り/小穴] {rec['combination']} 確率:{rec['prob']}")
-        # 成績6への記録: 勝負行 + 小穴見送り行（的中チェック対象として残す）
-        if label not in ("見送り", "") or tier == "小穴":
+        elif tier in ("小穴", "大穴"):
+            print(f"  → [見送り/{tier}] {rec['combination']} 確率:{rec['prob']}")
+        # 成績6への記録: 勝負行 + 小穴/大穴見送り行（的中チェック対象として残す）
+        if label not in ("見送り", "") or tier in ("小穴", "大穴"):
             pred_rows.append({
                 "日付": date_str,
                 "競艇場": venue_name,

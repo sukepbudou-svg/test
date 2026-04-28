@@ -212,18 +212,17 @@ def append_prediction_row(
     try:
         sheet = spreadsheet.worksheet(sheet_name)
     except gspread.WorksheetNotFound:
-        sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=14)
+        sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=13)
         headers = ["日付", "競艇場", "レース", "狙い", "買い目（3連単）", "的中確率",
-                   "オッズ", "期待回収率", "信頼度", "オッズ元", "本日レース数", "勝負推奨", "次点艇", "エッジ"]
+                   "オッズ", "期待回収率", "信頼度", "オッズ元", "本日レース数", "勝負推奨", "エッジ"]
         sheet.update("A1", [headers])
-        _format_header(spreadsheet, sheet, num_cols=14)
+        _format_header(spreadsheet, sheet, num_cols=13)
 
     cols = ["date", "venue_name", "race_no", "tier", "combination", "prob",
             "odds", "expected_roi", "confidence", "odds_source"]
     values = [row.get(c, "-") for c in cols]
     values.append(race_count if race_count is not None else "-")
     values.append(row.get("bet_label", ""))
-    values.append(row.get("second_pick", ""))
     values.append(row.get("edge", ""))
     sheet.append_row(values, value_input_option="RAW")
 
@@ -241,15 +240,15 @@ def append_prediction_row(
 
         reqs = [{"repeatCell": {
             "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                      "startColumnIndex": 0, "endColumnIndex": 14},
+                      "startColumnIndex": 0, "endColumnIndex": 13},
             "cell": {"userEnteredFormat": {"backgroundColor": row_bg}},
             "fields": "userEnteredFormat.backgroundColor",
         }}]
 
         if not is_skip:
-            # 勝負推奨（L列=index11）: 最強=赤、激熱=オレンジ
+            # 勝負推奨（L列=index11）: 灼熱=赤、激熱=オレンジ
             bet_label = row.get("bet_label", "")
-            if bet_label == "最強":
+            if bet_label == "灼熱":
                 reqs.append({"repeatCell": {
                     "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
                               "startColumnIndex": 11, "endColumnIndex": 12},
@@ -271,16 +270,16 @@ def append_prediction_row(
                     "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
                 }})
 
-            # エッジ（N列=index13）: 強度で色分け
+            # エッジ（M列=index12）: 強度で色分け
             try:
                 edge_float = float(row.get("edge", "0"))
                 if edge_float >= 1.5:
-                    edge_bg = {"red": 1.0, "green": 0.85, "blue": 0.2}   # 金色: 最大勝負
+                    edge_bg = {"red": 1.0, "green": 0.85, "blue": 0.2}   # 金色
                 else:
-                    edge_bg = {"red": 0.55, "green": 0.92, "blue": 0.55} # 緑: 勝負
+                    edge_bg = {"red": 0.55, "green": 0.92, "blue": 0.55} # 緑
                 reqs.append({"repeatCell": {
                     "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                              "startColumnIndex": 13, "endColumnIndex": 14},
+                              "startColumnIndex": 12, "endColumnIndex": 13},
                     "cell": {"userEnteredFormat": {
                         "backgroundColor": edge_bg,
                         "textFormat": {"bold": True},
@@ -393,7 +392,7 @@ def update_result_row(
         and r.get("買い目（3連単）", "") not in ("", "見送り", "-")
         and (
             str(r.get("勝負推奨", "")) not in ("", "見送り")
-            or str(r.get("狙い", "")) == "小穴"
+            or str(r.get("狙い", "")) in ("小穴", "大穴")
         )
     ]
 
