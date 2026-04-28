@@ -597,13 +597,90 @@ def _compute_venue_tier_stats(records: list, tier_check) -> dict:
     return venue
 
 
+def _build_summary_cf_rules(sid: int, full_range: dict, profit_range: dict) -> list:
+    """サマリーシート用の条件付き書式ルール（内容ベースでレイアウト崩れなし）"""
+    return [
+        # 小穴セクションヘッダー（■ + 小穴 を含む行 → 青）
+        {
+            "ranges": [full_range],
+            "booleanRule": {
+                "condition": {
+                    "type": "CUSTOM_FORMULA",
+                    "values": [{"userEnteredValue": '=AND(LEFT($A1,1)="■",ISNUMBER(FIND("小穴",$A1)))'}],
+                },
+                "format": {
+                    "backgroundColor": {"red": 0.18, "green": 0.36, "blue": 0.72},
+                    "textFormat": {
+                        "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0},
+                        "bold": True, "fontSize": 11,
+                    },
+                },
+            },
+        },
+        # 大穴セクションヘッダー（■ + 大穴 を含む行 → 赤）
+        {
+            "ranges": [full_range],
+            "booleanRule": {
+                "condition": {
+                    "type": "CUSTOM_FORMULA",
+                    "values": [{"userEnteredValue": '=AND(LEFT($A1,1)="■",ISNUMBER(FIND("大穴",$A1)))'}],
+                },
+                "format": {
+                    "backgroundColor": {"red": 0.72, "green": 0.18, "blue": 0.18},
+                    "textFormat": {
+                        "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0},
+                        "bold": True, "fontSize": 11,
+                    },
+                },
+            },
+        },
+        # 列ヘッダー行（A列が"予想点数"または"日付" → グレー）
+        {
+            "ranges": [full_range],
+            "booleanRule": {
+                "condition": {
+                    "type": "CUSTOM_FORMULA",
+                    "values": [{"userEnteredValue": '=OR($A1="予想点数",$A1="日付")'}],
+                },
+                "format": {
+                    "backgroundColor": {"red": 0.85, "green": 0.85, "blue": 0.85},
+                    "textFormat": {"bold": True},
+                },
+            },
+        },
+        # 収支がプラス → 緑（G列）
+        {
+            "ranges": [profit_range],
+            "booleanRule": {
+                "condition": {"type": "NUMBER_GREATER", "values": [{"userEnteredValue": "0"}]},
+                "format": {
+                    "backgroundColor": {"red": 0.8, "green": 0.95, "blue": 0.8},
+                    "textFormat": {"bold": True},
+                },
+            },
+        },
+        # 収支がマイナス → 赤（G列）
+        {
+            "ranges": [profit_range],
+            "booleanRule": {
+                "condition": {"type": "NUMBER_LESS", "values": [{"userEnteredValue": "0"}]},
+                "format": {
+                    "backgroundColor": {"red": 0.95, "green": 0.8, "blue": 0.8},
+                    "textFormat": {"bold": True},
+                },
+            },
+        },
+    ]
+
+
 def update_summary_sheet(
     spreadsheet_id: str,
     credentials_path: str = None,
 ) -> None:
     """
     RESULT_SHEETを集計してSUMMARY_SHEETを更新する
-    小穴全体 / 大穴全体 / 小穴★★★以上 / 大穴★★★以上 の4セクション構成
+    小穴激熱+灼熱 / 小穴見送り / 大穴灼熱 / 大穴見送り の4セクション
+    条件付き書式を使用するため行追加によるレイアウト崩れなし
     """
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
@@ -622,100 +699,76 @@ def update_summary_sheet(
     if not records:
         return
 
-    def is_koana(rec) -> bool:
-        return str(rec.get("狙い", "")) == "小穴"
+    def is_koana_hot(rec) -> bool:
+        return (str(rec.get("狙い", "")) == "小穴" and
+                str(rec.get("勝負推奨", "")) in ("激熱", "灼熱"))
 
-    def is_oana(rec) -> bool:
-        return str(rec.get("狙い", "")) == "大穴"
+    def is_koana_pass(rec) -> bool:
+        return (str(rec.get("狙い", "")) == "小穴" and
+                str(rec.get("勝負推奨", "")) == "見送り")
 
-    def is_star3plus(rec) -> bool:
-        return str(rec.get("信頼度", "")) in ("★★★☆", "★★★★")
+    def is_oana_hot(rec) -> bool:
+        return (str(rec.get("狙い", "")) == "大穴" and
+                str(rec.get("勝負推奨", "")) == "灼熱")
 
-    def is_koana_star3(rec) -> bool:
-        return is_koana(rec) and is_star3plus(rec)
+    def is_oana_pass(rec) -> bool:
+        return (str(rec.get("狙い", "")) == "大穴" and
+                str(rec.get("勝負推奨", "")) == "見送り")
 
-    def is_oana_star3(rec) -> bool:
-        return is_oana(rec) and is_star3plus(rec)
-
-    koana_stats      = _compute_tier_stats(records, is_koana)
-    oana_stats       = _compute_tier_stats(records, is_oana)
-    koana_star3_stats = _compute_tier_stats(records, is_koana_star3)
-    oana_star3_stats  = _compute_tier_stats(records, is_oana_star3)
+    koana_hot_stats  = _compute_tier_stats(records, is_koana_hot)
+    koana_pass_stats = _compute_tier_stats(records, is_koana_pass)
+    oana_hot_stats   = _compute_tier_stats(records, is_oana_hot)
+    oana_pass_stats  = _compute_tier_stats(records, is_oana_pass)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     NUM_COLS = 9
-
-    # セクションヘッダー色: 小穴=青系 / 大穴=赤系
-    _KOANA_COLOR = {"red": 0.18, "green": 0.36, "blue": 0.72}   # 濃い青
-    _OANA_COLOR  = {"red": 0.72, "green": 0.18, "blue": 0.18}   # 濃い赤
-    _STAR3_KOANA_COLOR = {"red": 0.25, "green": 0.55, "blue": 0.90}  # 明るい青
-    _STAR3_OANA_COLOR  = {"red": 0.90, "green": 0.35, "blue": 0.25}  # 明るい赤
 
     def _r(*args):
         lst = list(args)
         return lst + [""] * (NUM_COLS - len(lst))
 
     rows: list = []
-    section_header_rows: list = []  # (row_idx, header_color)
-    col_header_rows: list = []
-    summary_data_rows: list = []
-
     rows.append(_r("【予想成績サマリー】"))
     rows.append(_r("集計日時", now))
     rows.append(_r())
 
-    def _section(stats, title, header_color):
-        sec_rows: list = []
-        sec_headers: list = []
-        sec_ch: list = []
-        sec_data: list = []
-
-        sec_headers.append((len(rows) + len(sec_rows), header_color))
-        sec_rows.append(_r(f"■ {title}  全期間合計"))
-        sec_ch.append(len(rows) + len(sec_rows))
-        sec_rows.append(_r("予想点数", "予想レース数", "的中数", "的中率", "総払戻", "回収率", "収支"))
-
+    def _section(stats, title):
+        sec = []
         bets = stats["total_bets"]
         ret  = stats["total_return"]
         pr   = stats["pred_races"]
         hr   = stats["hit_races"]
         pp   = bets // 100
-        hitr = f"{hr / pr * 100:.1f}%" if pr > 0 else "0.0%"
-        roi  = f"{ret / bets * 100:.1f}%" if bets > 0 else "0.0%"
-        pft  = ret - bets
-        sec_data.append((len(rows) + len(sec_rows), pft))
-        sec_rows.append(_r(pp, pr, hr, hitr, f"¥{ret:,}", roi, f"¥{pft:,}"))
+        hitr = f"{hr/pr*100:.1f}%" if pr > 0 else "0.0%"
+        roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
+        pft  = ret - bets  # 数値で保持（CF条件で色分け）
 
-        sec_rows.append(_r())
-        sec_headers.append((len(rows) + len(sec_rows), header_color))
-        sec_rows.append(_r(f"■ {title}  日付別内訳"))
-        sec_ch.append(len(rows) + len(sec_rows))
-        sec_rows.append(_r("日付", "予想点数", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
+        sec.append(_r(f"■ {title}  全期間合計"))
+        sec.append(_r("予想点数", "予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
+        sec.append(_r(pp, pr, hr, hitr, f"¥{ret:,}", roi, pft))
+        sec.append(_r())
+        sec.append(_r(f"■ {title}  日付別内訳"))
+        sec.append(_r("日付", "予想点数", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
         for d in sorted(stats["daily"].keys()):
             dd  = stats["daily"][d]
             n   = dd["bets"] // 100
             dpr = len(dd["race_keys"])
             h   = len(dd["hit_race_keys"])
             r   = dd["ret"]
-            dr  = f"{h / dpr * 100:.1f}%" if dpr > 0 else "0.0%"
-            dp  = r - dd["bets"]
-            sec_rows.append(_r(d, n, dpr, h, dr, f"¥{r:,}", f"¥{dp:,}"))
+            dr  = f"{h/dpr*100:.1f}%" if dpr > 0 else "0.0%"
+            dp  = r - dd["bets"]  # 数値で保持
+            sec.append(_r(d, n, dpr, h, dr, f"¥{r:,}", dp))
+        sec.append(_r())
+        sec.append(_r())
+        return sec
 
-        sec_rows.append(_r())
-        sec_rows.append(_r())
-        return sec_rows, sec_headers, sec_ch, sec_data
-
-    for stats, title, hcolor in [
-        (koana_stats,       "小穴（全体）",        _KOANA_COLOR),
-        (oana_stats,        "大穴（全体）",         _OANA_COLOR),
-        (koana_star3_stats, "小穴 ★★★以上",       _STAR3_KOANA_COLOR),
-        (oana_star3_stats,  "大穴 ★★★以上",       _STAR3_OANA_COLOR),
+    for stats, title in [
+        (koana_hot_stats,  "小穴 激熱+灼熱"),
+        (koana_pass_stats, "小穴 見送り"),
+        (oana_hot_stats,   "大穴 灼熱"),
+        (oana_pass_stats,  "大穴 見送り"),
     ]:
-        sec_rows, sec_sh, sec_ch, sec_data = _section(stats, title, hcolor)
-        section_header_rows.extend(sec_sh)
-        col_header_rows.extend(sec_ch)
-        summary_data_rows.extend(sec_data)
-        rows.extend(sec_rows)
+        rows.extend(_section(stats, title))
 
     # シートへ書き込み
     try:
@@ -724,66 +777,38 @@ def update_summary_sheet(
         s_sheet = spreadsheet.add_worksheet(title=SUMMARY_SHEET, rows=500, cols=NUM_COLS)
 
     s_sheet.clear()
-    s_sheet.update("A1", rows)
+    # USER_ENTERED: 数値は数値として保存（CF の NUMBER_GREATER/LESS が効く）
+    s_sheet.update("A1", rows, value_input_option="USER_ENTERED")
 
-    # フォーマット適用
+    # 条件付き書式を設定（既存ルールを削除してから再設定）
+    sid = s_sheet.id
+    max_rows = 500
+    full_range   = {"sheetId": sid, "startRowIndex": 0, "endRowIndex": max_rows,
+                    "startColumnIndex": 0, "endColumnIndex": NUM_COLS}
+    profit_range = {"sheetId": sid, "startRowIndex": 0, "endRowIndex": max_rows,
+                    "startColumnIndex": 6, "endColumnIndex": 7}  # G列
+
     try:
-        sid = s_sheet.id
-        color_requests = []
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet.id}"
+        response = spreadsheet.client.request(
+            "GET", url, params={"fields": "sheets(properties.sheetId,conditionalFormats)"}
+        )
+        sheet_data = response.json()
+        target = next(
+            (s for s in sheet_data.get("sheets", []) if s["properties"]["sheetId"] == sid),
+            {}
+        )
+        num_existing = len(target.get("conditionalFormats", []))
 
-        # 1行目タイトルを太字センター
-        color_requests.append({"repeatCell": {
-            "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1,
-                      "startColumnIndex": 0, "endColumnIndex": NUM_COLS},
-            "cell": {"userEnteredFormat": {
-                "textFormat": {"bold": True, "fontSize": 13},
-                "horizontalAlignment": "CENTER",
-            }},
-            "fields": "userEnteredFormat(textFormat,horizontalAlignment)",
-        }})
-
-        for ri, hcol in section_header_rows:
-            color_requests.append({"repeatCell": {
-                "range": {"sheetId": sid, "startRowIndex": ri, "endRowIndex": ri + 1,
-                          "startColumnIndex": 0, "endColumnIndex": NUM_COLS},
-                "cell": {"userEnteredFormat": {
-                    "backgroundColor": hcol,
-                    "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1},
-                                   "bold": True, "fontSize": 11},
-                }},
-                "fields": "userEnteredFormat(backgroundColor,textFormat)",
-            }})
-
-        for ri in col_header_rows:
-            color_requests.append({"repeatCell": {
-                "range": {"sheetId": sid, "startRowIndex": ri, "endRowIndex": ri + 1,
-                          "startColumnIndex": 0, "endColumnIndex": NUM_COLS},
-                "cell": {"userEnteredFormat": {
-                    "backgroundColor": {"red": 0.85, "green": 0.85, "blue": 0.85},
-                    "textFormat": {"bold": True},
-                }},
-                "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
-            }})
-
-        for ri, pft in summary_data_rows:
-            pft_color = (
-                {"red": 0.8, "green": 0.95, "blue": 0.8} if pft >= 0
-                else {"red": 0.95, "green": 0.8, "blue": 0.8}
-            )
-            color_requests.append({"repeatCell": {
-                "range": {"sheetId": sid, "startRowIndex": ri, "endRowIndex": ri + 1,
-                          "startColumnIndex": 0, "endColumnIndex": NUM_COLS},
-                "cell": {"userEnteredFormat": {
-                    "backgroundColor": pft_color,
-                    "textFormat": {"bold": True},
-                }},
-                "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
-            }})
-
-        if color_requests:
-            spreadsheet.batch_update({"requests": color_requests})
-    except Exception:
-        pass
+        reqs = []
+        for i in range(num_existing - 1, -1, -1):
+            reqs.append({"deleteConditionalFormatRule": {"sheetId": sid, "index": i}})
+        for i, rule in enumerate(_build_summary_cf_rules(sid, full_range, profit_range)):
+            reqs.append({"addConditionalFormatRule": {"rule": rule, "index": i}})
+        if reqs:
+            spreadsheet.batch_update({"requests": reqs})
+    except Exception as e:
+        print(f"[WARN] 条件付き書式設定エラー: {e}")
 
     def _roi_str(stats):
         b = stats["total_bets"]
@@ -791,8 +816,8 @@ def update_summary_sheet(
 
     print(
         f"[OK] {SUMMARY_SHEET}更新: "
-        f"小穴{koana_stats['pred_races']}R ROI={_roi_str(koana_stats)} / "
-        f"大穴{oana_stats['pred_races']}R ROI={_roi_str(oana_stats)}"
+        f"小穴激熱+灼熱 {koana_hot_stats['pred_races']}R ROI={_roi_str(koana_hot_stats)} / "
+        f"大穴灼熱 {oana_hot_stats['pred_races']}R ROI={_roi_str(oana_hot_stats)}"
     )
 
 
