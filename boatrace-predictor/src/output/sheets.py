@@ -612,7 +612,7 @@ def _build_summary_cf_rules(sid: int, full_range: dict, profit_range: dict) -> l
                     "backgroundColor": {"red": 0.18, "green": 0.36, "blue": 0.72},
                     "textFormat": {
                         "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0},
-                        "bold": True, "fontSize": 11,
+                        "bold": True,
                     },
                 },
             },
@@ -629,7 +629,7 @@ def _build_summary_cf_rules(sid: int, full_range: dict, profit_range: dict) -> l
                     "backgroundColor": {"red": 0.72, "green": 0.18, "blue": 0.18},
                     "textFormat": {
                         "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0},
-                        "bold": True, "fontSize": 11,
+                        "bold": True,
                     },
                 },
             },
