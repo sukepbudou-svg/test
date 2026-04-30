@@ -392,7 +392,7 @@ def update_result_row(
         and r.get("買い目（3連単）", "") not in ("", "見送り", "-")
         and (
             str(r.get("勝負推奨", "")) not in ("", "見送り")
-            or str(r.get("狙い", "")) in ("本命", "小穴", "大穴")
+            or str(r.get("狙い", "")) in ("本命", "本命ボックス", "大穴")
         )
     ]
 
@@ -724,12 +724,12 @@ def update_summary_sheet(
         return (str(rec.get("狙い", "")) == "本命" and
                 str(rec.get("勝負推奨", "")) == "見送り")
 
-    def is_koana_hot(rec) -> bool:
-        return (str(rec.get("狙い", "")) == "小穴" and
+    def is_box_hot(rec) -> bool:
+        return (str(rec.get("狙い", "")) == "本命ボックス" and
                 str(rec.get("勝負推奨", "")) in ("激熱", "灼熱"))
 
-    def is_koana_pass(rec) -> bool:
-        return (str(rec.get("狙い", "")) == "小穴" and
+    def is_box_pass(rec) -> bool:
+        return (str(rec.get("狙い", "")) == "本命ボックス" and
                 str(rec.get("勝負推奨", "")) == "見送り")
 
     def is_oana_hot(rec) -> bool:
@@ -742,8 +742,8 @@ def update_summary_sheet(
 
     honmei_hot_stats  = _compute_tier_stats(records, is_honmei_hot)
     honmei_pass_stats = _compute_tier_stats(records, is_honmei_pass)
-    koana_hot_stats   = _compute_tier_stats(records, is_koana_hot)
-    koana_pass_stats  = _compute_tier_stats(records, is_koana_pass)
+    box_hot_stats     = _compute_tier_stats(records, is_box_hot)
+    box_pass_stats    = _compute_tier_stats(records, is_box_pass)
     oana_hot_stats    = _compute_tier_stats(records, is_oana_hot)
     oana_pass_stats   = _compute_tier_stats(records, is_oana_pass)
 
@@ -792,8 +792,8 @@ def update_summary_sheet(
     for stats, title in [
         (honmei_hot_stats,  "本命 激熱+灼熱"),
         (honmei_pass_stats, "本命 見送り"),
-        (koana_hot_stats,   "小穴 激熱+灼熱"),
-        (koana_pass_stats,  "小穴 見送り"),
+        (box_hot_stats,     "本命ボックス 激熱+灼熱"),
+        (box_pass_stats,    "本命ボックス 見送り"),
         (oana_hot_stats,    "大穴 灼熱"),
         (oana_pass_stats,   "大穴 見送り"),
     ]:

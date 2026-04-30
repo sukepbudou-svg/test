@@ -392,17 +392,27 @@ def get_recommendations(
             second_b2 = int(filtered.iloc[n]["boat2"]) if len(filtered) > n else None
             return topN.reset_index(drop=True), star_level, is_confident, second_b2
 
-        # 本命2点（15〜30倍：激熱≥1.5、灼熱≥2.5）
+        # 本命1点（15〜30倍：激熱≥0.7、灼熱≥1.5）
         honmei_recs, honmei_star_level, _, _ = pick_by_edge(
-            by_prob, "本命", n=2, min_odds=15, max_odds=30, hot_threshold=1.5, fire_threshold=2.5)
-        # 小穴2点（31〜60倍：激熱≥2.0、灼熱≥3.0）
-        recommended, race_star_level, _, race_second_b2 = pick_by_edge(
-            by_prob, "小穴", n=2, min_odds=31, max_odds=60, hot_threshold=2.0, fire_threshold=3.0)
+            by_prob, "本命", n=1, min_odds=15, max_odds=30, hot_threshold=0.7, fire_threshold=1.5)
+
+        # 本命ボックス：本命で選んだ3数字の残り5通り
+        box_df = pd.DataFrame()
+        if not honmei_recs.empty:
+            from itertools import permutations as _perms
+            main_combo = honmei_recs.iloc[0]["combination"]
+            boats = list(map(int, main_combo.split("-")))
+            box_combos = [f"{a}-{b}-{c}" for a, b, c in _perms(boats)
+                          if f"{a}-{b}-{c}" != main_combo]
+            box_df = by_prob[by_prob["combination"].isin(box_combos)].copy()
+            if not box_df.empty:
+                box_df["tier"] = "本命ボックス"
+
         # 大穴3点（100〜250倍：灼熱≥3.0のみ）
         oana_recs, oana_star_level, _, _ = pick_by_edge(
             by_prob, "大穴", n=3, min_odds=100, max_odds=250, hot_threshold=99, fire_threshold=3.0)
 
-        if honmei_recs.empty and recommended.empty and oana_recs.empty:
+        if honmei_recs.empty and oana_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
 
         def _make_row(rec, star_lv, second):
@@ -411,14 +421,10 @@ def get_recommendations(
                 # 大穴は★★★★(灼熱)のみ勝負、それ以外は見送り
                 if star_lv >= 3:
                     confidence, bet_label = "★★★★", "灼熱"
-                elif star_lv >= 2:
-                    confidence, bet_label = "★★★☆", "見送り"
-                elif star_lv >= 1:
-                    confidence, bet_label = "★★☆☆", "見送り"
                 else:
                     confidence, bet_label = "★☆☆☆", "見送り"
             else:
-                # 小穴
+                # 本命・本命ボックス共通
                 if star_lv >= 3:
                     confidence, bet_label = "★★★★", "灼熱"
                 elif star_lv >= 2:
@@ -446,8 +452,8 @@ def get_recommendations(
 
         for _, rec in honmei_recs.iterrows():
             all_recommendations.append(_make_row(rec, honmei_star_level, None))
-        for _, rec in recommended.iterrows():
-            all_recommendations.append(_make_row(rec, race_star_level, race_second_b2))
+        for _, rec in box_df.iterrows():
+            all_recommendations.append(_make_row(rec, honmei_star_level, None))
         for _, rec in oana_recs.iterrows():
             all_recommendations.append(_make_row(rec, oana_star_level, None))
 
