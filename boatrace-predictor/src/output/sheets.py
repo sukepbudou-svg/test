@@ -845,7 +845,7 @@ def update_summary_sheet(
 
     print(
         f"[OK] {SUMMARY_SHEET}更新: "
-        f"小穴激熱+灼熱 {koana_hot_stats['pred_races']}R ROI={_roi_str(koana_hot_stats)} / "
+        f"本命激熱+灼熱 {honmei_hot_stats['pred_races']}R ROI={_roi_str(honmei_hot_stats)} / "
         f"大穴灼熱 {oana_hot_stats['pred_races']}R ROI={_roi_str(oana_hot_stats)}"
     )
 
