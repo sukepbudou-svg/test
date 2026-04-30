@@ -148,8 +148,11 @@ def _predict_one_race(
     venue = race["venue"]
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 予想開始: {venue} {race_no}R")
 
+    # スケジュールから取得した正しいrace_idを使う
+    race_id = race.get("race_id")
+
     # 出馬表取得
-    card = fetch_race_card(today, venue_code, race_no)
+    card = fetch_race_card(today, venue_code, race_no, race_id=race_id)
     if not card or not card.get("horses"):
         print(f"  [WARN] 出馬表取得失敗: {venue} {race_no}R")
         return []
@@ -161,7 +164,7 @@ def _predict_one_race(
         return []
 
     # リアルタイム馬連オッズ取得
-    live_odds = fetch_odds_quinella(today, venue_code, race_no)
+    live_odds = fetch_odds_quinella(today, venue_code, race_no, race_id=race_id)
 
     # 予想生成
     recs = get_recommendations(model, df_race, live_odds)
@@ -194,7 +197,8 @@ def _fetch_result(race, today, spreadsheet_id, credentials_path,
     venue = race["venue"]
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 結果取得: {venue} {race_no}R")
 
-    result = fetch_race_result(today, venue_code, race_no)
+    race_id = race.get("race_id")
+    result = fetch_race_result(today, venue_code, race_no, race_id=race_id)
     if not result.get("available"):
         print(f"  [WARN] 結果未確定 → 2分後に再試行します")
         return False

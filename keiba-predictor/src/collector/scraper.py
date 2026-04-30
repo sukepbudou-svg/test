@@ -33,7 +33,8 @@ TRACK_CONDITIONS = {"1": "良", "2": "稍重", "3": "重", "4": "不良"}
 GRADE_MAP = {"G1": 5, "G2": 4, "G3": 3, "OP": 2, "L": 2, "3勝": 1, "2勝": 1, "1勝": 1, "未勝利": 0, "新馬": 0}
 
 
-def fetch_race_card(date: datetime, venue_code: str, race_no: int, timeout: int = 15) -> dict:
+def fetch_race_card(date: datetime, venue_code: str, race_no: int,
+                    race_id: str = None, timeout: int = 15) -> dict:
     """
     JRA公式から1レース分の出馬表を取得する
 
@@ -49,9 +50,10 @@ def fetch_race_card(date: datetime, venue_code: str, race_no: int, timeout: int 
             ]
         }
     """
+    rid = race_id or _make_race_id(date, venue_code, race_no)
     url = (
         f"https://race.netkeiba.com/race/shutuba.html"
-        f"?race_id={_make_race_id(date, venue_code, race_no)}"
+        f"?race_id={rid}"
     )
     try:
         resp = requests.get(url, headers=HEADERS, timeout=timeout)
@@ -65,7 +67,8 @@ def fetch_race_card(date: datetime, venue_code: str, race_no: int, timeout: int 
     return _parse_race_card(soup, date, venue_code, race_no)
 
 
-def fetch_race_result(date: datetime, venue_code: str, race_no: int, timeout: int = 15) -> dict:
+def fetch_race_result(date: datetime, venue_code: str, race_no: int,
+                      race_id: str = None, timeout: int = 15) -> dict:
     """
     JRA公式から1レース分の結果を取得する
 
@@ -77,9 +80,10 @@ def fetch_race_result(date: datetime, venue_code: str, race_no: int, timeout: in
             "win_payout": 350,
         }
     """
+    rid = race_id or _make_race_id(date, venue_code, race_no)
     url = (
         f"https://race.netkeiba.com/race/result.html"
-        f"?race_id={_make_race_id(date, venue_code, race_no)}"
+        f"?race_id={rid}"
     )
     try:
         resp = requests.get(url, headers=HEADERS, timeout=timeout)
@@ -116,16 +120,18 @@ def fetch_today_schedule(date: datetime = None, timeout: int = 15) -> list[dict]
     return _parse_schedule(soup, date)
 
 
-def fetch_odds_quinella(date: datetime, venue_code: str, race_no: int, timeout: int = 15) -> dict:
+def fetch_odds_quinella(date: datetime, venue_code: str, race_no: int,
+                        race_id: str = None, timeout: int = 15) -> dict:
     """
     馬連オッズを取得する
 
     Returns:
         {"1-2": 15.3, "1-3": 8.2, ...}
     """
+    rid = race_id or _make_race_id(date, venue_code, race_no)
     url = (
         f"https://odds.netkeiba.com/odds/odds_get_form.cgi"
-        f"?race_id={_make_race_id(date, venue_code, race_no)}&type=b5"
+        f"?race_id={rid}&type=b5"
     )
     try:
         resp = requests.get(url, headers=HEADERS, timeout=timeout)
