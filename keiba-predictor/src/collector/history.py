@@ -68,22 +68,7 @@ def _get_race_dates(today: datetime, months: int) -> list[datetime]:
 def _fetch_day(date: datetime, interval: float) -> list[dict]:
     """1日分の全レース結果を取得する"""
     date_str = date.strftime("%Y%m%d")
-
-    # JRA成績ページからその日のレース一覧を取得
-    url = f"https://www.jra.go.jp/JRADB/accessD.html?CNAME=pw01dde0100&JRDB=&MKCD={date_str}"
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=15)
-        resp.encoding = resp.apparent_encoding or "utf-8"
-    except requests.RequestException as e:
-        print(f"  [WARN] 接続失敗: {e}")
-        return []
-
-    soup = BeautifulSoup(resp.text, "html.parser")
-    race_links = _extract_race_links(soup, date_str)
-
-    if not race_links:
-        # フォールバック: netkeibaの静的ページを試す
-        race_links = _fetch_netkeiba_race_list(date_str)
+    race_links = _fetch_netkeiba_race_list(date_str)
 
     if not race_links:
         print(f"  [INFO] {date_str} 開催なし（またはデータ未取得）")
@@ -99,62 +84,40 @@ def _fetch_day(date: datetime, interval: float) -> list[dict]:
     return records
 
 
-def _extract_race_links(soup: BeautifulSoup, date_str: str) -> list[dict]:
-    """JRA公式ページからレースリンクを抽出する"""
-    links = []
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
-        # JRA公式の成績ページURL形式を探す
-        if "pw01dde0200" in href or "result" in href.lower():
-            m = re.search(r'JRDB=(\d+)', href)
-            if m:
-                links.append({"jrdb": m.group(1), "url": href})
-    return links
-
-
 def _fetch_netkeiba_race_list(date_str: str) -> list[dict]:
-    """複数ソースからrace_idリストを取得する"""
-    yyyy = date_str[:4]
-    mm = date_str[4:6]
-    dd = date_str[6:8]
-
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/122.0.0.0 Safari/537.36"
-        ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
-    }
-
+    """netkeibaからrace_idリストを取得する"""
     urls = [
-        # Yahoo競馬（静的HTML）
-        f"https://keiba.yahoo.co.jp/race/list/{date_str}/",
-        # race.netkeiba.com AJAXフラグメント
+        # db.netkeiba.com 日付別レース一覧（最も安定）
+        f"https://db.netkeiba.com/race/list/{date_str}/",
+        # race.netkeiba.com トップページのリスト
         f"https://race.netkeiba.com/top/race_list_2.html?kaisai_date={date_str}",
-        # db.netkeiba.com スラッシュ区切り
-        f"https://db.netkeiba.com/?pid=race_list&date={yyyy}/{mm}/{dd}",
+        # Yahoo競馬
+        f"https://keiba.yahoo.co.jp/race/list/{date_str}/",
     ]
 
     for url in urls:
         try:
-            resp = requests.get(url, headers=headers, timeout=15)
+            resp = requests.get(url, headers=HEADERS, timeout=15)
             if resp.status_code != 200:
+                print(f"  [DEBUG] HTTP{resp.status_code}: {url[:60]}")
                 continue
             for enc in ["EUC-JP", "utf-8"]:
                 resp.encoding = enc
                 text = resp.text
                 ids_found = set()
-                for m in re.finditer(r'/race/(\d{10,12})/?', text):
-                    ids_found.add(m.group(1))
                 for m in re.finditer(r'race_id=(\d{10,12})', text):
                     ids_found.add(m.group(1))
+                for m in re.finditer(r'/race/(\d{10,12})/', text):
+                    rid = m.group(1)
+                    # 日付一致チェック（race_idの先頭4桁=年）
+                    if rid.startswith(date_str[:4]):
+                        ids_found.add(rid)
                 if ids_found:
                     result = [{"race_id": rid} for rid in sorted(ids_found)]
-                    print(f"  [OK] {len(result)}レース発見 ({url[:55]})")
+                    print(f"  [OK] {len(result)}レース発見 ({url[:60]})")
                     return result
-        except requests.RequestException:
+        except requests.RequestException as e:
+            print(f"  [WARN] {url[:60]}: {e}")
             continue
 
     return []
