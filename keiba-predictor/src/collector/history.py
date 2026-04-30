@@ -27,7 +27,7 @@ DATA_DIR = Path(__file__).parent.parent.parent / "data" / "raw"
 GRADE_NUM = {"G1": 5, "G2": 4, "G3": 3, "L": 2, "OP": 2, "一般": 1}
 
 
-def fetch_history(months: int = 3, interval: float = 2.0) -> pd.DataFrame:
+def fetch_history(months: int = 3, interval: float = 1.0) -> pd.DataFrame:
     """
     過去n月分のJRAレース成績を取得して学習用DataFrameを返す
     """
@@ -113,9 +113,17 @@ def _fetch_netkeiba_race_list(date_str: str) -> list[dict]:
                     if rid.startswith(date_str[:4]):
                         ids_found.add(rid)
                 if ids_found:
-                    result = [{"race_id": rid} for rid in sorted(ids_found)]
-                    print(f"  [OK] {len(result)}レース発見 ({url[:60]})")
-                    return result
+                    # 有効なJRA race_idのみ残す（12桁: venue=01-10, race_no=01-12）
+                    valid = []
+                    for rid in sorted(ids_found):
+                        if len(rid) == 12:
+                            venue = int(rid[4:6])
+                            race_no = int(rid[10:12])
+                            if 1 <= venue <= 10 and 1 <= race_no <= 12:
+                                valid.append({"race_id": rid})
+                    if valid:
+                        print(f"  [OK] {len(valid)}レース発見 ({url[:60]})")
+                        return valid
         except requests.RequestException as e:
             print(f"  [WARN] {url[:60]}: {e}")
             continue
@@ -131,13 +139,20 @@ def _fetch_race_result(link_info: dict, date: datetime) -> list[dict]:
 
     url = f"https://db.netkeiba.com/race/{race_id}/"
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp = requests.get(url, headers=HEADERS, timeout=10)
         resp.encoding = "EUC-JP"
         soup = BeautifulSoup(resp.text, "html.parser")
-    except requests.RequestException:
+    except requests.RequestException as e:
+        print(f"    [SKIP] {race_id}: {e}")
         return []
 
-    return _parse_result_to_records(soup, race_id, date)
+    records = _parse_result_to_records(soup, race_id, date)
+    if records:
+        winner_combo = next((r["combination"] for r in records if r["result"] == 1), "-")
+        print(f"    {race_id}: {len(records)}通り 馬連={winner_combo}")
+    else:
+        print(f"    {race_id}: パース失敗")
+    return records
 
 
 def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) -> list[dict]:
