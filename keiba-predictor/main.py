@@ -4,7 +4,13 @@
 
 import argparse
 import os
+import sys
 from pathlib import Path
+
+# keiba-predictorフォルダをsys.pathに追加（どこから実行しても動くように）
+_ROOT = Path(__file__).parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 # credentials.jsonの検索順: 環境変数 → keiba-predictorフォルダ → boatrace-predictorフォルダ
 def _find_credentials() -> str:
