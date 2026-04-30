@@ -362,7 +362,8 @@ def get_recommendations(
         predictions = predict_race(model, race_row, payout_lookup, live_odds, weather, absent_boats)
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
 
-        def pick_by_edge(pool, tier_name, n=2, min_odds=0, max_odds=None):
+        def pick_by_edge(pool, tier_name, n=2, min_odds=0, max_odds=None,
+                         hot_threshold=2.0, fire_threshold=3.0):
             """
             指定オッズ範囲の組み合わせからエッジ上位n点を返す。
             1号艇固定なし。モデルが自由に最良の組み合わせを判断する。
@@ -377,10 +378,10 @@ def get_recommendations(
             filtered["edge_score"] = filtered["prob"] * filtered["odds_value"]
             filtered = filtered.sort_values("edge_score", ascending=False).reset_index(drop=True)
             top_edge = float(filtered.iloc[0]["edge_score"])
-            if top_edge >= 3.0:
-                star_level = 3   # ★★★★ 最強: モデル確率が期待値の3倍超
-            elif top_edge >= 2.0:
-                star_level = 2   # ★★★☆ 激熱: モデル確率が期待値の2倍超
+            if top_edge >= fire_threshold:
+                star_level = 3   # ★★★★ 灼熱
+            elif top_edge >= hot_threshold:
+                star_level = 2   # ★★★☆ 激熱
             elif top_edge >= 1.3:
                 star_level = 1   # ★★☆☆ 見送り
             else:
@@ -391,12 +392,15 @@ def get_recommendations(
             second_b2 = int(filtered.iloc[n]["boat2"]) if len(filtered) > n else None
             return topN.reset_index(drop=True), star_level, is_confident, second_b2
 
-        # 本命2点（オッズ20〜40倍の組み合わせからエッジ上位2点）
-        honmei_recs, honmei_star_level, _, _ = pick_by_edge(by_prob, "本命", n=2, min_odds=20, max_odds=40)
-        # 小穴2点（オッズ30〜80倍の組み合わせからエッジ上位2点）
-        recommended, race_star_level, _, race_second_b2 = pick_by_edge(by_prob, "小穴", n=2, min_odds=30, max_odds=80)
-        # 大穴3点（100〜250倍の組み合わせからエッジ上位3点）
-        oana_recs, oana_star_level, _, _ = pick_by_edge(by_prob, "大穴", n=3, min_odds=100, max_odds=250)
+        # 本命2点（15〜30倍：激熱≥1.5、灼熱≥2.5）
+        honmei_recs, honmei_star_level, _, _ = pick_by_edge(
+            by_prob, "本命", n=2, min_odds=15, max_odds=30, hot_threshold=1.5, fire_threshold=2.5)
+        # 小穴2点（31〜60倍：激熱≥2.0、灼熱≥3.0）
+        recommended, race_star_level, _, race_second_b2 = pick_by_edge(
+            by_prob, "小穴", n=2, min_odds=31, max_odds=60, hot_threshold=2.0, fire_threshold=3.0)
+        # 大穴3点（100〜250倍：灼熱≥3.0のみ）
+        oana_recs, oana_star_level, _, _ = pick_by_edge(
+            by_prob, "大穴", n=3, min_odds=100, max_odds=250, hot_threshold=99, fire_threshold=3.0)
 
         if honmei_recs.empty and recommended.empty and oana_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
