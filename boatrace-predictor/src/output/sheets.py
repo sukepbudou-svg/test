@@ -392,7 +392,7 @@ def update_result_row(
         and r.get("買い目（3連単）", "") not in ("", "見送り", "-")
         and (
             str(r.get("勝負推奨", "")) not in ("", "見送り")
-            or str(r.get("狙い", "")) in ("小穴", "大穴")
+            or str(r.get("狙い", "")) in ("本命", "小穴", "大穴")
         )
     ]
 
@@ -600,6 +600,23 @@ def _compute_venue_tier_stats(records: list, tier_check) -> dict:
 def _build_summary_cf_rules(sid: int, full_range: dict, profit_range: dict) -> list:
     """サマリーシート用の条件付き書式ルール（内容ベースでレイアウト崩れなし）"""
     return [
+        # 本命セクションヘッダー（■ + 本命 を含む行 → 緑）
+        {
+            "ranges": [full_range],
+            "booleanRule": {
+                "condition": {
+                    "type": "CUSTOM_FORMULA",
+                    "values": [{"userEnteredValue": '=AND(LEFT($A1,1)="■",ISNUMBER(FIND("本命",$A1)))'}],
+                },
+                "format": {
+                    "backgroundColor": {"red": 0.15, "green": 0.55, "blue": 0.25},
+                    "textFormat": {
+                        "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0},
+                        "bold": True,
+                    },
+                },
+            },
+        },
         # 小穴セクションヘッダー（■ + 小穴 を含む行 → 青）
         {
             "ranges": [full_range],
@@ -699,6 +716,14 @@ def update_summary_sheet(
     if not records:
         return
 
+    def is_honmei_hot(rec) -> bool:
+        return (str(rec.get("狙い", "")) == "本命" and
+                str(rec.get("勝負推奨", "")) in ("激熱", "灼熱"))
+
+    def is_honmei_pass(rec) -> bool:
+        return (str(rec.get("狙い", "")) == "本命" and
+                str(rec.get("勝負推奨", "")) == "見送り")
+
     def is_koana_hot(rec) -> bool:
         return (str(rec.get("狙い", "")) == "小穴" and
                 str(rec.get("勝負推奨", "")) in ("激熱", "灼熱"))
@@ -715,10 +740,12 @@ def update_summary_sheet(
         return (str(rec.get("狙い", "")) == "大穴" and
                 str(rec.get("勝負推奨", "")) == "見送り")
 
-    koana_hot_stats  = _compute_tier_stats(records, is_koana_hot)
-    koana_pass_stats = _compute_tier_stats(records, is_koana_pass)
-    oana_hot_stats   = _compute_tier_stats(records, is_oana_hot)
-    oana_pass_stats  = _compute_tier_stats(records, is_oana_pass)
+    honmei_hot_stats  = _compute_tier_stats(records, is_honmei_hot)
+    honmei_pass_stats = _compute_tier_stats(records, is_honmei_pass)
+    koana_hot_stats   = _compute_tier_stats(records, is_koana_hot)
+    koana_pass_stats  = _compute_tier_stats(records, is_koana_pass)
+    oana_hot_stats    = _compute_tier_stats(records, is_oana_hot)
+    oana_pass_stats   = _compute_tier_stats(records, is_oana_pass)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     NUM_COLS = 9
@@ -763,10 +790,12 @@ def update_summary_sheet(
         return sec
 
     for stats, title in [
-        (koana_hot_stats,  "小穴 激熱+灼熱"),
-        (koana_pass_stats, "小穴 見送り"),
-        (oana_hot_stats,   "大穴 灼熱"),
-        (oana_pass_stats,  "大穴 見送り"),
+        (honmei_hot_stats,  "本命 激熱+灼熱"),
+        (honmei_pass_stats, "本命 見送り"),
+        (koana_hot_stats,   "小穴 激熱+灼熱"),
+        (koana_pass_stats,  "小穴 見送り"),
+        (oana_hot_stats,    "大穴 灼熱"),
+        (oana_pass_stats,   "大穴 見送り"),
     ]:
         rows.extend(_section(stats, title))
 

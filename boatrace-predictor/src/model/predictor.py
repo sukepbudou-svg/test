@@ -391,12 +391,14 @@ def get_recommendations(
             second_b2 = int(filtered.iloc[n]["boat2"]) if len(filtered) > n else None
             return topN.reset_index(drop=True), star_level, is_confident, second_b2
 
+        # 本命2点（オッズ20〜40倍の組み合わせからエッジ上位2点）
+        honmei_recs, honmei_star_level, _, _ = pick_by_edge(by_prob, "本命", n=2, min_odds=20, max_odds=40)
         # 小穴2点（オッズ30〜80倍の組み合わせからエッジ上位2点）
         recommended, race_star_level, _, race_second_b2 = pick_by_edge(by_prob, "小穴", n=2, min_odds=30, max_odds=80)
         # 大穴3点（100〜250倍の組み合わせからエッジ上位3点）
         oana_recs, oana_star_level, _, _ = pick_by_edge(by_prob, "大穴", n=3, min_odds=100, max_odds=250)
 
-        if recommended.empty and oana_recs.empty:
+        if honmei_recs.empty and recommended.empty and oana_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
 
         def _make_row(rec, star_lv, second):
@@ -438,6 +440,8 @@ def get_recommendations(
                 "edge": str(edge_val),
             }
 
+        for _, rec in honmei_recs.iterrows():
+            all_recommendations.append(_make_row(rec, honmei_star_level, None))
         for _, rec in recommended.iterrows():
             all_recommendations.append(_make_row(rec, race_star_level, race_second_b2))
         for _, rec in oana_recs.iterrows():
