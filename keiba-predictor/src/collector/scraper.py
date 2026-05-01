@@ -316,13 +316,17 @@ def _parse_race_card(soup: BeautifulSoup, date: datetime, venue_code: str, race_
                 m = re.search(r'/jockey/(\w+)', j_link.get("href", ""))
                 jockey_id = m.group(1) if m else ""
 
-            # 斤量
+            # 斤量・馬体重・増減
             weight_text = ""
+            horse_weight, weight_diff = 480, 0
             for cell in cells:
                 t = cell.get_text(strip=True)
                 if re.match(r'^\d{2}\.\d$', t):
                     weight_text = t
-                    break
+                mw = re.match(r'(\d{3})\(([+-]?\d+)\)', t)
+                if mw:
+                    horse_weight = int(mw.group(1))
+                    weight_diff = int(mw.group(2))
             weight = float(weight_text) if weight_text else 55.0
 
             result["horses"].append({
@@ -332,6 +336,8 @@ def _parse_race_card(soup: BeautifulSoup, date: datetime, venue_code: str, race_
                 "jockey": jockey,
                 "jockey_id": jockey_id,
                 "weight": weight,
+                "horse_weight": horse_weight,
+                "weight_diff": weight_diff,
             })
         except (ValueError, IndexError):
             continue

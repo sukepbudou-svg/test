@@ -7,7 +7,7 @@
 import time
 from datetime import datetime, timedelta
 
-PREDICT_BEFORE_MIN = 6
+PREDICT_BEFORE_MIN = 15
 RESULT_AFTER_MIN = 12
 MAX_RESULT_RETRIES = 10
 LOOP_INTERVAL_SEC = 30
