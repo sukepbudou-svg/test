@@ -126,13 +126,9 @@ def get_recommendations(
         odds_disp, src_disp, prob_disp, roi_disp = _fmt(rec)
         recommended.append(_row("本命", rec["combination"], prob_disp, odds_disp, roi_disp, src_disp))
 
-    # 2. 本命改_馬連: エッジ上位2点（本命と重複なし）
-    honmei_combos = set(honmei_picks["combination"])
+    # 2. 本命改_馬連: エッジ上位2点（本命との重複可）
     edge_candidates = (
-        predictions[
-            (predictions["expected_roi"] >= EDGE_THRESHOLD) &
-            (~predictions["combination"].isin(honmei_combos))
-        ]
+        predictions[predictions["expected_roi"] >= EDGE_THRESHOLD]
         .sort_values("expected_roi", ascending=False)
     )
     for _, rec in edge_candidates.head(HONMEI_KAI_UMAREN_N).iterrows():
