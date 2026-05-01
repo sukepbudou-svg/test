@@ -143,6 +143,29 @@ def fetch_odds_quinella(date: datetime, venue_code: str, race_no: int,
     return _parse_quinella_odds(resp.text)
 
 
+def fetch_odds_wide(date: datetime, venue_code: str, race_no: int,
+                    race_id: str = None, timeout: int = 15) -> dict:
+    """
+    ワイドオッズを取得する（最小払戻ベース）
+
+    Returns:
+        {"1-2": 3.5, "1-3": 2.8, ...}
+    """
+    rid = race_id or _make_race_id(date, venue_code, race_no)
+    url = (
+        f"https://odds.netkeiba.com/odds/odds_get_form.cgi"
+        f"?race_id={rid}&type=b6"
+    )
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=timeout)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        print(f"[WARN] ワイドオッズ取得失敗 {venue_code}-R{race_no}: {e}")
+        return {}
+
+    return _parse_wide_odds(resp.text)
+
+
 def fetch_jockey_stats(jockey_id: str, timeout: int = 15) -> dict:
     """
     騎手の成績統計を取得する（今年の勝率・連対率等）
@@ -408,7 +431,6 @@ def _parse_schedule(soup: BeautifulSoup, date: datetime) -> list[dict]:
 def _parse_quinella_odds(text: str) -> dict:
     """馬連オッズのレスポンスをパースしてdictを返す"""
     odds = {}
-    # タブ区切り or カンマ区切りで馬番1,馬番2,オッズ の形式が多い
     for line in text.splitlines():
         parts = re.split(r'[\t,]', line.strip())
         if len(parts) >= 3:
@@ -416,6 +438,24 @@ def _parse_quinella_odds(text: str) -> dict:
                 h1, h2, o = int(parts[0]), int(parts[1]), float(parts[2])
                 key = f"{min(h1,h2)}-{max(h1,h2)}"
                 odds[key] = o
+            except (ValueError, IndexError):
+                continue
+    return odds
+
+
+def _parse_wide_odds(text: str) -> dict:
+    """ワイドオッズのレスポンスをパースしてdictを返す（最小払戻ベース）"""
+    odds = {}
+    for line in text.splitlines():
+        parts = re.split(r'[\t,]', line.strip())
+        # ワイドは「馬番1,馬番2,最小オッズ,最大オッズ」形式の場合がある
+        if len(parts) >= 3:
+            try:
+                h1, h2 = int(parts[0]), int(parts[1])
+                # 最小オッズを使用（安全側の期待値計算のため）
+                o_min = float(parts[2])
+                key = f"{min(h1,h2)}-{max(h1,h2)}"
+                odds[key] = o_min
             except (ValueError, IndexError):
                 continue
     return odds

@@ -13,12 +13,15 @@ from src.features.builder import get_feature_columns, build_quinella_features
 # 馬連の控除率（約77.5%が払い戻し）
 QUINELLA_RETURN_RATE = 0.775
 
-# 倍率帯ごとの設定
-TIERS = [
-    {"name": "中アナ",   "min": 10.0,  "max": 30.0,  "n": 2},
-    {"name": "大アナ",   "min": 31.0,  "max": 80.0,  "n": 2},
-    {"name": "穴",       "min": 81.0,  "max": 9999.0, "n": 1},
-]
+# 本命: 確率上位N点
+HONMEI_N = 2
+# 本命改_馬連: エッジ上位N点（期待値 > EDGE_THRESHOLD）
+HONMEI_KAI_UMAREN_N = 2
+EDGE_THRESHOLD = 1.0
+# 本命改_3連複: 上位N頭ボックス
+TOP_HORSES_N = 4
+# 本命改_ワイド: エッジ上位N点
+WIDE_N = 2
 
 
 def predict_race(
@@ -79,9 +82,16 @@ def get_recommendations(
     model: lgb.Booster,
     df_race: pd.DataFrame,
     live_odds: dict = None,
+    live_wide_odds: dict = None,
 ) -> pd.DataFrame:
     """
-    1レース分の推奨買い目を選出する（倍率帯別）
+    1レース分の推奨買い目を選出する
+
+    買い方:
+      本命        : 確率上位2点（馬連）
+      本命改_馬連 : エッジ上位2点（period × odds > 1.0）
+      本命改_3連複: 上位4頭ボックス4点
+      本命改_ワイド: エッジ上位2点（ワイド）
 
     Returns:
         DataFrame: 推奨買い目リスト
@@ -90,43 +100,98 @@ def get_recommendations(
     if predictions.empty:
         return pd.DataFrame()
 
-    used = set()
+    meta = {
+        "date": df_race["date"].iloc[0] if not df_race.empty else "",
+        "venue": df_race["venue"].iloc[0] if not df_race.empty else "",
+        "race_no": df_race["race_no"].iloc[0] if not df_race.empty else 0,
+    }
     recommended = []
 
-    for tier in TIERS:
-        candidates = predictions[
-            (predictions["odds_value"] >= tier["min"]) &
-            (predictions["odds_value"] <= tier["max"]) &
-            (~predictions["combination"].isin(used))
-        ].sort_values("prob", ascending=False)
+    def _row(tier, combo, prob, odds_disp, roi_disp, src_disp):
+        return {**meta, "tier": tier, "combination": combo,
+                "prob": prob, "odds": odds_disp,
+                "expected_roi": roi_disp, "odds_source": src_disp}
 
-        picked = candidates.head(tier["n"])
-        for _, rec in picked.iterrows():
-            used.add(rec["combination"])
-            src = rec["odds_source"]
-            odds_disp = f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(推定)"
-            recommended.append({
-                "date": df_race["date"].iloc[0] if not df_race.empty else "",
-                "venue": df_race["venue"].iloc[0] if not df_race.empty else "",
-                "race_no": df_race["race_no"].iloc[0] if not df_race.empty else 0,
-                "tier": tier["name"],
-                "combination": rec["combination"],
-                "prob": f"{rec['prob']*100:.2f}%",
-                "odds": odds_disp,
-                "expected_roi": f"{rec['expected_roi']*100:.0f}%",
-                "odds_source": "リアルタイム" if src == "live" else "推定",
-            })
+    def _fmt(rec):
+        src = rec["odds_source"]
+        odds_disp = f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(推定)"
+        src_disp = "リアルタイム" if src == "live" else "推定"
+        prob_disp = f"{rec['prob']*100:.2f}%"
+        roi_disp = f"{rec['expected_roi']*100:.0f}%"
+        return odds_disp, src_disp, prob_disp, roi_disp
+
+    # 1. 本命: 確率上位2点（馬連）
+    honmei_picks = predictions.head(HONMEI_N)
+    for _, rec in honmei_picks.iterrows():
+        odds_disp, src_disp, prob_disp, roi_disp = _fmt(rec)
+        recommended.append(_row("本命", rec["combination"], prob_disp, odds_disp, roi_disp, src_disp))
+
+    # 2. 本命改_馬連: エッジ上位2点（本命と重複なし）
+    honmei_combos = set(honmei_picks["combination"])
+    edge_candidates = (
+        predictions[
+            (predictions["expected_roi"] >= EDGE_THRESHOLD) &
+            (~predictions["combination"].isin(honmei_combos))
+        ]
+        .sort_values("expected_roi", ascending=False)
+    )
+    for _, rec in edge_candidates.head(HONMEI_KAI_UMAREN_N).iterrows():
+        odds_disp, src_disp, prob_disp, roi_disp = _fmt(rec)
+        recommended.append(_row("本命改_馬連", rec["combination"], prob_disp, odds_disp, roi_disp, src_disp))
+
+    # 3. 本命改_3連複: 上位4頭ボックス（C(4,3)=4点）
+    top_horses = _get_top_horses(predictions, n=TOP_HORSES_N)
+    for trio in combinations(sorted(top_horses), 3):
+        combo_str = f"{trio[0]}-{trio[1]}-{trio[2]}"
+        recommended.append(_row("本命改_3連複", combo_str, "-", "-", "-", "-"))
+
+    # 4. 本命改_ワイド: エッジ上位2点
+    if live_wide_odds:
+        wide_recs = _calc_wide_recs(predictions, live_wide_odds, n=WIDE_N)
+        for combo, w_odds, w_edge in wide_recs:
+            prob_val = predictions.loc[
+                predictions["combination"] == combo, "prob"
+            ].values
+            prob_disp = f"{prob_val[0]*100:.2f}%" if len(prob_val) else "-"
+            recommended.append(_row(
+                "本命改_ワイド", combo, prob_disp,
+                f"{w_odds}倍", f"{w_edge*100:.0f}%", "リアルタイム"
+            ))
 
     if not recommended:
-        return pd.DataFrame([{
-            "date": df_race["date"].iloc[0] if not df_race.empty else "",
-            "venue": df_race["venue"].iloc[0] if not df_race.empty else "",
-            "race_no": df_race["race_no"].iloc[0] if not df_race.empty else 0,
+        return pd.DataFrame([{**meta,
             "tier": "-", "combination": "見送り",
             "prob": "0%", "odds": "-", "expected_roi": "0%", "odds_source": "-",
         }])
 
     return pd.DataFrame(recommended)
+
+
+def _get_top_horses(predictions: pd.DataFrame, n: int = 4) -> list:
+    """確率上位の組み合わせから上位n頭を抽出する"""
+    seen: set = set()
+    horses: list = []
+    for _, row in predictions.iterrows():
+        for h in [int(row["horse1"]), int(row["horse2"])]:
+            if h not in seen:
+                seen.add(h)
+                horses.append(h)
+        if len(horses) >= n:
+            break
+    return horses[:n]
+
+
+def _calc_wide_recs(predictions: pd.DataFrame, live_wide_odds: dict, n: int = 2) -> list:
+    """ワイドオッズでエッジを計算し上位n点を返す [(combo, odds, edge), ...]"""
+    results = []
+    for _, row in predictions.iterrows():
+        combo = row["combination"]
+        if combo in live_wide_odds:
+            w_odds = live_wide_odds[combo]
+            edge = row["prob"] * w_odds
+            results.append((combo, w_odds, edge))
+    results.sort(key=lambda x: x[2], reverse=True)
+    return results[:n]
 
 
 def apply_training_filter(recs: pd.DataFrame, training_times: dict) -> pd.DataFrame:
@@ -171,10 +236,10 @@ def apply_training_filter(recs: pd.DataFrame, training_times: dict) -> pd.DataFr
     for _, rec in recs.iterrows():
         combo = rec.get("combination", "")
         parts = combo.split("-")
-        if len(parts) == 2:
+        if len(parts) >= 2:
             try:
-                g1, g2 = _grade(int(parts[0])), _grade(int(parts[1]))
-                evals.append(f"{g1}/{g2}")
+                grades = [_grade(int(p)) for p in parts]
+                evals.append("/".join(grades))
             except ValueError:
                 evals.append("-")
         else:
@@ -182,10 +247,10 @@ def apply_training_filter(recs: pd.DataFrame, training_times: dict) -> pd.DataFr
 
     recs["training_eval"] = evals
 
-    # 両馬がC評価 → 見送りに変更
+    # 全馬がC評価 → 見送りに変更
     def _is_both_c(ev: str) -> bool:
         parts = ev.split("/")
-        return len(parts) == 2 and all(p == "C" for p in parts)
+        return len(parts) >= 2 and all(p == "C" for p in parts)
 
     mask = recs["training_eval"].apply(_is_both_c)
     if mask.any():

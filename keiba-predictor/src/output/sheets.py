@@ -66,7 +66,7 @@ def append_prediction_row(
         sheet = spreadsheet.worksheet(sheet_name)
     except gspread.WorksheetNotFound:
         sheet = spreadsheet.add_worksheet(title=sheet_name, rows=500, cols=11)
-        headers = ["日付", "競馬場", "レース", "狙い", "馬連買い目", "的中確率", "オッズ", "期待回収率", "オッズ元", "追い切り"]
+        headers = ["日付", "競馬場", "レース", "狙い", "買い目", "的中確率", "オッズ", "期待回収率", "オッズ元", "追い切り"]
         _retry_api(lambda: sheet.update("A1", [headers]))
 
     cols = ["date", "venue", "race_no", "tier", "combination", "prob", "odds", "expected_roi", "odds_source", "training_eval"]
@@ -126,7 +126,7 @@ def update_result_row(
         pred_rows = [{"馬連買い目": "-", "的中確率": "-", "期待回収率": "-"}]
 
     for pr in pred_rows:
-        combo = pr.get("馬連買い目", pr.get("combination", "-"))
+        combo = pr.get("買い目", pr.get("馬連買い目", pr.get("combination", "-")))
         hit = "◎" if combo == actual_combo else "×"
         payout = quinella_payout if hit == "◎" else 0
         profit = payout - 100
