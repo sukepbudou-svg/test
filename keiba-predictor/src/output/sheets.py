@@ -65,11 +65,11 @@ def append_prediction_row(
     try:
         sheet = spreadsheet.worksheet(sheet_name)
     except gspread.WorksheetNotFound:
-        sheet = spreadsheet.add_worksheet(title=sheet_name, rows=500, cols=10)
-        headers = ["日付", "競馬場", "レース", "狙い", "馬連買い目", "的中確率", "オッズ", "期待回収率", "オッズ元"]
+        sheet = spreadsheet.add_worksheet(title=sheet_name, rows=500, cols=11)
+        headers = ["日付", "競馬場", "レース", "狙い", "馬連買い目", "的中確率", "オッズ", "期待回収率", "オッズ元", "追い切り"]
         _retry_api(lambda: sheet.update("A1", [headers]))
 
-    cols = ["date", "venue", "race_no", "tier", "combination", "prob", "odds", "expected_roi", "odds_source"]
+    cols = ["date", "venue", "race_no", "tier", "combination", "prob", "odds", "expected_roi", "odds_source", "training_eval"]
     values = [row.get(c, "-") for c in cols]
     _retry_api(lambda: sheet.append_row(values, value_input_option="RAW"))
 

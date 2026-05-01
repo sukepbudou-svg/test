@@ -185,6 +185,26 @@ def fetch_horse_past_results(horse_id: str, n: int = 5, timeout: int = 15) -> li
     return _parse_horse_results(soup, n)
 
 
+def fetch_training_times(race_id: str, timeout: int = 15) -> dict:
+    """
+    追い切りタイム（最終追い切り）を取得する
+
+    Returns:
+        {horse_no: {"time_3f": 38.5, "time_1f": 12.1, "track": "ウッド"}}
+    """
+    url = f"https://race.netkeiba.com/race/oikiri.html?race_id={race_id}"
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=timeout)
+        resp.raise_for_status()
+        resp.encoding = "EUC-JP"
+    except requests.RequestException as e:
+        print(f"[WARN] 追い切り取得失敗 {race_id}: {e}")
+        return {}
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    return _parse_training_times(soup)
+
+
 # ─── 内部パース関数 ───
 
 def _make_race_id(date: datetime, venue_code: str, race_no: int) -> str:
@@ -456,5 +476,59 @@ def _parse_horse_results(soup: BeautifulSoup, n: int) -> list[dict]:
             })
         except (ValueError, IndexError):
             continue
+
+    return results
+
+
+def _parse_training_times(soup: BeautifulSoup) -> dict:
+    """追い切りページをパース: 馬番ごとに最終追い切りの3F/1Fタイムを返す"""
+    result = {}
+
+    # netkeiba追い切りページのテーブルを探す
+    table = (soup.find("table", class_=re.compile(r'OikiTable|oikiri', re.I))
+             or soup.find("table", id=re.compile(r'oikiri', re.I)))
+    if not table:
+        for t in soup.find_all("table"):
+            if len(t.find_all("tr")) > 5:
+                table = t
+                break
+    if not table:
+        return result
+
+    seen = set()
+    for row in table.find_all("tr")[1:]:
+        cells = row.find_all("td")
+        if len(cells) < 5:
+            continue
+        try:
+            horse_no = None
+            for cell in cells[:3]:
+                t = cell.get_text(strip=True)
+                if t.isdigit() and 1 <= int(t) <= 18:
+                    horse_no = int(t)
+                    break
+            if horse_no is None or horse_no in seen:
+                continue
+            seen.add(horse_no)
+
+            track = ""
+            time_vals = []
+            for cell in cells:
+                t = cell.get_text(strip=True)
+                for tk in ["ウッド", "坂路", "ポリ", "芝", "ダート"]:
+                    if tk in t:
+                        track = tk
+                if re.match(r'^\d{2}\.\d$', t):
+                    time_vals.append(float(t))
+
+            time_3f = next((v for v in time_vals if 30 <= v <= 50), None)
+            time_1f = next((v for v in time_vals if 10 <= v <= 20), None)
+
+            if time_3f is not None or time_1f is not None:
+                result[horse_no] = {"time_3f": time_3f, "time_1f": time_1f, "track": track}
+        except (ValueError, IndexError):
+            continue
+
+    return result
 
     return results

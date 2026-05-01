@@ -148,7 +148,8 @@ def _predict_one_race(
     venue = race["venue"]
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 予想開始: {venue} {race_no}R")
 
-    from src.collector.scraper import fetch_jockey_stats, fetch_horse_past_results
+    from src.collector.scraper import fetch_jockey_stats, fetch_horse_past_results, fetch_training_times
+    from src.model.predictor import apply_training_filter
 
     # スケジュールから取得した正しいrace_idを使う
     race_id = race.get("race_id")
@@ -196,18 +197,27 @@ def _predict_one_race(
     # 予想生成
     recs = get_recommendations(model, df_race, live_odds)
 
+    # 追い切りタイムで評価・フィルタリング
+    training_times = fetch_training_times(race_id) if race_id else {}
+    if training_times:
+        print(f"  追い切りデータ: {len(training_times)}頭")
+    recs = apply_training_filter(recs, training_times)
+
     pred_rows = []
     date_str = today.strftime("%Y-%m-%d")
     for _, rec in recs.iterrows():
-        if rec.get("combination") in ("見送り", "-", ""):
+        combo = rec.get("combination", "")
+        if combo in ("見送り", "-", "") or combo.startswith("見送り"):
             continue
         row_dict = {**rec.to_dict(), "date": date_str, "venue": venue}
         append_prediction_row(spreadsheet_id, row_dict, credentials_path)
-        print(f"  → {rec['combination']} 確率:{rec['prob']} 期待回収率:{rec['expected_roi']}")
+        train_ev = rec.get("training_eval", "-")
+        print(f"  → {combo} 確率:{rec['prob']} 期待回収率:{rec['expected_roi']} 追い切り:{train_ev}")
         pred_rows.append({
-            "馬連買い目": rec.get("combination", ""),
+            "馬連買い目": combo,
             "的中確率": rec.get("prob", "-"),
             "期待回収率": rec.get("expected_roi", "-"),
+            "追い切り": train_ev,
         })
 
     if not pred_rows:

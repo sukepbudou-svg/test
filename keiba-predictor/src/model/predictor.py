@@ -127,3 +127,69 @@ def get_recommendations(
         }])
 
     return pd.DataFrame(recommended)
+
+
+def apply_training_filter(recs: pd.DataFrame, training_times: dict) -> pd.DataFrame:
+    """
+    追い切りタイムで推奨買い目を評価する
+
+    フィールド内3Fタイム順位で評価:
+      A = 上位1/3（速い）
+      B = 中位1/3
+      C = 下位1/3（遅い）
+      ? = データなし
+
+    両馬がCの場合は見送りに変更する
+    """
+    recs = recs.copy()
+    if not training_times:
+        recs["training_eval"] = "-"
+        return recs
+
+    # 3Fタイムのある馬だけでランク付け（小さいほど速い＝良い）
+    times = {hn: d["time_3f"] for hn, d in training_times.items()
+             if d.get("time_3f") is not None}
+    if not times:
+        recs["training_eval"] = "-"
+        return recs
+
+    sorted_horses = sorted(times, key=lambda h: times[h])
+    n = len(sorted_horses)
+    rank_map = {hn: i for i, hn in enumerate(sorted_horses)}
+
+    def _grade(horse_no: int) -> str:
+        if horse_no not in rank_map:
+            return "?"
+        r = rank_map[horse_no]
+        if r < n / 3:
+            return "A"
+        elif r < 2 * n / 3:
+            return "B"
+        return "C"
+
+    evals = []
+    for _, rec in recs.iterrows():
+        combo = rec.get("combination", "")
+        parts = combo.split("-")
+        if len(parts) == 2:
+            try:
+                g1, g2 = _grade(int(parts[0])), _grade(int(parts[1]))
+                evals.append(f"{g1}/{g2}")
+            except ValueError:
+                evals.append("-")
+        else:
+            evals.append("-")
+
+    recs["training_eval"] = evals
+
+    # 両馬がC評価 → 見送りに変更
+    def _is_both_c(ev: str) -> bool:
+        parts = ev.split("/")
+        return len(parts) == 2 and all(p == "C" for p in parts)
+
+    mask = recs["training_eval"].apply(_is_both_c)
+    if mask.any():
+        recs.loc[mask, "combination"] = "見送り(追い切り不調)"
+        recs.loc[mask, "tier"] = "-"
+
+    return recs
