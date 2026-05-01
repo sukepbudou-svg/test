@@ -61,14 +61,16 @@ def cmd_auto():
     run_auto(spreadsheet_id, credentials_path)
 
 
-def cmd_test_one():
+def cmd_test_one(race_id_arg: str = None):
     """次の1レースだけ予想してスプレッドシートに書き込む（動作確認用）"""
     import time
-    from datetime import datetime, timedelta
+    from datetime import datetime
+    import requests
     from src.collector.scraper import (
         fetch_today_schedule, fetch_race_card,
         fetch_odds_quinella, fetch_odds_wide,
         fetch_jockey_stats, fetch_horse_past_results, fetch_training_times,
+        VENUE_CODES, HEADERS,
     )
     from src.features.builder import build_race_features
     from src.model.trainer import load_model
@@ -89,39 +91,63 @@ def cmd_test_one():
         print("[ERROR] モデルが見つかりません。先に --mode train を実行してください")
         return
 
-    schedule = fetch_today_schedule(today)
-    if not schedule:
-        print("[ERROR] 本日の開催情報が取得できませんでした（開催なしの可能性）")
-        return
+    # race_id直接指定の場合はスケジュール取得をスキップ
+    if race_id_arg:
+        venue_code = race_id_arg[4:6]
+        race_no = int(race_id_arg[10:12])
+        venue = VENUE_CODES.get(venue_code, "不明")
+        race_id = race_id_arg
+        print(f"[指定] race_id={race_id} → {venue} {race_no}R\n")
+    else:
+        # スケジュール取得
+        date_str = today.strftime('%Y%m%d')
+        schedule_url = f"https://race.netkeiba.com/top/race_list.html?kaisai_date={date_str}"
+        print(f"スケジュール取得中: {schedule_url}")
+        schedule = fetch_today_schedule(today)
 
-    # 発走時刻が取れているレースのみ対象にして次のレースを探す
-    now = today
-    target = None
-    for r in schedule:
-        t_str = r.get("scheduled_time")
-        if not t_str:
-            continue
-        try:
-            hh, mm = map(int, t_str.split(":"))
-            dt = datetime(today.year, today.month, today.day, hh, mm)
-        except (ValueError, AttributeError):
-            continue
-        if dt > now:
-            target = {**r, "scheduled_dt": dt}
+        if not schedule:
+            print("[ERROR] 本日の開催情報が取得できませんでした")
+            print("  考えられる原因:")
+            print("  1. 早朝のためスケジュールがまだ公開されていない（9時以降に再試行）")
+            print("  2. 本日は開催なし")
+            print("  3. ネットワークエラー")
+            print()
+            print("  race_idを直接指定して実行することもできます:")
+            print("  python main.py --mode test_one --race-id 202605020511")
+            return
+
+        print(f"スケジュール取得: {len(schedule)}レース")
+        for r in schedule[:5]:
+            print(f"  {r.get('venue')} {r.get('race_no')}R  {r.get('scheduled_time','--:--')}  race_id={r.get('race_id')}")
+        if len(schedule) > 5:
+            print(f"  ... 他{len(schedule)-5}レース")
+        print()
+
+        # 発走時刻が未来のレースを探す（時刻なしも含めて最初の1つを選ぶ）
+        target = None
+        now = today
+        for r in schedule:
+            t_str = r.get("scheduled_time")
+            if t_str:
+                try:
+                    hh, mm = map(int, t_str.split(":"))
+                    dt = datetime(today.year, today.month, today.day, hh, mm)
+                    if dt <= now:
+                        continue  # 発走済みはスキップ
+                except (ValueError, AttributeError):
+                    pass
+            target = r
             break
 
-    if not target:
-        print("[INFO] 本日の残りレースが見つかりませんでした")
-        print(f"  取得できたレース数: {len(schedule)}")
-        for r in schedule[:5]:
-            print(f"  {r.get('venue')} {r.get('race_no')}R {r.get('scheduled_time','--:--')}")
-        return
+        if not target:
+            print("[INFO] 本日の未発走レースが見つかりませんでした（全レース発走済みの可能性）")
+            return
 
-    venue_code = target["venue_code"]
-    race_no = target["race_no"]
-    venue = target["venue"]
-    race_id = target.get("race_id")
-    print(f"対象: {venue} {race_no}R (発走 {target.get('scheduled_time')} / race_id={race_id})\n")
+        venue_code = target["venue_code"]
+        race_no = target["race_no"]
+        venue = target["venue"]
+        race_id = target.get("race_id")
+        print(f"対象: {venue} {race_no}R (発走 {target.get('scheduled_time','--:--')} / race_id={race_id})\n")
 
     # 出馬表
     card = fetch_race_card(today, venue_code, race_no, race_id=race_id)
@@ -232,6 +258,10 @@ if __name__ == "__main__":
         choices=["train", "auto", "predict", "test_one"],
         help="実行モード: train=学習 / auto=自動予想 / predict=本日予想表示 / test_one=次の1レースだけ予想",
     )
+    parser.add_argument(
+        "--race-id", default=None,
+        help="test_one用: 予想するレースのrace_id（例: 202605020511）",
+    )
     args = parser.parse_args()
 
     if args.mode == "train":
@@ -241,4 +271,4 @@ if __name__ == "__main__":
     elif args.mode == "predict":
         cmd_predict()
     elif args.mode == "test_one":
-        cmd_test_one()
+        cmd_test_one(race_id_arg=args.race_id)
