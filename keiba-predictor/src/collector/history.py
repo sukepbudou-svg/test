@@ -1,13 +1,14 @@
 """
 JRA過去レース成績一括取得モジュール
-JRA公式データファイル（seiseki.jra.go.jp）から学習用データを収集する
+netkeibaから学習用データを収集する
 """
 
 import re
 import time
+from collections import defaultdict
 from datetime import datetime, timedelta
-from pathlib import Path
 from itertools import combinations
+from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
@@ -23,32 +24,32 @@ HEADERS = {
     )
 }
 
-DATA_DIR = Path(__file__).parent.parent.parent / "data" / "raw"
 GRADE_NUM = {"G1": 5, "G2": 4, "G3": 3, "L": 2, "OP": 2, "一般": 1}
 
 
 def fetch_history(months: int = 3, interval: float = 1.0) -> pd.DataFrame:
-    """
-    過去n月分のJRAレース成績を取得して学習用DataFrameを返す
-    """
+    """過去n月分のJRAレース成績を取得して学習用DataFrameを返す"""
     today = datetime.now()
     target_dates = _get_race_dates(today, months)
     print(f"=== 過去データ取得開始: {len(target_dates)}日分（土日） ===")
 
-    all_records = []
+    all_combo_records = []
+    all_raw_records = []
     for i, date in enumerate(target_dates):
         print(f"[{i+1}/{len(target_dates)}] {date.strftime('%Y-%m-%d')} 取得中...")
-        records = _fetch_day(date, interval)
-        if records:
-            all_records.extend(records)
-            print(f"  → {len(records)}組み合わせ取得")
+        combos, raw = _fetch_day(date, interval)
+        if combos:
+            all_combo_records.extend(combos)
+            all_raw_records.extend(raw)
+            print(f"  → {len(combos)}組み合わせ取得")
         time.sleep(interval)
 
-    if not all_records:
+    if not all_combo_records:
         print("[WARN] データが取得できませんでした")
         return pd.DataFrame()
 
-    df = pd.DataFrame(all_records)
+    print("  騎手・馬の過去成績を計算中...")
+    df = _build_enriched_df(all_combo_records, all_raw_records)
     print(f"=== 取得完了: {len(df)}組み合わせ / 的中率:{df['result'].mean()*100:.2f}% ===")
     return df
 
@@ -65,33 +66,28 @@ def _get_race_dates(today: datetime, months: int) -> list[datetime]:
     return list(reversed(dates))
 
 
-def _fetch_day(date: datetime, interval: float) -> list[dict]:
-    """1日分の全レース結果を取得する"""
+def _fetch_day(date: datetime, interval: float) -> tuple[list, list]:
+    """1日分の全レース結果を取得する。(combo_records, raw_horse_records)を返す"""
     date_str = date.strftime("%Y%m%d")
     race_links = _fetch_netkeiba_race_list(date_str)
-
     if not race_links:
         print(f"  [INFO] {date_str} 開催なし（またはデータ未取得）")
-        return []
+        return [], []
 
-    records = []
+    all_combos, all_raw = [], []
     for link_info in race_links:
-        r = _fetch_race_result(link_info, date)
-        if r:
-            records.extend(r)
+        combos, raw = _fetch_race_result(link_info, date)
+        all_combos.extend(combos)
+        all_raw.extend(raw)
         time.sleep(interval)
-
-    return records
+    return all_combos, all_raw
 
 
 def _fetch_netkeiba_race_list(date_str: str) -> list[dict]:
     """netkeibaからrace_idリストを取得する"""
     urls = [
-        # db.netkeiba.com 日付別レース一覧（最も安定）
         f"https://db.netkeiba.com/race/list/{date_str}/",
-        # race.netkeiba.com トップページのリスト
         f"https://race.netkeiba.com/top/race_list_2.html?kaisai_date={date_str}",
-        # Yahoo競馬
         f"https://keiba.yahoo.co.jp/race/list/{date_str}/",
     ]
 
@@ -109,11 +105,9 @@ def _fetch_netkeiba_race_list(date_str: str) -> list[dict]:
                     ids_found.add(m.group(1))
                 for m in re.finditer(r'/race/(\d{10,12})/', text):
                     rid = m.group(1)
-                    # 日付一致チェック（race_idの先頭4桁=年）
                     if rid.startswith(date_str[:4]):
                         ids_found.add(rid)
                 if ids_found:
-                    # 有効なJRA race_idのみ残す（12桁: venue=01-10, race_no=01-12）
                     valid = []
                     for rid in sorted(ids_found):
                         if len(rid) == 12:
@@ -131,11 +125,11 @@ def _fetch_netkeiba_race_list(date_str: str) -> list[dict]:
     return []
 
 
-def _fetch_race_result(link_info: dict, date: datetime) -> list[dict]:
-    """1レース分の結果を取得して馬連組み合わせレコードを返す"""
+def _fetch_race_result(link_info: dict, date: datetime) -> tuple[list, list]:
+    """1レース分の結果を取得する。(combo_records, raw_horse_records)を返す"""
     race_id = link_info.get("race_id")
     if not race_id:
-        return []
+        return [], []
 
     url = f"https://db.netkeiba.com/race/{race_id}/"
     try:
@@ -144,51 +138,52 @@ def _fetch_race_result(link_info: dict, date: datetime) -> list[dict]:
         soup = BeautifulSoup(resp.text, "html.parser")
     except requests.RequestException as e:
         print(f"    [SKIP] {race_id}: {e}")
-        return []
+        return [], []
 
-    records = _parse_result_to_records(soup, race_id, date)
-    if records:
-        winner_combo = next((r["combination"] for r in records if r["result"] == 1), "-")
-        print(f"    {race_id}: {len(records)}通り 馬連={winner_combo}")
+    combos, raw = _parse_result_to_records(soup, race_id, date)
+    if combos:
+        winner = next((r["combination"] for r in combos if r["result"] == 1), "-")
+        print(f"    {race_id}: {len(combos)}通り 馬連={winner}")
     else:
         print(f"    {race_id}: パース失敗")
-    return records
+    return combos, raw
 
 
-def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) -> list[dict]:
-    """レース結果ページをパースして馬連組み合わせレコードを生成する"""
+def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) -> tuple[list, list]:
+    """レース結果ページをパースして (combo_records, raw_horse_records) を返す"""
 
     # レース情報
-    race_info_el = soup.find(class_="race_otherdata") or soup.find("div", class_=re.compile(r'data_intro'))
-    grade = "一般"
-    surface = "芝"
-    distance = 2000
-    condition = "良"
-    weather = "晴"
-
+    race_info_el = (soup.find(class_="race_otherdata")
+                    or soup.find("div", class_=re.compile(r'data_intro')))
+    grade, surface, distance, condition, weather = "一般", "芝", 2000, "良", "晴"
     if race_info_el:
-        text = race_info_el.get_text()
-        m = re.search(r'(芝|ダート)\s*(\d{3,4})', text)
+        t = race_info_el.get_text()
+        m = re.search(r'(芝|ダート)\s*(\d{3,4})', t)
         if m:
             surface = m.group(1)
             distance = int(m.group(2))
         for g in ["G1", "G2", "G3", "オープン", "OP"]:
-            if g in text:
+            if g in t:
                 grade = g.replace("オープン", "OP")
                 break
         for c in ["不良", "重", "稍重", "良"]:
-            if c in text:
+            if c in t:
                 condition = c
                 break
         for w in ["雨", "曇", "晴"]:
-            if w in text:
+            if w in t:
                 weather = w
                 break
+
+    grade_num = GRADE_NUM.get(grade, 1)
+    condition_num = CONDITION_NUM.get(condition, 4)
+    surface_num = SURFACE_NUM.get(surface, 1)
+    weather_num = {"晴": 3, "曇": 2, "雨": 1}.get(weather, 3)
 
     # 着順テーブル
     table = soup.find("table", class_=re.compile(r'race_table_01|Shutuba_HorseList'))
     if not table:
-        return []
+        return [], []
 
     horse_data = {}
     for row in table.find_all("tr")[1:]:
@@ -203,9 +198,23 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
                 continue
             horse_no = int(horse_no_text)
 
-            weight = 55.0
-            horse_weight = 480
-            weight_diff = 0
+            # 馬名・馬ID（リンクから取得）
+            horse_name, horse_id = "", ""
+            h_link = row.find("a", href=re.compile(r'/horse/'))
+            if h_link:
+                horse_name = h_link.get_text(strip=True)
+                m = re.search(r'/horse/(\d+)', h_link.get("href", ""))
+                horse_id = m.group(1) if m else ""
+
+            # 騎手・騎手ID（リンクから取得）
+            jockey, jockey_id = "", ""
+            j_link = row.find("a", href=re.compile(r'/jockey/'))
+            if j_link:
+                jockey = j_link.get_text(strip=True)
+                m = re.search(r'/jockey/(\w+)', j_link.get("href", ""))
+                jockey_id = m.group(1) if m else ""
+
+            weight, horse_weight, weight_diff = 55.0, 480, 0
             for cell in cells:
                 t = cell.get_text(strip=True)
                 if re.match(r'^\d{2}\.\d$', t):
@@ -217,6 +226,10 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
 
             horse_data[horse_no] = {
                 "rank": rank,
+                "horse_name": horse_name,
+                "horse_id": horse_id,
+                "jockey": jockey,
+                "jockey_id": jockey_id,
                 "weight": weight,
                 "horse_weight": horse_weight,
                 "weight_diff": weight_diff,
@@ -225,45 +238,55 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
             continue
 
     if len(horse_data) < 2:
-        return []
+        return [], []
 
-    # 1着・2着を確認
     ranked = {v["rank"]: k for k, v in horse_data.items() if v["rank"] <= 2}
     if 1 not in ranked or 2 not in ranked:
-        return []
-    winner = ranked[1]
-    second = ranked[2]
+        return [], []
+    winner, second = ranked[1], ranked[2]
     winning_combo = f"{min(winner, second)}-{max(winner, second)}"
 
-    # 払戻取得
+    # 払戻
     quinella_payout = 0
     text = soup.get_text()
     m = re.search(r'馬連[^\d]*(\d[\d,]+)', text)
     if m:
         quinella_payout = int(m.group(1).replace(",", ""))
 
-    # 特徴量
-    grade_num = GRADE_NUM.get(grade, 1)
-    condition_num = CONDITION_NUM.get(condition, 4)
-    surface_num = SURFACE_NUM.get(surface, 1)
-    weather_num = {"晴": 3, "曇": 2, "雨": 1}.get(weather, 3)
+    date_str = date.strftime("%Y-%m-%d")
 
-    records = []
-    horse_nos = sorted(horse_data.keys())
-    for h1, h2 in combinations(horse_nos, 2):
+    # 馬別生データ（ローリング集計用）
+    raw_records = [
+        {
+            "date": date_str,
+            "race_id": race_id,
+            "horse_no": hn,
+            "horse_name": hd["horse_name"],
+            "jockey": hd["jockey"],
+            "rank": hd["rank"],
+            "surface_num": surface_num,
+            "distance": distance,
+        }
+        for hn, hd in horse_data.items()
+    ]
+
+    # 馬連コンボレコード
+    combo_records = []
+    for h1, h2 in combinations(sorted(horse_data.keys()), 2):
         combo = f"{h1}-{h2}"
-        result = 1 if combo == winning_combo else 0
-        d1 = horse_data[h1]
-        d2 = horse_data[h2]
-
-        records.append({
-            "date": date.strftime("%Y-%m-%d"),
+        d1, d2 = horse_data[h1], horse_data[h2]
+        combo_records.append({
+            "date": date_str,
             "race_id": race_id,
             "combination": combo,
             "horse1": h1,
             "horse2": h2,
-            "result": result,
-            "quinella_payout": quinella_payout if result == 1 else 0,
+            "horse_name1": d1["horse_name"],
+            "horse_name2": d2["horse_name"],
+            "jockey1": d1["jockey"],
+            "jockey2": d2["jockey"],
+            "result": 1 if combo == winning_combo else 0,
+            "quinella_payout": quinella_payout if combo == winning_combo else 0,
             "grade_num": grade_num,
             "condition_num": condition_num,
             "weather_num": weather_num,
@@ -275,7 +298,7 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
             "h1_jockey_win_rate": 0.15,
             "h1_jockey_top2_rate": 0.30,
             "h1_jockey_top3_rate": 0.45,
-            "h1_past_avg_rank": 6.0,
+            "h1_past_avg_rank": 8.0,
             "h1_past_win_rate": 0.10,
             "h1_past_top3_rate": 0.30,
             "h1_same_cond_rate": 0.30,
@@ -286,7 +309,7 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
             "h2_jockey_win_rate": 0.15,
             "h2_jockey_top2_rate": 0.30,
             "h2_jockey_top3_rate": 0.45,
-            "h2_past_avg_rank": 6.0,
+            "h2_past_avg_rank": 8.0,
             "h2_past_win_rate": 0.10,
             "h2_past_top3_rate": 0.30,
             "h2_same_cond_rate": 0.30,
@@ -298,7 +321,7 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
             "diff_jockey_top3_rate": 0.0,
             "sum_jockey_top3_rate": 0.90,
             "diff_past_avg_rank": 0.0,
-            "sum_past_avg_rank": 12.0,
+            "sum_past_avg_rank": 16.0,
             "diff_past_win_rate": 0.0,
             "sum_past_win_rate": 0.20,
             "diff_past_top3_rate": 0.0,
@@ -315,4 +338,108 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
             "sum_weight_diff": d1["weight_diff"] + d2["weight_diff"],
         })
 
-    return records
+    return combo_records, raw_records
+
+
+def _build_enriched_df(combo_records: list, raw_records: list) -> pd.DataFrame:
+    """コンボレコードに騎手・馬のローリング過去成績を付与する（データリークなし）"""
+    df = pd.DataFrame(combo_records)
+    if not raw_records:
+        return df
+
+    df_raw = (pd.DataFrame(raw_records)
+              .sort_values(["date", "race_id", "horse_no"])
+              .reset_index(drop=True))
+
+    # ── 騎手スタッツをローリング計算（5戦以上で実績値、それ未満はデフォルト）──
+    jockey_stats: dict[tuple, dict] = {}
+    jockey_acc: dict[str, dict] = defaultdict(lambda: {"w": 0, "t2": 0, "t3": 0, "n": 0})
+
+    for _, r in df_raw.iterrows():
+        j, d = r["jockey"], r["date"]
+        if not j:
+            continue
+        acc = jockey_acc[j]
+        n = acc["n"]
+        jockey_stats[(d, j)] = {
+            "win_rate":  acc["w"]  / n if n >= 5 else 0.15,
+            "top2_rate": acc["t2"] / n if n >= 5 else 0.30,
+            "top3_rate": acc["t3"] / n if n >= 5 else 0.45,
+        }
+        acc["w"]  += 1 if r["rank"] == 1 else 0
+        acc["t2"] += 1 if r["rank"] <= 2 else 0
+        acc["t3"] += 1 if r["rank"] <= 3 else 0
+        acc["n"]  += 1
+
+    # ── 馬スタッツをローリング計算 ──
+    horse_stats: dict[tuple, dict] = {}
+    horse_acc: dict[str, list] = defaultdict(list)
+
+    for _, r in df_raw.iterrows():
+        h, d = r["horse_name"], r["date"]
+        if not h:
+            continue
+        past = horse_acc[h]
+        if past:
+            past_ranks = [p for p in past if p < 99]
+            avg_rank   = sum(past_ranks) / len(past_ranks) if past_ranks else 8.0
+            win_rate   = sum(1 for p in past if p == 1) / len(past)
+            top3_rate  = sum(1 for p in past if p <= 3) / len(past)
+            recent     = past[-3:]
+            recent_form = sum(1 for p in recent if p <= 3)
+            # 同条件（馬場×距離±200m）での3着以内率
+            same_cond = [
+                p for p, s, dist in zip(
+                    horse_acc[h + "_ranks"],
+                    horse_acc[h + "_surface"],
+                    horse_acc[h + "_dist"],
+                )
+                if s == r["surface_num"] and abs(dist - r["distance"]) <= 200
+            ] if (h + "_ranks") in horse_acc else []
+            same_cond_rate = (sum(1 for p in same_cond if p <= 3) / len(same_cond)
+                              if same_cond else 0.30)
+        else:
+            avg_rank, win_rate, top3_rate, recent_form, same_cond_rate = 8.0, 0.10, 0.30, 1, 0.30
+
+        horse_stats[(d, h)] = {
+            "avg_rank": avg_rank,
+            "win_rate": win_rate,
+            "top3_rate": top3_rate,
+            "recent_form": recent_form,
+            "same_cond_rate": same_cond_rate,
+        }
+        past.append(r["rank"])
+        horse_acc[h + "_ranks"].append(r["rank"])
+        horse_acc[h + "_surface"].append(r["surface_num"])
+        horse_acc[h + "_dist"].append(r["distance"])
+
+    # ── DataFrameに反映 ──
+    _DJ = {"win_rate": 0.15, "top2_rate": 0.30, "top3_rate": 0.45}
+    _DH = {"avg_rank": 8.0, "win_rate": 0.10, "top3_rate": 0.30,
+           "recent_form": 1, "same_cond_rate": 0.30}
+
+    dates = df["date"].tolist()
+    j1 = df.get("jockey1", pd.Series([""] * len(df))).tolist()
+    j2 = df.get("jockey2", pd.Series([""] * len(df))).tolist()
+    h1 = df.get("horse_name1", pd.Series([""] * len(df))).tolist()
+    h2 = df.get("horse_name2", pd.Series([""] * len(df))).tolist()
+
+    for stat, defval in [("win_rate", 0.15), ("top2_rate", 0.30), ("top3_rate", 0.45)]:
+        v1 = [jockey_stats.get((d, j), _DJ)[stat] for d, j in zip(dates, j1)]
+        v2 = [jockey_stats.get((d, j), _DJ)[stat] for d, j in zip(dates, j2)]
+        df[f"h1_jockey_{stat}"] = v1
+        df[f"h2_jockey_{stat}"] = v2
+        df[f"diff_jockey_{stat}"] = [a - b for a, b in zip(v1, v2)]
+        df[f"sum_jockey_{stat}"]  = [a + b for a, b in zip(v1, v2)]
+
+    for stat, defval in [("avg_rank", 8.0), ("win_rate", 0.10), ("top3_rate", 0.30),
+                         ("recent_form", 1), ("same_cond_rate", 0.30)]:
+        col = "same_cond_rate" if stat == "same_cond_rate" else f"past_{stat}" if stat != "recent_form" else "recent_form"
+        v1 = [horse_stats.get((d, h), _DH)[stat] for d, h in zip(dates, h1)]
+        v2 = [horse_stats.get((d, h), _DH)[stat] for d, h in zip(dates, h2)]
+        df[f"h1_{col}"] = v1
+        df[f"h2_{col}"] = v2
+        df[f"diff_{col}"] = [a - b for a, b in zip(v1, v2)]
+        df[f"sum_{col}"]  = [a + b for a, b in zip(v1, v2)]
+
+    return df

@@ -247,11 +247,31 @@ def _parse_race_card(soup: BeautifulSoup, date: datetime, venue_code: str, race_
                 continue
             horse_no = int(horse_no_text)
 
+            # 馬名・馬ID
+            horse_name, horse_id = "", ""
             horse_name_el = row.find(class_=re.compile(r'HorseName|horse_name', re.I))
-            horse_name = horse_name_el.get_text(strip=True) if horse_name_el else ""
+            if horse_name_el:
+                horse_name = horse_name_el.get_text(strip=True)
+                h_link = horse_name_el.find("a", href=True) or row.find("a", href=re.compile(r'/horse/'))
+            else:
+                h_link = row.find("a", href=re.compile(r'/horse/'))
+            if h_link:
+                if not horse_name:
+                    horse_name = h_link.get_text(strip=True)
+                m = re.search(r'/horse/(\d+)', h_link.get("href", ""))
+                horse_id = m.group(1) if m else ""
 
+            # 騎手・騎手ID
+            jockey, jockey_id = "", ""
             jockey_el = row.find(class_=re.compile(r'Jockey|jockey', re.I))
-            jockey = jockey_el.get_text(strip=True) if jockey_el else ""
+            if jockey_el:
+                jockey = jockey_el.get_text(strip=True)
+            j_link = row.find("a", href=re.compile(r'/jockey/'))
+            if j_link:
+                if not jockey:
+                    jockey = j_link.get_text(strip=True)
+                m = re.search(r'/jockey/(\w+)', j_link.get("href", ""))
+                jockey_id = m.group(1) if m else ""
 
             # 斤量
             weight_text = ""
@@ -265,7 +285,9 @@ def _parse_race_card(soup: BeautifulSoup, date: datetime, venue_code: str, race_
             result["horses"].append({
                 "horse_no": horse_no,
                 "horse_name": horse_name,
+                "horse_id": horse_id,
                 "jockey": jockey,
+                "jockey_id": jockey_id,
                 "weight": weight,
             })
         except (ValueError, IndexError):

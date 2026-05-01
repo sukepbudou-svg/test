@@ -148,6 +148,8 @@ def _predict_one_race(
     venue = race["venue"]
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 予想開始: {venue} {race_no}R")
 
+    from src.collector.scraper import fetch_jockey_stats, fetch_horse_past_results
+
     # スケジュールから取得した正しいrace_idを使う
     race_id = race.get("race_id")
 
@@ -157,8 +159,33 @@ def _predict_one_race(
         print(f"  [WARN] 出馬表取得失敗: {venue} {race_no}R")
         return []
 
-    # 特徴量生成
-    df_race = build_race_features(card)
+    # 騎手成績・馬の過去成績を取得
+    jockey_stats = {}
+    horse_histories = {}
+    for horse in card["horses"]:
+        jockey     = horse.get("jockey", "")
+        jockey_id  = horse.get("jockey_id", "")
+        horse_name = horse.get("horse_name", "")
+        horse_id   = horse.get("horse_id", "")
+
+        if jockey_id and jockey and jockey not in jockey_stats:
+            stats = fetch_jockey_stats(jockey_id)
+            if stats:
+                jockey_stats[jockey] = stats
+            time.sleep(0.5)
+
+        if horse_id and horse_name and horse_name not in horse_histories:
+            history = fetch_horse_past_results(horse_id, n=5)
+            if history:
+                horse_histories[horse_name] = history
+            time.sleep(0.5)
+
+    print(f"  騎手:{len(jockey_stats)}名 馬:{len(horse_histories)}頭 の成績取得完了")
+
+    # 特徴量生成（騎手・馬の実績を渡す）
+    df_race = build_race_features(card,
+                                  jockey_stats=jockey_stats or None,
+                                  horse_histories=horse_histories or None)
     if df_race.empty:
         print(f"  [WARN] 特徴量生成失敗: {venue} {race_no}R")
         return []
