@@ -253,17 +253,45 @@ def cmd_predict():
 
 def cmd_debug():
     """スケジュール取得の診断を行う"""
+    import re
+    import requests
     from datetime import datetime
-    from src.collector.scraper import fetch_today_schedule
+    from src.collector.scraper import HEADERS
+
     today = datetime.now()
-    print(f"=== スケジュール診断: {today.strftime('%Y-%m-%d')} ===\n")
-    schedule = fetch_today_schedule(today)
-    if schedule:
-        print(f"\n取得成功: {len(schedule)}レース")
-        for r in schedule:
-            print(f"  {r['venue']} {r['race_no']}R  {r.get('scheduled_time','--:--')}  {r['race_id']}")
-    else:
-        print("\n[結果] スケジュール取得できませんでした")
+    date_str = today.strftime("%Y%m%d")
+    print(f"=== スケジュール診断: {date_str} ===\n")
+
+    urls = [
+        f"https://race.netkeiba.com/top/race_list.html?kaisai_date={date_str}",
+        f"https://db.netkeiba.com/race/list/{date_str}/",
+        f"https://keiba.yahoo.co.jp/race/list/{date_str}/",
+    ]
+
+    for url in urls:
+        print(f"--- {url} ---")
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=15)
+            print(f"  HTTP: {resp.status_code}  長さ: {len(resp.text)}文字")
+            for enc in ["EUC-JP", "utf-8"]:
+                resp.encoding = enc
+                text = resp.text
+                # 数字列のパターンを幅広く検索
+                ids_8  = re.findall(r'\d{8}', text)
+                ids_10 = re.findall(r'\d{10}', text)
+                ids_12 = re.findall(r'\d{12}', text)
+                print(f"  [{enc}] 8桁:{len(ids_8)}件 10桁:{len(ids_10)}件 12桁:{len(ids_12)}件")
+                if ids_12:
+                    print(f"    12桁の例: {ids_12[:5]}")
+                elif ids_10:
+                    print(f"    10桁の例: {ids_10[:5]}")
+            # ページ先頭200文字を表示
+            resp.encoding = "EUC-JP"
+            snippet = resp.text[:300].replace("\n", " ").replace("\r", "")
+            print(f"  先頭300字: {snippet}")
+        except Exception as e:
+            print(f"  エラー: {e}")
+        print()
 
 
 if __name__ == "__main__":
