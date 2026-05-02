@@ -382,7 +382,7 @@ def _parse_race_card(soup: BeautifulSoup, date: datetime, venue_code: str, race_
                 m = re.search(r'/horse/(\d{6,})', href)
                 if m:
                     horse_id = m.group(1)
-                    horse_name = a.get_text(strip=True)
+                    horse_name = a.get("title") or a.get_text(strip=True)
                     break
 
             # 騎手・騎手ID
@@ -394,7 +394,7 @@ def _parse_race_card(soup: BeautifulSoup, date: datetime, venue_code: str, race_
             if j_link:
                 if not jockey:
                     jockey = j_link.get_text(strip=True)
-                m = re.search(r'/jockey/(\w+)', j_link.get("href", ""))
+                m = re.search(r'/jockey/(?:result/recent/)?(\d+)', j_link.get("href", ""))
                 jockey_id = m.group(1) if m else ""
 
             # 斤量・馬体重・増減・単勝オッズ
