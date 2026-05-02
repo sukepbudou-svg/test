@@ -109,51 +109,31 @@ def fetch_today_schedule(date: datetime = None, timeout: int = 15) -> list[dict]
         date = datetime.now()
 
     date_str = date.strftime("%Y%m%d")
-    urls = [
-        f"https://race.netkeiba.com/top/race_list.html?kaisai_date={date_str}",
-        f"https://db.netkeiba.com/race/list/{date_str}/",
-        f"https://race.netkeiba.com/top/race_list_2.html?kaisai_date={date_str}",
-    ]
 
-    for url in urls:
-        try:
-            resp = requests.get(url, headers=HEADERS, timeout=timeout)
-            print(f"  [DEBUG] {url[:70]} → HTTP{resp.status_code}")
-            if resp.status_code != 200:
-                continue
-            for enc in ["EUC-JP", "utf-8"]:
-                resp.encoding = enc
-                text = resp.text
-                ids_found = set()
-                for m in re.finditer(r'race_id=(\d{10,12})', text):
-                    ids_found.add(m.group(1))
-                for m in re.finditer(r'/race/(\d{10,12})/', text):
-                    rid = m.group(1)
-                    if rid.startswith(date_str[:4]):
-                        ids_found.add(rid)
-                print(f"  [DEBUG] {enc}: {len(ids_found)}件のrace_id候補")
-                if not ids_found:
-                    continue
-                valid = []
-                for rid in sorted(ids_found):
-                    if len(rid) < 10:
-                        continue
-                    venue_code = rid[4:6]
-                    race_no_str = rid[10:12] if len(rid) >= 12 else rid[8:10]
-                    try:
-                        if 1 <= int(venue_code) <= 10 and 1 <= int(race_no_str) <= 12:
-                            valid.append(rid)
-                    except ValueError:
-                        continue
-                print(f"  [DEBUG] 有効race_id: {len(valid)}件 例:{valid[:3]}")
+    # Yahoo競馬の静的HTMLから取得を試みる
+    yahoo_url = f"https://keiba.yahoo.co.jp/race/list/{date_str}/"
+    try:
+        resp = requests.get(yahoo_url, headers=HEADERS, timeout=timeout)
+        if resp.status_code == 200:
+            resp.encoding = "utf-8"
+            text = resp.text
+            ids_found = set()
+            for m in re.finditer(r'race_id=(\d{12})', text):
+                ids_found.add(m.group(1))
+            for m in re.finditer(r'/race/(?:denma|result|card)/(\d{12})', text):
+                ids_found.add(m.group(1))
+            if ids_found:
+                valid = [rid for rid in sorted(ids_found)
+                         if 1 <= int(rid[4:6]) <= 10 and 1 <= int(rid[10:12]) <= 12]
                 if valid:
-                    print(f"  [OK] {len(valid)}レース発見 ({url[:60]})")
+                    print(f"  [OK] Yahoo競馬から{len(valid)}レース発見")
                     return _build_schedule(valid, text, date)
-        except requests.RequestException as e:
-            print(f"[WARN] スケジュール取得失敗 {url[:60]}: {e}")
-            continue
+    except requests.RequestException:
+        pass
 
-    return []
+    # プローブ方式: 出馬表URLに直接アクセスして今日の日付を確認
+    print("  [INFO] スケジュールページからIDが見つからないため出馬表を直接探索します...")
+    return _probe_today_races(date, timeout)
 
 
 def fetch_odds_quinella(date: datetime, venue_code: str, race_no: int,
@@ -435,6 +415,68 @@ def _parse_race_result(soup: BeautifulSoup) -> dict:
         "ranks": ranks,
     })
     return result
+
+
+def _probe_today_races(date: datetime, timeout: int = 10) -> list[dict]:
+    """出馬表URLを直接探索して本日開催のrace_idを特定する"""
+    year = date.strftime("%Y")
+    # 今日の日付が出馬表ページに含まれる形式
+    date_patterns = [
+        date.strftime("%Y年%-m月%-d日"),   # 2026年5月2日
+        date.strftime("%Y年%m月%d日"),     # 2026年05月02日
+        date.strftime("%Y/%m/%d"),         # 2026/05/02
+    ]
+    # 月の表記は環境依存なので安全に両方作る
+    m_val, d_val = date.month, date.day
+    date_patterns += [
+        f"{year}年{m_val}月{d_val}日",
+        f"{year}年{m_val:02d}月{d_val:02d}日",
+    ]
+
+    # 5月上旬はkai=3〜5が多い。順に試す
+    kai_order = [3, 4, 2, 5, 1, 6]
+    nichi_order = list(range(1, 9))
+    venues = ["05", "06", "07", "08", "09", "04", "03", "01", "02", "10"]
+
+    found: list[dict] = []
+    found_venues: set = set()
+
+    for venue_code in venues:
+        if venue_code in found_venues:
+            continue
+        for kai in kai_order:
+            hit_nichi = None
+            for nichi in nichi_order:
+                probe_id = f"{year}{venue_code}{kai:02d}{nichi:02d}01"
+                url = f"https://race.netkeiba.com/race/shutuba.html?race_id={probe_id}"
+                try:
+                    resp = requests.get(url, headers=HEADERS, timeout=timeout)
+                    if resp.status_code != 200:
+                        continue
+                    resp.encoding = "EUC-JP"
+                    text = resp.text
+                    if any(p in text for p in date_patterns):
+                        hit_nichi = nichi
+                        break
+                except requests.RequestException:
+                    pass
+                time.sleep(0.3)
+
+            if hit_nichi is not None:
+                print(f"  [OK] {VENUE_CODES.get(venue_code,'不明')} kai={kai} nichi={hit_nichi} を発見")
+                for race_no in range(1, 13):
+                    found.append({
+                        "race_id": f"{year}{venue_code}{kai:02d}{hit_nichi:02d}{race_no:02d}",
+                        "venue_code": venue_code,
+                        "venue": VENUE_CODES.get(venue_code, "不明"),
+                        "race_no": race_no,
+                        "scheduled_time": None,
+                        "date": date.strftime("%Y-%m-%d"),
+                    })
+                found_venues.add(venue_code)
+                break  # 次の会場へ
+
+    return sorted(found, key=lambda x: (x["venue_code"], x["race_no"]))
 
 
 def _build_schedule(race_ids: list, page_text: str, date: datetime) -> list[dict]:
