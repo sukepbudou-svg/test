@@ -214,15 +214,21 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
                 m = re.search(r'/jockey/(\w+)', j_link.get("href", ""))
                 jockey_id = m.group(1) if m else ""
 
-            weight, horse_weight, weight_diff = 55.0, 480, 0
+            weight, horse_weight, weight_diff, win_odds = 55.0, 480, 0, 0.0
             for cell in cells:
-                t = cell.get_text(strip=True)
-                if re.match(r'^\d{2}\.\d$', t):
-                    weight = float(t)
+                t = cell.get_text(strip=True).replace(",", "")
                 mw = re.match(r'(\d{3})\(([+-]?\d+)\)', t)
                 if mw:
                     horse_weight = int(mw.group(1))
                     weight_diff = int(mw.group(2))
+                    continue
+                mv = re.match(r'^(\d+\.\d)$', t)
+                if mv:
+                    val = float(mv.group(1))
+                    if 50.0 <= val <= 60.0:
+                        weight = val
+                    elif val >= 1.0 and win_odds == 0.0:
+                        win_odds = val
 
             horse_data[horse_no] = {
                 "rank": rank,
@@ -233,6 +239,7 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
                 "weight": weight,
                 "horse_weight": horse_weight,
                 "weight_diff": weight_diff,
+                "win_odds": win_odds,
             }
         except (ValueError, IndexError):
             continue
@@ -292,6 +299,7 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
             "weather_num": weather_num,
             "surface_num": surface_num,
             "distance": distance,
+            "h1_win_odds": d1["win_odds"],
             "h1_weight": d1["weight"],
             "h1_horse_weight": d1["horse_weight"],
             "h1_weight_diff": d1["weight_diff"],
@@ -303,6 +311,7 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
             "h1_past_top3_rate": 0.30,
             "h1_same_cond_rate": 0.30,
             "h1_recent_form": 1,
+            "h2_win_odds": d2["win_odds"],
             "h2_weight": d2["weight"],
             "h2_horse_weight": d2["horse_weight"],
             "h2_weight_diff": d2["weight_diff"],
@@ -330,6 +339,8 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
             "sum_same_cond_rate": 0.60,
             "diff_recent_form": 0,
             "sum_recent_form": 2,
+            "diff_win_odds": d1["win_odds"] - d2["win_odds"],
+            "sum_win_odds": d1["win_odds"] + d2["win_odds"],
             "diff_weight": d1["weight"] - d2["weight"],
             "sum_weight": d1["weight"] + d2["weight"],
             "diff_horse_weight": d1["horse_weight"] - d2["horse_weight"],

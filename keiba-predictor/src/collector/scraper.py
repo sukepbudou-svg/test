@@ -322,19 +322,15 @@ def _parse_race_card(soup: BeautifulSoup, date: datetime, venue_code: str, race_
                 continue
             horse_no = int(horse_no_text)
 
-            # 馬名・馬ID
+            # 馬名・馬ID（行内のすべてのaタグから積極的に探す）
             horse_name, horse_id = "", ""
-            horse_name_el = row.find(class_=re.compile(r'HorseName|horse_name', re.I))
-            if horse_name_el:
-                horse_name = horse_name_el.get_text(strip=True)
-                h_link = horse_name_el.find("a", href=True) or row.find("a", href=re.compile(r'/horse/'))
-            else:
-                h_link = row.find("a", href=re.compile(r'/horse/'))
-            if h_link:
-                if not horse_name:
-                    horse_name = h_link.get_text(strip=True)
-                m = re.search(r'/horse/(\d+)', h_link.get("href", ""))
-                horse_id = m.group(1) if m else ""
+            for a in row.find_all("a", href=True):
+                href = a.get("href", "")
+                m = re.search(r'/horse/(\d{6,})', href)
+                if m:
+                    horse_id = m.group(1)
+                    horse_name = a.get_text(strip=True)
+                    break
 
             # 騎手・騎手ID
             jockey, jockey_id = "", ""
@@ -348,18 +344,22 @@ def _parse_race_card(soup: BeautifulSoup, date: datetime, venue_code: str, race_
                 m = re.search(r'/jockey/(\w+)', j_link.get("href", ""))
                 jockey_id = m.group(1) if m else ""
 
-            # 斤量・馬体重・増減
-            weight_text = ""
-            horse_weight, weight_diff = 480, 0
+            # 斤量・馬体重・増減・単勝オッズ
+            weight, horse_weight, weight_diff, win_odds = 55.0, 480, 0, 0.0
             for cell in cells:
-                t = cell.get_text(strip=True)
-                if re.match(r'^\d{2}\.\d$', t):
-                    weight_text = t
+                t = cell.get_text(strip=True).replace(",", "")
                 mw = re.match(r'(\d{3})\(([+-]?\d+)\)', t)
                 if mw:
                     horse_weight = int(mw.group(1))
                     weight_diff = int(mw.group(2))
-            weight = float(weight_text) if weight_text else 55.0
+                    continue
+                mv = re.match(r'^(\d+\.\d)$', t)
+                if mv:
+                    val = float(mv.group(1))
+                    if 50.0 <= val <= 60.0:
+                        weight = val          # 斤量
+                    elif val >= 1.0 and win_odds == 0.0:
+                        win_odds = val        # 単勝オッズ（最初の非斤量小数）
 
             result["horses"].append({
                 "horse_no": horse_no,
@@ -370,6 +370,7 @@ def _parse_race_card(soup: BeautifulSoup, date: datetime, venue_code: str, race_
                 "weight": weight,
                 "horse_weight": horse_weight,
                 "weight_diff": weight_diff,
+                "win_odds": win_odds,
             })
         except (ValueError, IndexError):
             continue

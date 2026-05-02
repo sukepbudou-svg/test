@@ -80,6 +80,7 @@ def build_race_features(race_card: dict, jockey_stats: dict = None,
             "surface_num": surface_num,
             "distance": distance,
             # 馬の特徴量
+            "win_odds": horse.get("win_odds", 0.0),
             "weight": horse.get("weight", 55.0),
             "horse_weight": horse.get("horse_weight", 480),
             "weight_diff": horse.get("weight_diff", 0),
@@ -113,7 +114,7 @@ def build_quinella_features(df_race: pd.DataFrame) -> pd.DataFrame:
 
     feature_cols = [
         "grade_num", "condition_num", "weather_num", "surface_num", "distance",
-        "weight", "horse_weight", "weight_diff",
+        "win_odds", "weight", "horse_weight", "weight_diff",
         "jockey_win_rate", "jockey_top2_rate", "jockey_top3_rate",
         "past_avg_rank", "past_win_rate", "past_top3_rate",
         "same_cond_rate", "recent_form",
@@ -141,7 +142,7 @@ def build_quinella_features(df_race: pd.DataFrame) -> pd.DataFrame:
 
         # 各馬の個別特徴量
         indiv_cols = [
-            "weight", "horse_weight", "weight_diff",
+            "win_odds", "weight", "horse_weight", "weight_diff",
             "jockey_win_rate", "jockey_top2_rate", "jockey_top3_rate",
             "past_avg_rank", "past_win_rate", "past_top3_rate",
             "same_cond_rate", "recent_form",
@@ -163,7 +164,7 @@ def get_feature_columns() -> list[str]:
         "grade_num", "condition_num", "weather_num", "surface_num", "distance",
     ]
     indiv_cols = [
-        "weight", "horse_weight", "weight_diff",
+        "win_odds", "weight", "horse_weight", "weight_diff",
         "jockey_win_rate", "jockey_top2_rate", "jockey_top3_rate",
         "past_avg_rank", "past_win_rate", "past_top3_rate",
         "same_cond_rate", "recent_form",
