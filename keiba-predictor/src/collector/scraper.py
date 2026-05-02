@@ -420,17 +420,12 @@ def _parse_race_result(soup: BeautifulSoup) -> dict:
 def _probe_today_races(date: datetime, timeout: int = 10) -> list[dict]:
     """出馬表URLを直接探索して本日開催のrace_idを特定する"""
     year = date.strftime("%Y")
-    # 今日の日付が出馬表ページに含まれる形式
-    date_patterns = [
-        date.strftime("%Y年%-m月%-d日"),   # 2026年5月2日
-        date.strftime("%Y年%m月%d日"),     # 2026年05月02日
-        date.strftime("%Y/%m/%d"),         # 2026/05/02
-    ]
-    # 月の表記は環境依存なので安全に両方作る
+    # 今日の日付が出馬表ページに含まれる形式（Windows互換）
     m_val, d_val = date.month, date.day
-    date_patterns += [
-        f"{year}年{m_val}月{d_val}日",
-        f"{year}年{m_val:02d}月{d_val:02d}日",
+    date_patterns = [
+        f"{year}年{m_val}月{d_val}日",          # 2026年5月2日
+        f"{year}年{m_val:02d}月{d_val:02d}日",  # 2026年05月02日
+        date.strftime("%Y/%m/%d"),               # 2026/05/02
     ]
 
     # 5月上旬はkai=3〜5が多い。順に試す
