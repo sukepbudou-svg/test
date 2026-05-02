@@ -112,14 +112,6 @@ def build_quinella_features(df_race: pd.DataFrame) -> pd.DataFrame:
     if df_race.empty or len(df_race) < 2:
         return pd.DataFrame()
 
-    feature_cols = [
-        "grade_num", "condition_num", "weather_num", "surface_num", "distance",
-        "win_odds", "weight", "horse_weight", "weight_diff",
-        "jockey_win_rate", "jockey_top2_rate", "jockey_top3_rate",
-        "past_avg_rank", "past_win_rate", "past_top3_rate",
-        "same_cond_rate", "recent_form",
-    ]
-
     rows = []
     horse_nos = sorted(set(df_race["horse_no"].tolist()))
 
