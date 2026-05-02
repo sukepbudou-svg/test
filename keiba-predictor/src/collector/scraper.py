@@ -726,19 +726,33 @@ def _parse_jockey_stats(soup: BeautifulSoup) -> dict:
 def _parse_horse_results(soup: BeautifulSoup, n: int) -> list[dict]:
     """馬の過去成績HTMLをパースして直近n走を返す"""
     results = []
-    table = soup.find("table", class_=re.compile(r'db_h_race_results|race_table', re.I))
+    table = (soup.find("table", class_=re.compile(r'db_h_race_results', re.I))
+             or soup.find("table", class_=re.compile(r'nk_tb_common', re.I)))
+    if not table:
+        all_tables = soup.find_all("table")
+        if all_tables:
+            table = max(all_tables, key=lambda t: len(t.find_all("tr")))
     if not table:
         return results
 
     rows = table.find_all("tr")[1:]  # ヘッダー除外
     for row in rows[:n]:
         cells = row.find_all("td")
-        if len(cells) < 12:
+        if len(cells) < 8:
             continue
         try:
-            # 着順: cells[11] が定番だが念のため内容確認
-            rank_text = cells[11].get_text(strip=True) if len(cells) > 11 else ""
-            rank = int(rank_text) if rank_text.isdigit() else 99
+            # 着順: cells[11]が定番、なければ左から12列目までで数字を探す
+            rank = 99
+            if len(cells) > 11:
+                t = cells[11].get_text(strip=True)
+                if t.isdigit() and int(t) <= 28:
+                    rank = int(t)
+            if rank == 99:
+                for cell in cells[:15]:
+                    t = cell.get_text(strip=True)
+                    if t.isdigit() and 1 <= int(t) <= 28:
+                        rank = int(t)
+                        break
 
             # コース（例: "芝1600", "ダ1400"）: 固定インデックスに依存せず内容で探す
             surface, distance, condition = "芝", 0, "良"
