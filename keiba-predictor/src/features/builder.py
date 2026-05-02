@@ -41,8 +41,21 @@ def build_race_features(race_card: dict, jockey_stats: dict = None,
     surface_num = SURFACE_NUM.get(race_card.get("surface", "芝"), 1)
     distance = int(race_card.get("distance", 2000))
 
+    # 人気順位: win_odds昇順でランク付け（0.0=不明は最下位扱い）
+    horses = race_card["horses"]
+    n_horses = len(horses)
+    sorted_by_odds = sorted(
+        range(n_horses),
+        key=lambda i: horses[i].get("win_odds", 0.0) or float("inf")
+    )
+    popularity_map: dict[str, int] = {}
+    for pop_rank, idx in enumerate(sorted_by_odds, 1):
+        name = horses[idx].get("horse_name", "")
+        if name:
+            popularity_map[name] = pop_rank
+
     rows = []
-    for horse in race_card["horses"]:
+    for horse in horses:
         horse_no = horse["horse_no"]
         jockey = horse.get("jockey", "")
         horse_name = horse.get("horse_name", "")
@@ -58,11 +71,7 @@ def build_race_features(race_card: dict, jockey_stats: dict = None,
         past_avg_rank = _calc_avg_rank(history)
         past_win_rate = _calc_win_rate(history)
         past_top3_rate = _calc_top3_rate(history)
-        # 同距離・同馬場での成績
-        same_cond_rate = _calc_same_condition_rate(
-            history, surface_num, distance
-        )
-        # 連続好走（直近3走で3着以内の数）
+        same_cond_rate = _calc_same_condition_rate(history, surface_num, distance)
         recent_form = _calc_recent_form(history, n=3)
 
         rows.append({
@@ -81,6 +90,7 @@ def build_race_features(race_card: dict, jockey_stats: dict = None,
             "distance": distance,
             # 馬の特徴量
             "win_odds": horse.get("win_odds", 0.0),
+            "popularity": popularity_map.get(horse_name, n_horses),
             "weight": horse.get("weight", 55.0),
             "horse_weight": horse.get("horse_weight", 480),
             "weight_diff": horse.get("weight_diff", 0),
@@ -134,7 +144,7 @@ def build_quinella_features(df_race: pd.DataFrame) -> pd.DataFrame:
 
         # 各馬の個別特徴量
         indiv_cols = [
-            "win_odds", "weight", "horse_weight", "weight_diff",
+            "win_odds", "popularity", "weight", "horse_weight", "weight_diff",
             "jockey_win_rate", "jockey_top2_rate", "jockey_top3_rate",
             "past_avg_rank", "past_win_rate", "past_top3_rate",
             "same_cond_rate", "recent_form",
@@ -156,7 +166,7 @@ def get_feature_columns() -> list[str]:
         "grade_num", "condition_num", "weather_num", "surface_num", "distance",
     ]
     indiv_cols = [
-        "win_odds", "weight", "horse_weight", "weight_diff",
+        "win_odds", "popularity", "weight", "horse_weight", "weight_diff",
         "jockey_win_rate", "jockey_top2_rate", "jockey_top3_rate",
         "past_avg_rank", "past_win_rate", "past_top3_rate",
         "same_cond_rate", "recent_form",

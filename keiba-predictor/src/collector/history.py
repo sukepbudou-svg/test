@@ -247,6 +247,14 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
     if len(horse_data) < 2:
         return [], []
 
+    # 人気順位: win_odds昇順でランク付け（0.0=不明は最下位）
+    sorted_by_odds = sorted(
+        horse_data.items(),
+        key=lambda x: x[1]["win_odds"] if x[1]["win_odds"] > 0 else float("inf")
+    )
+    for pop_rank, (hn, _) in enumerate(sorted_by_odds, 1):
+        horse_data[hn]["popularity"] = pop_rank
+
     ranked = {v["rank"]: k for k, v in horse_data.items() if v["rank"] <= 2}
     if 1 not in ranked or 2 not in ranked:
         return [], []
@@ -300,6 +308,7 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
             "surface_num": surface_num,
             "distance": distance,
             "h1_win_odds": d1["win_odds"],
+            "h1_popularity": d1["popularity"],
             "h1_weight": d1["weight"],
             "h1_horse_weight": d1["horse_weight"],
             "h1_weight_diff": d1["weight_diff"],
@@ -312,6 +321,7 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
             "h1_same_cond_rate": 0.30,
             "h1_recent_form": 1,
             "h2_win_odds": d2["win_odds"],
+            "h2_popularity": d2["popularity"],
             "h2_weight": d2["weight"],
             "h2_horse_weight": d2["horse_weight"],
             "h2_weight_diff": d2["weight_diff"],
@@ -341,6 +351,8 @@ def _parse_result_to_records(soup: BeautifulSoup, race_id: str, date: datetime) 
             "sum_recent_form": 2,
             "diff_win_odds": d1["win_odds"] - d2["win_odds"],
             "sum_win_odds": d1["win_odds"] + d2["win_odds"],
+            "diff_popularity": d1["popularity"] - d2["popularity"],
+            "sum_popularity": d1["popularity"] + d2["popularity"],
             "diff_weight": d1["weight"] - d2["weight"],
             "sum_weight": d1["weight"] + d2["weight"],
             "diff_horse_weight": d1["horse_weight"] - d2["horse_weight"],

@@ -45,6 +45,15 @@ def predict_race(
         return pd.DataFrame()
 
     feature_cols = get_feature_columns()
+
+    # モデルの学習時と特徴量数が違う場合は再学習を促す
+    expected = len(feature_cols)
+    actual = model.num_feature()
+    if actual != expected:
+        print(f"[ERROR] モデルの特徴量数が不一致: モデル={actual}個 / 現在のコード={expected}個")
+        print("  → python main.py --mode train で再学習してください")
+        return pd.DataFrame()
+
     X = df_quinella[feature_cols].fillna(0).values
     probs = model.predict(X)
 
