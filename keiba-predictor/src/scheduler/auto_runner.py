@@ -42,13 +42,18 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
     today_date = today.date()
     for r in raw_schedule:
         t_str = r.get("scheduled_time")
-        if not t_str:
-            continue
-        try:
-            hh, mm = map(int, t_str.split(":"))
-            scheduled_dt = datetime(today_date.year, today_date.month, today_date.day, hh, mm)
-        except (ValueError, AttributeError):
-            continue
+        if t_str:
+            try:
+                hh, mm = map(int, t_str.split(":"))
+                scheduled_dt = datetime(today_date.year, today_date.month, today_date.day, hh, mm)
+            except (ValueError, AttributeError):
+                scheduled_dt = None
+        else:
+            scheduled_dt = None
+        # 時刻不明の場合はレース番号から推定（1R=10:00、35分間隔）
+        if scheduled_dt is None:
+            race_no = r.get("race_no", 1)
+            scheduled_dt = datetime(today_date.year, today_date.month, today_date.day, 10, 0) + timedelta(minutes=(race_no - 1) * 35)
         schedule.append({
             **r,
             "scheduled_dt": scheduled_dt,

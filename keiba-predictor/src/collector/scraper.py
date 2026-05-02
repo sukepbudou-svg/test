@@ -459,19 +459,39 @@ def _probe_today_races(date: datetime, timeout: int = 10) -> list[dict]:
 
             if hit_nichi is not None:
                 print(f"  [OK] {VENUE_CODES.get(venue_code,'不明')} kai={kai} nichi={hit_nichi} を発見")
+                # 1Rの出馬表ページから発走時刻を取得
+                r1_time = _extract_race_time(text)
                 for race_no in range(1, 13):
+                    # 取得できた1Rの時刻を基に以降のレースを推定（1レース約35分間隔）
+                    if r1_time:
+                        h, m = r1_time
+                        total_min = h * 60 + m + (race_no - 1) * 35
+                        stime = f"{total_min // 60:02d}:{total_min % 60:02d}"
+                    else:
+                        stime = None
                     found.append({
                         "race_id": f"{year}{venue_code}{kai:02d}{hit_nichi:02d}{race_no:02d}",
                         "venue_code": venue_code,
                         "venue": VENUE_CODES.get(venue_code, "不明"),
                         "race_no": race_no,
-                        "scheduled_time": None,
+                        "scheduled_time": stime,
                         "date": date.strftime("%Y-%m-%d"),
                     })
                 found_venues.add(venue_code)
                 break  # 次の会場へ
 
     return sorted(found, key=lambda x: (x["venue_code"], x["race_no"]))
+
+
+def _extract_race_time(html_text: str):
+    """出馬表HTMLから発走予定時刻を (hour, minute) で返す。見つからない場合は None"""
+    for pattern in [r'(\d{1,2}):(\d{2})発走', r'発走\D{0,5}(\d{1,2}):(\d{2})']:
+        m = re.search(pattern, html_text)
+        if m:
+            h, mn = int(m.group(1)), int(m.group(2))
+            if 8 <= h <= 18:
+                return h, mn
+    return None
 
 
 def _build_schedule(race_ids: list, page_text: str, date: datetime) -> list[dict]:
