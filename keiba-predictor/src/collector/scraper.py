@@ -145,18 +145,18 @@ def fetch_odds_quinella(date: datetime, venue_code: str, race_no: int,
         {"1-2": 15.3, "1-3": 8.2, ...}
     """
     rid = race_id or _make_race_id(date, venue_code, race_no)
-    url = (
-        f"https://odds.netkeiba.com/odds/odds_get_form.cgi"
-        f"?race_id={rid}&type=b5"
-    )
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=timeout)
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        print(f"[WARN] 馬連オッズ取得失敗 {venue_code}-R{race_no}: {e}")
-        return {}
-
-    return _parse_quinella_odds(resp.text)
+    for base in ["https://race.netkeiba.com", "https://odds.netkeiba.com"]:
+        url = f"{base}/odds/odds_get_form.cgi?race_id={rid}&type=b5"
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=timeout)
+            resp.raise_for_status()
+            result = _parse_quinella_odds(resp.text)
+            if result:
+                return result
+        except requests.RequestException:
+            continue
+    print(f"[WARN] 馬連オッズ取得失敗 {venue_code}-R{race_no}")
+    return {}
 
 
 def fetch_odds_wide(date: datetime, venue_code: str, race_no: int,
@@ -168,18 +168,18 @@ def fetch_odds_wide(date: datetime, venue_code: str, race_no: int,
         {"1-2": 3.5, "1-3": 2.8, ...}
     """
     rid = race_id or _make_race_id(date, venue_code, race_no)
-    url = (
-        f"https://odds.netkeiba.com/odds/odds_get_form.cgi"
-        f"?race_id={rid}&type=b6"
-    )
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=timeout)
-        resp.raise_for_status()
-    except requests.RequestException as e:
-        print(f"[WARN] ワイドオッズ取得失敗 {venue_code}-R{race_no}: {e}")
-        return {}
-
-    return _parse_wide_odds(resp.text)
+    for base in ["https://race.netkeiba.com", "https://odds.netkeiba.com"]:
+        url = f"{base}/odds/odds_get_form.cgi?race_id={rid}&type=b6"
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=timeout)
+            resp.raise_for_status()
+            result = _parse_wide_odds(resp.text)
+            if result:
+                return result
+        except requests.RequestException:
+            continue
+    print(f"[WARN] ワイドオッズ取得失敗 {venue_code}-R{race_no}")
+    return {}
 
 
 def fetch_jockey_stats(jockey_id: str, timeout: int = 15) -> dict:

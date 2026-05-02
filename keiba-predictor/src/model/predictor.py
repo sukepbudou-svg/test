@@ -126,11 +126,16 @@ def get_recommendations(
         odds_disp, src_disp, prob_disp, roi_disp = _fmt(rec)
         recommended.append(_row("本命", rec["combination"], prob_disp, odds_disp, roi_disp, src_disp))
 
-    # 2. 本命改_馬連: エッジ上位2点（本命との重複可）
-    edge_candidates = (
-        predictions[predictions["expected_roi"] >= EDGE_THRESHOLD]
-        .sort_values("expected_roi", ascending=False)
-    )
+    # 2. 本命改_馬連: ライブオッズあり→エッジ上位2点 / なし→確率3〜4位
+    has_live = (predictions["odds_source"] == "live").any()
+    if has_live:
+        edge_candidates = (
+            predictions[predictions["expected_roi"] >= EDGE_THRESHOLD]
+            .sort_values("expected_roi", ascending=False)
+        )
+    else:
+        # 推定オッズ時はエッジが全て0.775で均一のため確率順で本命の次点を選ぶ
+        edge_candidates = predictions.iloc[HONMEI_N:].copy()
     for _, rec in edge_candidates.head(HONMEI_KAI_UMAREN_N).iterrows():
         odds_disp, src_disp, prob_disp, roi_disp = _fmt(rec)
         recommended.append(_row("本命改_馬連", rec["combination"], prob_disp, odds_disp, roi_disp, src_disp))

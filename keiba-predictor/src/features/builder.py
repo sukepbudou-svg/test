@@ -120,7 +120,7 @@ def build_quinella_features(df_race: pd.DataFrame) -> pd.DataFrame:
     ]
 
     rows = []
-    horse_nos = df_race["horse_no"].tolist()
+    horse_nos = sorted(set(df_race["horse_no"].tolist()))
 
     for h1, h2 in combinations(horse_nos, 2):
         r1 = df_race[df_race["horse_no"] == h1].iloc[0]
