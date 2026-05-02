@@ -102,22 +102,50 @@ def fetch_today_schedule(date: datetime = None, timeout: int = 15) -> list[dict]
     本日の開催レース一覧を取得する
 
     Returns:
-        [{"venue_code": "05", "venue": "東京", "race_no": 1, "scheduled_time": "10:00"}, ...]
+        [{"venue_code": "05", "venue": "東京", "race_no": 1, "scheduled_time": "10:00",
+          "race_id": "202605050511"}, ...]
     """
     if date is None:
         date = datetime.now()
 
-    url = f"https://race.netkeiba.com/top/race_list.html?kaisai_date={date.strftime('%Y%m%d')}"
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=timeout)
-        resp.raise_for_status()
-        resp.encoding = "EUC-JP"
-    except requests.RequestException as e:
-        print(f"[WARN] 開催スケジュール取得失敗: {e}")
-        return []
+    date_str = date.strftime("%Y%m%d")
+    urls = [
+        f"https://race.netkeiba.com/top/race_list.html?kaisai_date={date_str}",
+        f"https://db.netkeiba.com/race/list/{date_str}/",
+        f"https://race.netkeiba.com/top/race_list_2.html?kaisai_date={date_str}",
+    ]
 
-    soup = BeautifulSoup(resp.text, "html.parser")
-    return _parse_schedule(soup, date)
+    for url in urls:
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=timeout)
+            if resp.status_code != 200:
+                continue
+            for enc in ["EUC-JP", "utf-8"]:
+                resp.encoding = enc
+                text = resp.text
+                ids_found = set()
+                for m in re.finditer(r'race_id=(\d{12})', text):
+                    ids_found.add(m.group(1))
+                for m in re.finditer(r'/race/(\d{12})/', text):
+                    rid = m.group(1)
+                    if rid.startswith(date_str[:4]):
+                        ids_found.add(rid)
+                if not ids_found:
+                    continue
+                valid = []
+                for rid in sorted(ids_found):
+                    venue_code = rid[4:6]
+                    race_no = int(rid[10:12])
+                    if 1 <= int(venue_code) <= 10 and 1 <= race_no <= 12:
+                        valid.append(rid)
+                if valid:
+                    print(f"  [OK] {len(valid)}レース発見 ({url[:60]})")
+                    return _build_schedule(valid, text, date)
+        except requests.RequestException as e:
+            print(f"[WARN] スケジュール取得失敗 {url[:60]}: {e}")
+            continue
+
+    return []
 
 
 def fetch_odds_quinella(date: datetime, venue_code: str, race_no: int,
@@ -401,36 +429,30 @@ def _parse_race_result(soup: BeautifulSoup) -> dict:
     return result
 
 
-def _parse_schedule(soup: BeautifulSoup, date: datetime) -> list[dict]:
-    """開催スケジュールHTMLをパースしてリストを返す"""
+def _build_schedule(race_ids: list, page_text: str, date: datetime) -> list[dict]:
+    """race_idリストとページテキストからスケジュールdictリストを生成する"""
     schedule = []
-    race_links = soup.select("a[href*='race_id']")
-    seen = set()
-
-    for link in race_links:
-        href = link.get("href", "")
-        m = re.search(r'race_id=(\d{12})', href)
-        if not m:
-            continue
-        race_id = m.group(1)
-        if race_id in seen:
-            continue
-        seen.add(race_id)
-
-        venue_code = race_id[4:6]
-        race_no = int(race_id[10:12])
-        time_el = link.find_previous(class_=re.compile(r'time|Time', re.I))
-        scheduled_time = time_el.get_text(strip=True) if time_el else None
-
+    for rid in race_ids:
+        venue_code = rid[4:6]
+        race_no = int(rid[10:12])
+        # 発走時刻をページテキストから取得（race_idの近くにある HH:MM 形式）
+        scheduled_time = None
+        idx = page_text.find(rid)
+        if idx >= 0:
+            snippet = page_text[max(0, idx - 200):idx + 200]
+            m = re.search(r'(\d{1,2}):(\d{2})', snippet)
+            if m:
+                hh, mm = int(m.group(1)), int(m.group(2))
+                if 8 <= hh <= 18:
+                    scheduled_time = f"{hh:02d}:{mm:02d}"
         schedule.append({
-            "race_id": race_id,
+            "race_id": rid,
             "venue_code": venue_code,
             "venue": VENUE_CODES.get(venue_code, "不明"),
             "race_no": race_no,
             "scheduled_time": scheduled_time,
             "date": date.strftime("%Y-%m-%d"),
         })
-
     return sorted(schedule, key=lambda x: (x["venue_code"], x["race_no"]))
 
 
