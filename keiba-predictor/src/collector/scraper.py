@@ -274,6 +274,32 @@ def fetch_training_times(race_id: str, timeout: int = 15) -> dict:
 
 # ─── 内部パース関数 ───
 
+def _dump_horse_debug(soup: BeautifulSoup, horse_rows: list) -> None:
+    """出馬表の最初の馬行HTMLをファイルに保存する（horse_id診断用・1回だけ書く）"""
+    from pathlib import Path
+    debug_path = Path(__file__).parent.parent.parent / "data" / "horse_debug.txt"
+    debug_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(str(debug_path), "w", encoding="utf-8", errors="replace") as f:
+        f.write(f"horse_rows count: {len(horse_rows)}\n\n")
+        if horse_rows:
+            row = horse_rows[0]
+            f.write("=== FIRST ROW HTML (first 2000 chars) ===\n")
+            f.write(str(row)[:2000])
+            f.write("\n\n=== ALL ANCHOR TAGS IN FIRST ROW ===\n")
+            for a in row.find_all("a"):
+                f.write(f"  href={str(a.get('href',''))!r:70}  text={a.get_text(strip=True)!r}\n")
+            f.write("\n=== FIRST 6 TD CELLS ===\n")
+            for i, td in enumerate(row.find_all("td")[:6]):
+                f.write(f"  cells[{i}] class={td.get('class')}  text={td.get_text(strip=True)!r}\n")
+        else:
+            f.write("=== NO HorseList ROWS FOUND ===\n")
+            f.write("=== ALL TR CLASSES IN PAGE ===\n")
+            for tr in soup.find_all("tr")[:20]:
+                f.write(f"  class={tr.get('class')}  text_start={tr.get_text(strip=True)[:40]!r}\n")
+            f.write("\n=== PAGE HTML (first 3000 chars) ===\n")
+            f.write(str(soup)[:3000])
+
+
 def _make_race_id(date: datetime, venue_code: str, race_no: int) -> str:
     """レースIDを生成 例: 202605010111 (年+場コード+開催回+日+レース番号)"""
     # netkeiba形式: YYYYJJKKNN (年4桁+場2桁+開催回2桁+日2桁+レース2桁)
@@ -324,6 +350,10 @@ def _parse_race_card(soup: BeautifulSoup, date: datetime, venue_code: str, race_
 
     # 出走馬リスト
     horse_rows = soup.select("tr.HorseList, tr.Shutuba_HorseList")
+
+    # デバッグ: 最初の馬行HTMLをファイルに保存（horse_idが取れない問題の診断用）
+    _dump_horse_debug(soup, horse_rows)
+
     for row in horse_rows:
         cells = row.find_all("td")
         if len(cells) < 8:
