@@ -161,7 +161,13 @@ def fetch_odds_quinella(date: datetime, venue_code: str, race_no: int,
         {"1-2": 15.3, "1-3": 8.2, ...}
     """
     rid = race_id or _make_race_id(date, venue_code, race_no)
-    # HTMLオッズページから取得（type=b4が馬連）
+
+    # 方法1: 内部APIエンドポイント（JSONレスポンス）
+    result = _fetch_odds_api(rid, odds_type="b4", timeout=timeout)
+    if len(result) > 10:
+        return result
+
+    # 方法2: HTMLオッズページをパース
     url = f"https://race.netkeiba.com/odds/index.html?type=b4&race_id={rid}"
     try:
         resp = requests.get(url, headers=HEADERS, timeout=timeout)
@@ -184,7 +190,13 @@ def fetch_odds_wide(date: datetime, venue_code: str, race_no: int,
         {"1-2": 3.5, "1-3": 2.8, ...}
     """
     rid = race_id or _make_race_id(date, venue_code, race_no)
-    # HTMLオッズページから取得（type=b5がワイド）
+
+    # 方法1: 内部APIエンドポイント（JSONレスポンス）
+    result = _fetch_odds_api(rid, odds_type="b5", timeout=timeout)
+    if len(result) > 10:
+        return result
+
+    # 方法2: HTMLオッズページをパース
     url = f"https://race.netkeiba.com/odds/index.html?type=b5&race_id={rid}"
     try:
         resp = requests.get(url, headers=HEADERS, timeout=timeout)
@@ -317,10 +329,21 @@ def _parse_race_card(soup: BeautifulSoup, date: datetime, venue_code: str, race_
         if len(cells) < 8:
             continue
         try:
-            horse_no_text = cells[0].get_text(strip=True)
-            if not horse_no_text.isdigit():
+            # 馬番: Umaban classのtd → なければ cells[1]（cells[0]は枠番）
+            horse_no = None
+            umaban_td = row.find("td", class_=re.compile(r'Umaban|umaban', re.I))
+            if umaban_td:
+                t = umaban_td.get_text(strip=True)
+                if t.isdigit() and 1 <= int(t) <= 18:
+                    horse_no = int(t)
+            if horse_no is None:
+                for cell in cells[1:3]:  # cells[1]が馬番（cells[0]は枠番）
+                    t = cell.get_text(strip=True)
+                    if t.isdigit() and 1 <= int(t) <= 18:
+                        horse_no = int(t)
+                        break
+            if horse_no is None:
                 continue
-            horse_no = int(horse_no_text)
 
             # 馬名・馬ID（行内のすべてのaタグから積極的に探す）
             horse_name, horse_id = "", ""
@@ -604,37 +627,46 @@ def _parse_odds_html(html: str, n_horses: int = 18) -> dict:
     return odds
 
 
-def _parse_quinella_odds(text: str) -> dict:
-    """馬連オッズのレスポンスをパースしてdictを返す"""
-    odds = {}
-    for line in text.splitlines():
-        parts = re.split(r'[\t,]', line.strip())
-        if len(parts) >= 3:
-            try:
-                h1, h2, o = int(parts[0]), int(parts[1]), float(parts[2])
-                key = f"{min(h1,h2)}-{max(h1,h2)}"
-                odds[key] = o
-            except (ValueError, IndexError):
+def _fetch_odds_api(race_id: str, odds_type: str = "b4", timeout: int = 15) -> dict:
+    """netkeiba内部JSONAPIからオッズを取得する"""
+    urls = [
+        f"https://race.netkeiba.com/api/api_get_jra_odds.html?race_id={race_id}&type={odds_type}&action=init",
+        f"https://race.netkeiba.com/api/api_get_jra_odds.html?race_id={race_id}&type={odds_type}&action=update",
+    ]
+    for url in urls:
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=timeout)
+            if resp.status_code != 200:
                 continue
-    return odds
-
-
-def _parse_wide_odds(text: str) -> dict:
-    """ワイドオッズのレスポンスをパースしてdictを返す（最小払戻ベース）"""
-    odds = {}
-    for line in text.splitlines():
-        parts = re.split(r'[\t,]', line.strip())
-        # ワイドは「馬番1,馬番2,最小オッズ,最大オッズ」形式の場合がある
-        if len(parts) >= 3:
             try:
-                h1, h2 = int(parts[0]), int(parts[1])
-                # 最小オッズを使用（安全側の期待値計算のため）
-                o_min = float(parts[2])
-                key = f"{min(h1,h2)}-{max(h1,h2)}"
-                odds[key] = o_min
-            except (ValueError, IndexError):
+                data = resp.json()
+            except ValueError:
                 continue
-    return odds
+            odds = {}
+            # {"data": {"odds": {"1": {"2": "15.3", ...}, ...}}}
+            raw_odds = (data.get("data") or {}).get("odds", {})
+            if isinstance(raw_odds, dict):
+                for h1_str, inner in raw_odds.items():
+                    if not isinstance(inner, dict):
+                        continue
+                    try:
+                        h1 = int(h1_str)
+                    except ValueError:
+                        continue
+                    for h2_str, o_val in inner.items():
+                        try:
+                            h2 = int(h2_str)
+                            o = float(o_val)
+                            if h1 != h2 and o > 1.0:
+                                key = f"{min(h1,h2)}-{max(h1,h2)}"
+                                odds[key] = o
+                        except (ValueError, TypeError):
+                            continue
+            if len(odds) > 5:
+                return odds
+        except requests.RequestException:
+            pass
+    return {}
 
 
 def _parse_jockey_stats(soup: BeautifulSoup) -> dict:
@@ -674,15 +706,26 @@ def _parse_horse_results(soup: BeautifulSoup, n: int) -> list[dict]:
         if len(cells) < 12:
             continue
         try:
+            # 着順: cells[11] が定番だが念のため内容確認
             rank_text = cells[11].get_text(strip=True) if len(cells) > 11 else ""
             rank = int(rank_text) if rank_text.isdigit() else 99
 
-            dist_text = cells[6].get_text(strip=True) if len(cells) > 6 else ""
-            surface = "芝" if dist_text.startswith("芝") else "ダート"
-            dist_m = re.search(r'\d{3,4}', dist_text)
-            distance = int(dist_m.group()) if dist_m else 0
+            # コース（例: "芝1600", "ダ1400"）: 固定インデックスに依存せず内容で探す
+            surface, distance, condition = "芝", 0, "良"
+            for cell in cells:
+                t = cell.get_text(strip=True)
+                m = re.match(r'(芝|ダ|ダート)(\d{3,4})', t)
+                if m:
+                    surface = "芝" if m.group(1) == "芝" else "ダート"
+                    distance = int(m.group(2))
+                    break
 
-            condition = cells[7].get_text(strip=True) if len(cells) > 7 else "良"
+            # 馬場状態: "良", "稍重", "重", "不良" のいずれかを持つセルを探す
+            for cell in cells:
+                t = cell.get_text(strip=True)
+                if t in ("不良", "重", "稍重", "良"):
+                    condition = t
+                    break
 
             results.append({
                 "rank": rank,
@@ -746,5 +789,3 @@ def _parse_training_times(soup: BeautifulSoup) -> dict:
             continue
 
     return result
-
-    return results
