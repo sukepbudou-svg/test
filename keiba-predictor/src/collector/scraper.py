@@ -161,17 +161,17 @@ def fetch_odds_quinella(date: datetime, venue_code: str, race_no: int,
         {"1-2": 15.3, "1-3": 8.2, ...}
     """
     rid = race_id or _make_race_id(date, venue_code, race_no)
-    for base in ["https://race.netkeiba.com", "https://odds.netkeiba.com"]:
-        url = f"{base}/odds/odds_get_form.cgi?race_id={rid}&type=b5"
-        try:
-            resp = requests.get(url, headers=HEADERS, timeout=timeout)
-            resp.raise_for_status()
-            result = _parse_quinella_odds(resp.text)
-            if result:
-                return result
-        except requests.RequestException:
-            continue
-    print(f"[WARN] 馬連オッズ取得失敗 {venue_code}-R{race_no}")
+    # HTMLオッズページから取得（type=b4が馬連）
+    url = f"https://race.netkeiba.com/odds/index.html?type=b4&race_id={rid}"
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=timeout)
+        resp.raise_for_status()
+        resp.encoding = "EUC-JP"
+        result = _parse_odds_html(resp.text, n_horses=18)
+        if result:
+            return result
+    except requests.RequestException as e:
+        print(f"[WARN] 馬連オッズ取得失敗 {venue_code}-R{race_no}: {e}")
     return {}
 
 
@@ -184,17 +184,17 @@ def fetch_odds_wide(date: datetime, venue_code: str, race_no: int,
         {"1-2": 3.5, "1-3": 2.8, ...}
     """
     rid = race_id or _make_race_id(date, venue_code, race_no)
-    for base in ["https://race.netkeiba.com", "https://odds.netkeiba.com"]:
-        url = f"{base}/odds/odds_get_form.cgi?race_id={rid}&type=b6"
-        try:
-            resp = requests.get(url, headers=HEADERS, timeout=timeout)
-            resp.raise_for_status()
-            result = _parse_wide_odds(resp.text)
-            if result:
-                return result
-        except requests.RequestException:
-            continue
-    print(f"[WARN] ワイドオッズ取得失敗 {venue_code}-R{race_no}")
+    # HTMLオッズページから取得（type=b5がワイド）
+    url = f"https://race.netkeiba.com/odds/index.html?type=b5&race_id={rid}"
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=timeout)
+        resp.raise_for_status()
+        resp.encoding = "EUC-JP"
+        result = _parse_odds_html(resp.text, n_horses=18)
+        if result:
+            return result
+    except requests.RequestException as e:
+        print(f"[WARN] ワイドオッズ取得失敗 {venue_code}-R{race_no}: {e}")
     return {}
 
 
@@ -535,6 +535,51 @@ def _build_schedule(race_ids: list, page_text: str, date: datetime) -> list[dict
             "date": date.strftime("%Y-%m-%d"),
         })
     return sorted(schedule, key=lambda x: (x["venue_code"], x["race_no"]))
+
+
+def _parse_odds_html(html: str, n_horses: int = 18) -> dict:
+    """
+    race.netkeiba.comのオッズHTMLテーブルをパースして {combo: odds} を返す。
+    馬連・ワイド両方に対応（テーブル構造が同じ）。
+    """
+    odds = {}
+    soup = BeautifulSoup(html, "html.parser")
+
+    # オッズテーブルを探す（複数パターン対応）
+    tables = soup.find_all("table", id=re.compile(r'odds_', re.I))
+    if not tables:
+        tables = soup.find_all("table", class_=re.compile(r'Odds|odds', re.I))
+    if not tables:
+        tables = soup.find_all("table")
+
+    for table in tables:
+        rows = table.find_all("tr")
+        for row in rows:
+            cells = row.find_all("td")
+            # 各行から馬番ペアとオッズを抽出
+            nums, float_vals = [], []
+            for cell in cells:
+                t = cell.get_text(strip=True).replace(",", "")
+                if re.match(r'^\d{1,2}$', t) and 1 <= int(t) <= n_horses:
+                    nums.append(int(t))
+                elif re.match(r'^\d+\.\d$', t):
+                    float_vals.append(float(t))
+            if len(nums) >= 2 and float_vals:
+                h1, h2 = min(nums[0], nums[1]), max(nums[0], nums[1])
+                if h1 != h2:
+                    odds[f"{h1}-{h2}"] = float_vals[0]
+
+    # テーブル方式で取れない場合はテキストから直接抽出
+    if not odds:
+        for m in re.finditer(r'(\d{1,2})-(\d{1,2})\D{0,5}(\d+\.\d)', html):
+            h1, h2 = int(m.group(1)), int(m.group(2))
+            o = float(m.group(3))
+            if 1 <= h1 <= n_horses and 1 <= h2 <= n_horses and h1 != h2:
+                key = f"{min(h1,h2)}-{max(h1,h2)}"
+                if key not in odds:
+                    odds[key] = o
+
+    return odds
 
 
 def _parse_quinella_odds(text: str) -> dict:
