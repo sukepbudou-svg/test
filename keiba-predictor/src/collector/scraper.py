@@ -539,45 +539,66 @@ def _build_schedule(race_ids: list, page_text: str, date: datetime) -> list[dict
 
 def _parse_odds_html(html: str, n_horses: int = 18) -> dict:
     """
-    race.netkeiba.comのオッズHTMLテーブルをパースして {combo: odds} を返す。
-    馬連・ワイド両方に対応（テーブル構造が同じ）。
+    race.netkeiba.comのオッズHTMLをパース。
+    JavaScript変数・HTMLテーブル・テキストパターンの順で試みる。
     """
     odds = {}
+
+    # 方法1: JavaScriptの変数/JSON埋め込みから抽出
+    # 例: {"1":{"2":"15.3","3":"8.2",...},...}  や  [["1","2","15.3"],...]
+    for pattern in [
+        r'"(\d{1,2})"\s*:\s*\{([^}]+)\}',          # {"1": {"2": "15.3", ...}}
+        r'\[(\d{1,2})\s*,\s*(\d{1,2})\s*,\s*"?([\d.]+)"?\]',  # [1, 2, "15.3"]
+    ]:
+        for m in re.finditer(pattern, html):
+            try:
+                if len(m.groups()) == 3:  # [h1, h2, odds] 形式
+                    h1, h2, o = int(m.group(1)), int(m.group(2)), float(m.group(3))
+                    if 1 <= h1 <= n_horses and 1 <= h2 <= n_horses and h1 != h2 and o > 1.0:
+                        key = f"{min(h1,h2)}-{max(h1,h2)}"
+                        odds[key] = o
+                else:  # {"1": {"2": "15.3"}} 形式
+                    h1 = int(m.group(1))
+                    inner = m.group(2)
+                    for m2 in re.finditer(r'"(\d{1,2})"\s*:\s*"?([\d.]+)"?', inner):
+                        h2, o = int(m2.group(1)), float(m2.group(2))
+                        if 1 <= h2 <= n_horses and h1 != h2 and o > 1.0:
+                            key = f"{min(h1,h2)}-{max(h1,h2)}"
+                            odds[key] = o
+            except (ValueError, IndexError):
+                continue
+        if len(odds) > 10:
+            return odds
+
+    # 方法2: HTMLテーブルから抽出
     soup = BeautifulSoup(html, "html.parser")
-
-    # オッズテーブルを探す（複数パターン対応）
-    tables = soup.find_all("table", id=re.compile(r'odds_', re.I))
-    if not tables:
-        tables = soup.find_all("table", class_=re.compile(r'Odds|odds', re.I))
-    if not tables:
-        tables = soup.find_all("table")
-
+    tables = (soup.find_all("table", id=re.compile(r'odds_', re.I)) or
+              soup.find_all("table", class_=re.compile(r'Odds|odds', re.I)) or
+              soup.find_all("table"))
     for table in tables:
-        rows = table.find_all("tr")
-        for row in rows:
+        for row in table.find_all("tr"):
             cells = row.find_all("td")
-            # 各行から馬番ペアとオッズを抽出
             nums, float_vals = [], []
             for cell in cells:
                 t = cell.get_text(strip=True).replace(",", "")
                 if re.match(r'^\d{1,2}$', t) and 1 <= int(t) <= n_horses:
                     nums.append(int(t))
-                elif re.match(r'^\d+\.\d$', t):
+                elif re.match(r'^\d+\.\d$', t) and float(t) > 1.0:
                     float_vals.append(float(t))
             if len(nums) >= 2 and float_vals:
                 h1, h2 = min(nums[0], nums[1]), max(nums[0], nums[1])
                 if h1 != h2:
                     odds[f"{h1}-{h2}"] = float_vals[0]
+    if len(odds) > 10:
+        return odds
 
-    # テーブル方式で取れない場合はテキストから直接抽出
-    if not odds:
-        for m in re.finditer(r'(\d{1,2})-(\d{1,2})\D{0,5}(\d+\.\d)', html):
-            h1, h2 = int(m.group(1)), int(m.group(2))
-            o = float(m.group(3))
-            if 1 <= h1 <= n_horses and 1 <= h2 <= n_horses and h1 != h2:
-                key = f"{min(h1,h2)}-{max(h1,h2)}"
-                if key not in odds:
-                    odds[key] = o
+    # 方法3: テキストから「X-Y 15.3」パターンを抽出
+    for m in re.finditer(r'(\d{1,2})-(\d{1,2})[^\d]{1,8}?([\d]+\.[\d])', html):
+        h1, h2, o = int(m.group(1)), int(m.group(2)), float(m.group(3))
+        if 1 <= h1 <= n_horses and 1 <= h2 <= n_horses and h1 != h2 and o > 1.0:
+            key = f"{min(h1,h2)}-{max(h1,h2)}"
+            if key not in odds:
+                odds[key] = o
 
     return odds
 
