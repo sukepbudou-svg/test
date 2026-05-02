@@ -251,12 +251,27 @@ def cmd_predict():
         print()
 
 
+def cmd_debug():
+    """スケジュール取得の診断を行う"""
+    from datetime import datetime
+    from src.collector.scraper import fetch_today_schedule
+    today = datetime.now()
+    print(f"=== スケジュール診断: {today.strftime('%Y-%m-%d')} ===\n")
+    schedule = fetch_today_schedule(today)
+    if schedule:
+        print(f"\n取得成功: {len(schedule)}レース")
+        for r in schedule:
+            print(f"  {r['venue']} {r['race_no']}R  {r.get('scheduled_time','--:--')}  {r['race_id']}")
+    else:
+        print("\n[結果] スケジュール取得できませんでした")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="競馬馬連予想ツール")
     parser.add_argument(
         "--mode", required=True,
-        choices=["train", "auto", "predict", "test_one"],
-        help="実行モード: train=学習 / auto=自動予想 / predict=本日予想表示 / test_one=次の1レースだけ予想",
+        choices=["train", "auto", "predict", "test_one", "debug"],
+        help="実行モード: train=学習 / auto=自動予想 / predict=本日予想表示 / test_one=1レーステスト / debug=診断",
     )
     parser.add_argument(
         "--race-id", default=None,
@@ -272,3 +287,5 @@ if __name__ == "__main__":
         cmd_predict()
     elif args.mode == "test_one":
         cmd_test_one(race_id_arg=args.race_id)
+    elif args.mode == "debug":
+        cmd_debug()

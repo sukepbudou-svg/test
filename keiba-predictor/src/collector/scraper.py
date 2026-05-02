@@ -118,26 +118,34 @@ def fetch_today_schedule(date: datetime = None, timeout: int = 15) -> list[dict]
     for url in urls:
         try:
             resp = requests.get(url, headers=HEADERS, timeout=timeout)
+            print(f"  [DEBUG] {url[:70]} → HTTP{resp.status_code}")
             if resp.status_code != 200:
                 continue
             for enc in ["EUC-JP", "utf-8"]:
                 resp.encoding = enc
                 text = resp.text
                 ids_found = set()
-                for m in re.finditer(r'race_id=(\d{12})', text):
+                for m in re.finditer(r'race_id=(\d{10,12})', text):
                     ids_found.add(m.group(1))
-                for m in re.finditer(r'/race/(\d{12})/', text):
+                for m in re.finditer(r'/race/(\d{10,12})/', text):
                     rid = m.group(1)
                     if rid.startswith(date_str[:4]):
                         ids_found.add(rid)
+                print(f"  [DEBUG] {enc}: {len(ids_found)}件のrace_id候補")
                 if not ids_found:
                     continue
                 valid = []
                 for rid in sorted(ids_found):
+                    if len(rid) < 10:
+                        continue
                     venue_code = rid[4:6]
-                    race_no = int(rid[10:12])
-                    if 1 <= int(venue_code) <= 10 and 1 <= race_no <= 12:
-                        valid.append(rid)
+                    race_no_str = rid[10:12] if len(rid) >= 12 else rid[8:10]
+                    try:
+                        if 1 <= int(venue_code) <= 10 and 1 <= int(race_no_str) <= 12:
+                            valid.append(rid)
+                    except ValueError:
+                        continue
+                print(f"  [DEBUG] 有効race_id: {len(valid)}件 例:{valid[:3]}")
                 if valid:
                     print(f"  [OK] {len(valid)}レース発見 ({url[:60]})")
                     return _build_schedule(valid, text, date)
