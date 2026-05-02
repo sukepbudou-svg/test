@@ -270,12 +270,68 @@ def cmd_debug():
         print("  → 直接race_idを指定する場合: python main.py --mode test_one --race-id 202605XXXXXXXX")
 
 
-if __name__ == "__main__":
+def cmd_debug_card(race_id_arg: str = None):
+    """出馬表HTMLの最初の馬行を出力して horse_id 抽出の問題を診断する"""
+    import requests
+    from bs4 import BeautifulSoup
+    from datetime import datetime
+    from src.collector.scraper import fetch_today_schedule, HEADERS
+
+    today = datetime.now()
+    if race_id_arg:
+        race_id = race_id_arg
+    else:
+        schedule = fetch_today_schedule(today)
+        if not schedule:
+            print("[ERROR] スケジュール取得失敗")
+            return
+        race_id = schedule[0]["race_id"]
+
+    url = f"https://race.netkeiba.com/race/shutuba.html?race_id={race_id}"
+    print(f"URL: {url}\n")
+    resp = requests.get(url, headers=HEADERS, timeout=15)
+    resp.encoding = "EUC-JP"
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    # HorseList行を探す
+    horse_rows = soup.select("tr.HorseList, tr.Shutuba_HorseList")
+    print(f"HorseList行数: {len(horse_rows)}")
+    if not horse_rows:
+        print("\n--- 全trタグのclass一覧 ---")
+        for tr in soup.find_all("tr")[:10]:
+            print(f"  class={tr.get('class')}")
+        return
+
+    row = horse_rows[0]
+    print(f"\n--- 最初の馬行のHTML（最初の1000文字）---")
+    print(str(row)[:1000])
+
+    print(f"\n--- 行内のaタグ一覧 ---")
+    for a in row.find_all("a", href=True):
+        print(f"  href={a.get('href')!r:60}  text={a.get_text(strip=True)!r}")
+
+    print(f"\n--- 行内のtdタグ（最初の5個）---")
+    for i, td in enumerate(row.find_all("td")[:5]):
+        print(f"  cells[{i}]: class={td.get('class')}  text={td.get_text(strip=True)!r}")
+
+    print(f"\n--- horse/jockey パターン検索 ---")
+    import re
+    row_html = str(row)
+    for pattern, label in [
+        (r'/horse/(\d{4,})', 'href /horse/'),
+        (r'horse[_\-]?id["\s:=\']+(\d{4,})', 'JS horse_id'),
+        (r'"horse":.*?"(\d{10})"', 'JSON horse'),
+        (r'/jockey/(\w+)', 'jockey href'),
+    ]:
+        found = re.findall(pattern, row_html, re.IGNORECASE)
+        print(f"  {label}: {found[:5]}")
+
+
     parser = argparse.ArgumentParser(description="競馬馬連予想ツール")
     parser.add_argument(
         "--mode", required=True,
-        choices=["train", "auto", "predict", "test_one", "debug"],
-        help="実行モード: train=学習 / auto=自動予想 / predict=本日予想表示 / test_one=1レーステスト / debug=診断",
+        choices=["train", "auto", "predict", "test_one", "debug", "debug_card"],
+        help="実行モード: train=学習 / auto=自動予想 / predict=本日予想表示 / test_one=1レーステスト / debug=診断 / debug_card=出馬表HTML診断",
     )
     parser.add_argument(
         "--race-id", default=None,
@@ -293,3 +349,5 @@ if __name__ == "__main__":
         cmd_test_one(race_id_arg=args.race_id)
     elif args.mode == "debug":
         cmd_debug()
+    elif args.mode == "debug_card":
+        cmd_debug_card(race_id_arg=args.race_id)
