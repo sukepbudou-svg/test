@@ -131,9 +131,25 @@ def fetch_today_schedule(date: datetime = None, timeout: int = 15) -> list[dict]
     except requests.RequestException:
         pass
 
+    # キャッシュ確認（同じ日は再探索しない）
+    import json
+    from pathlib import Path
+    cache_path = Path(__file__).parent.parent.parent / "data" / f"schedule_{date_str}.json"
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    if cache_path.exists():
+        try:
+            cached = json.loads(cache_path.read_text(encoding="utf-8"))
+            print(f"  [OK] キャッシュから{len(cached)}レース読み込み")
+            return cached
+        except Exception:
+            pass
+
     # プローブ方式: 出馬表URLに直接アクセスして今日の日付を確認
     print("  [INFO] スケジュールページからIDが見つからないため出馬表を直接探索します...")
-    return _probe_today_races(date, timeout)
+    result = _probe_today_races(date, timeout)
+    if result:
+        cache_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    return result
 
 
 def fetch_odds_quinella(date: datetime, venue_code: str, race_no: int,
