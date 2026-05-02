@@ -327,6 +327,7 @@ def cmd_debug_card(race_id_arg: str = None):
         print(f"  {label}: {found[:5]}")
 
 
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="競馬馬連予想ツール")
     parser.add_argument(
         "--mode", required=True,
