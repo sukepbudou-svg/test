@@ -667,21 +667,29 @@ def _parse_odds_html(html: str, n_horses: int = 18) -> dict:
 
 
 def _fetch_odds_api(race_id: str, odds_type: str = "b4", timeout: int = 15) -> dict:
-    """netkeiba内部JSONAPIからオッズを取得する"""
+    """netkeiba内部JSONAPIからオッズを取得する（セッションクッキー付き）"""
     referer = f"https://race.netkeiba.com/race/odds.html?race_id={race_id}"
+    session = requests.Session()
+    session.headers.update(HEADERS)
+    # オッズページを先に取得してクッキーを確立
+    try:
+        session.get(referer, timeout=8)
+    except requests.RequestException:
+        pass
+
     api_headers = {
-        **HEADERS,
         "Referer": referer,
         "Accept": "application/json, text/javascript, */*; q=0.01",
         "X-Requested-With": "XMLHttpRequest",
     }
+    import time as _t
+    ts = int(_t.time() * 1000)
     urls = [
-        f"https://race.netkeiba.com/api/api_get_jra_odds.html?race_id={race_id}&type={odds_type}&action=init",
-        f"https://race.netkeiba.com/api/api_get_jra_odds.html?race_id={race_id}&type={odds_type}&action=update",
+        f"https://race.netkeiba.com/api/api_get_jra_odds.html?race_id={race_id}&type={odds_type}&action=init&_={ts}",
     ]
     for url in urls:
         try:
-            resp = requests.get(url, headers=api_headers, timeout=timeout)
+            resp = session.get(url, headers=api_headers, timeout=timeout)
             if resp.status_code != 200:
                 print(f"  [DEBUG odds] status={resp.status_code} url={url}")
                 continue
@@ -690,8 +698,9 @@ def _fetch_odds_api(race_id: str, odds_type: str = "b4", timeout: int = 15) -> d
             except ValueError:
                 print(f"  [DEBUG odds] JSON解析失敗 type={odds_type} body={resp.text[:200]!r}")
                 continue
+            print(f"  [DEBUG odds] type={odds_type} response_keys={list(data.keys())[:5]} sample={str(data)[:150]}")
             raw_odds = (data.get("data") or {}).get("odds", {})
-            print(f"  [DEBUG odds] type={odds_type} raw_oddsキー数={len(raw_odds)} sample={str(raw_odds)[:120]}")
+            print(f"  [DEBUG odds] raw_oddsキー数={len(raw_odds)}")
             odds = {}
             if isinstance(raw_odds, dict):
                 for h1_str, inner in raw_odds.items():
