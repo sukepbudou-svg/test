@@ -382,18 +382,13 @@ def update_result_row(
         if not pred_rows:
             print(f"  [WARN] 予想データの読み込みに失敗しました（APIエラー）")
 
-    # 該当レースの予想行を抽出
-    # 勝負行 + 小穴見送り行（的中チェック対象）を含める
+    # 該当レースの予想行を抽出（見送り含む全行）
     race_preds = [
         r for r in pred_rows
         if str(r.get("日付", "")) == date
         and str(r.get("競艇場", "")) == venue_name
         and str(r.get("レース", "")) == str(race_no)
         and r.get("買い目（3連単）", "") not in ("", "見送り", "-")
-        and (
-            str(r.get("勝負推奨", "")) not in ("", "見送り")
-            or str(r.get("狙い", "")) in ("本命", "本命ボックス", "大穴")
-        )
     ]
 
     # 列名がずれている場合のフォールバック（旧フォーマット対応）
@@ -716,36 +711,26 @@ def update_summary_sheet(
     if not records:
         return
 
-    def is_honmei_hot(rec) -> bool:
-        return (str(rec.get("狙い", "")) == "本命" and
-                str(rec.get("勝負推奨", "")) in ("激熱", "灼熱"))
-
-    def is_honmei_pass(rec) -> bool:
-        return (str(rec.get("狙い", "")) == "本命" and
-                str(rec.get("勝負推奨", "")) == "見送り")
-
-    def is_box_hot(rec) -> bool:
-        return (str(rec.get("狙い", "")) == "本命ボックス" and
-                str(rec.get("勝負推奨", "")) in ("激熱", "灼熱"))
-
-    def is_box_pass(rec) -> bool:
-        return (str(rec.get("狙い", "")) == "本命ボックス" and
-                str(rec.get("勝負推奨", "")) == "見送り")
-
-    def is_oana_hot(rec) -> bool:
-        return (str(rec.get("狙い", "")) == "大穴" and
+    def is_honmei_ana_hot(rec) -> bool:
+        return (str(rec.get("狙い", "")) == "本命穴" and
                 str(rec.get("勝負推奨", "")) == "灼熱")
 
-    def is_oana_pass(rec) -> bool:
-        return (str(rec.get("狙い", "")) == "大穴" and
+    def is_honmei_ana_pass(rec) -> bool:
+        return (str(rec.get("狙い", "")) == "本命穴" and
                 str(rec.get("勝負推奨", "")) == "見送り")
 
-    honmei_hot_stats  = _compute_tier_stats(records, is_honmei_hot)
-    honmei_pass_stats = _compute_tier_stats(records, is_honmei_pass)
-    box_hot_stats     = _compute_tier_stats(records, is_box_hot)
-    box_pass_stats    = _compute_tier_stats(records, is_box_pass)
-    oana_hot_stats    = _compute_tier_stats(records, is_oana_hot)
-    oana_pass_stats   = _compute_tier_stats(records, is_oana_pass)
+    def is_cho_ana_hot(rec) -> bool:
+        return (str(rec.get("狙い", "")) == "超穴" and
+                str(rec.get("勝負推奨", "")) == "灼熱")
+
+    def is_cho_ana_pass(rec) -> bool:
+        return (str(rec.get("狙い", "")) == "超穴" and
+                str(rec.get("勝負推奨", "")) == "見送り")
+
+    honmei_ana_hot_stats  = _compute_tier_stats(records, is_honmei_ana_hot)
+    honmei_ana_pass_stats = _compute_tier_stats(records, is_honmei_ana_pass)
+    cho_ana_hot_stats     = _compute_tier_stats(records, is_cho_ana_hot)
+    cho_ana_pass_stats    = _compute_tier_stats(records, is_cho_ana_pass)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     NUM_COLS = 9
@@ -790,12 +775,10 @@ def update_summary_sheet(
         return sec
 
     for stats, title in [
-        (honmei_hot_stats,  "本命 激熱+灼熱"),
-        (honmei_pass_stats, "本命 見送り"),
-        (box_hot_stats,     "本命ボックス 激熱+灼熱"),
-        (box_pass_stats,    "本命ボックス 見送り"),
-        (oana_hot_stats,    "大穴 灼熱"),
-        (oana_pass_stats,   "大穴 見送り"),
+        (honmei_ana_hot_stats,  "本命穴 灼熱"),
+        (honmei_ana_pass_stats, "本命穴 見送り"),
+        (cho_ana_hot_stats,     "超穴 灼熱"),
+        (cho_ana_pass_stats,    "超穴 見送り"),
     ]:
         rows.extend(_section(stats, title))
 
@@ -845,8 +828,8 @@ def update_summary_sheet(
 
     print(
         f"[OK] {SUMMARY_SHEET}更新: "
-        f"本命激熱+灼熱 {honmei_hot_stats['pred_races']}R ROI={_roi_str(honmei_hot_stats)} / "
-        f"大穴灼熱 {oana_hot_stats['pred_races']}R ROI={_roi_str(oana_hot_stats)}"
+        f"本命穴灼熱 {honmei_ana_hot_stats['pred_races']}R ROI={_roi_str(honmei_ana_hot_stats)} / "
+        f"超穴灼熱 {cho_ana_hot_stats['pred_races']}R ROI={_roi_str(cho_ana_hot_stats)}"
     )
 
 

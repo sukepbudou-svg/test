@@ -362,21 +362,20 @@ def _predict_one_race(
         if label not in ("見送り", ""):
             has_bet = True
             print(f"  → [{label}] {rec['combination']} 確率:{rec['prob']}")
-        elif tier in ("本命", "本命ボックス", "大穴"):
+        else:
             print(f"  → [見送り/{tier}] {rec['combination']} 確率:{rec['prob']}")
-        # 成績6への記録: 勝負行 + 小穴/大穴見送り行（的中チェック対象として残す）
-        if label not in ("見送り", "") or tier in ("本命", "本命ボックス", "大穴"):
-            pred_rows.append({
-                "日付": date_str,
-                "競艇場": venue_name,
-                "レース": str(race_no),
-                "狙い": tier if tier else "-",
-                "買い目（3連単）": rec.get("combination", ""),
-                "的中確率": rec.get("prob", "-"),
-                "期待回収率": rec.get("expected_roi", "-"),
-                "信頼度": rec.get("confidence", "-"),
-                "勝負推奨": label,
-            })
+        # 全行（見送り含む）を成績記録対象に追加
+        pred_rows.append({
+            "日付": date_str,
+            "競艇場": venue_name,
+            "レース": str(race_no),
+            "狙い": tier if tier else "-",
+            "買い目（3連単）": rec.get("combination", ""),
+            "的中確率": rec.get("prob", "-"),
+            "期待回収率": rec.get("expected_roi", "-"),
+            "信頼度": rec.get("confidence", "-"),
+            "勝負推奨": label,
+        })
     if not has_bet:
         print(f"  → 見送り（参考予想のみ）")
 

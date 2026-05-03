@@ -392,21 +392,20 @@ def get_recommendations(
             second_b2 = int(filtered.iloc[n]["boat2"]) if len(filtered) > n else None
             return topN.reset_index(drop=True), star_level, is_confident, second_b2
 
-        # 本命穴: 100〜150倍 から上位2点（edge≥3.0で灼熱）
+        # 本命穴: 100〜150倍 から上位2点（灼熱は超穴のedgeに連動）
         honmei_ana_recs, honmei_ana_star, _, _ = pick_by_edge(
             by_prob, "本命穴", n=2, min_odds=100, max_odds=150,
             hot_threshold=99, fire_threshold=3.0)
 
-        # 超穴: 150〜400倍 から上位2点（edge≥4.0で灼熱: 400倍でも確率がランダム以上になる基準）
+        # 超穴: 150〜300倍 から上位2点（edge≥3.0で灼熱）
         cho_ana_recs, cho_ana_star, _, _ = pick_by_edge(
-            by_prob, "超穴", n=2, min_odds=150, max_odds=400,
-            hot_threshold=99, fire_threshold=4.0)
+            by_prob, "超穴", n=2, min_odds=150, max_odds=300,
+            hot_threshold=99, fire_threshold=3.0)
 
         if honmei_ana_recs.empty and cho_ana_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
 
         def _make_row(rec, star_lv, second):
-            # 本命穴・超穴ともに灼熱（edge≥2.0）のみ勝負
             if star_lv >= 3:
                 confidence, bet_label = "★★★★", "灼熱"
             else:
@@ -428,8 +427,9 @@ def get_recommendations(
                 "edge": str(edge_val),
             }
 
+        # 本命穴の灼熱は超穴のedge（cho_ana_star）に連動する
         for _, rec in honmei_ana_recs.iterrows():
-            all_recommendations.append(_make_row(rec, honmei_ana_star, None))
+            all_recommendations.append(_make_row(rec, cho_ana_star, None))
         for _, rec in cho_ana_recs.iterrows():
             all_recommendations.append(_make_row(rec, cho_ana_star, None))
 
