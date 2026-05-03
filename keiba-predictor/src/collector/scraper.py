@@ -249,7 +249,12 @@ def fetch_horse_past_results(horse_id: str, n: int = 5, timeout: int = 15) -> li
         return []
 
     soup = BeautifulSoup(resp.text, "html.parser")
-    return _parse_horse_results(soup, n)
+    result = _parse_horse_results(soup, n)
+    if not result:
+        tables = soup.find_all("table")
+        table_classes = [t.get("class") for t in tables[:5]]
+        print(f"  [DEBUG] 馬成績パース失敗 {horse_id}: テーブル数={len(tables)} classes={table_classes}")
+    return result
 
 
 def fetch_training_times(race_id: str, timeout: int = 15) -> dict:
