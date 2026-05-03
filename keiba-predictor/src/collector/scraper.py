@@ -64,7 +64,20 @@ def fetch_race_card(date: datetime, venue_code: str, race_no: int,
         return {}
 
     soup = BeautifulSoup(resp.text, "html.parser")
-    return _parse_race_card(soup, date, venue_code, race_no)
+    card = _parse_race_card(soup, date, venue_code, race_no)
+
+    # 出馬表HTMLで単勝オッズが取れない場合はAPIから補完
+    if card and card.get("horses"):
+        known = sum(1 for h in card["horses"] if h.get("win_odds", 0.0) > 0)
+        if known == 0:
+            win_odds_map = _fetch_win_odds_api(rid)
+            if win_odds_map:
+                for h in card["horses"]:
+                    no = h.get("horse_no")
+                    if no in win_odds_map:
+                        h["win_odds"] = win_odds_map[no]
+
+    return card
 
 
 def fetch_race_result(date: datetime, venue_code: str, race_no: int,
@@ -665,6 +678,42 @@ def _parse_odds_html(html: str, n_horses: int = 18) -> dict:
 
     # 少数ヒットはフェイクデータの可能性が高いため破棄
     return odds if len(odds) >= 10 else {}
+
+
+def _fetch_win_odds_api(race_id: str, timeout: int = 10) -> dict:
+    """単勝オッズAPIから {horse_no: odds} を取得する（type=b1）"""
+    import time as _t
+    referer = f"https://race.netkeiba.com/race/odds.html?race_id={race_id}"
+    api_headers = {
+        **HEADERS,
+        "Referer": referer,
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "X-Requested-With": "XMLHttpRequest",
+    }
+    ts = int(_t.time() * 1000)
+    url = (f"https://race.netkeiba.com/api/api_get_jra_odds.html"
+           f"?race_id={race_id}&type=b1&action=init&_={ts}")
+    try:
+        resp = requests.get(url, headers=api_headers, timeout=timeout)
+        if resp.status_code != 200:
+            return {}
+        data = resp.json()
+        if (data.get("status") or "").upper() != "OK":
+            return {}
+        # 単勝レスポンス: {"data": {"odds": {"1": "3.5", "2": "12.3", ...}}}
+        raw = (data.get("data") or {}).get("odds", {})
+        result = {}
+        for h_str, o_val in raw.items():
+            try:
+                h = int(h_str)
+                o = float(o_val) if not isinstance(o_val, dict) else 0.0
+                if o > 1.0:
+                    result[h] = o
+            except (ValueError, TypeError):
+                continue
+        return result
+    except (requests.RequestException, ValueError):
+        return {}
 
 
 def _fetch_odds_api(race_id: str, odds_type: str = "b4", timeout: int = 15) -> dict:
