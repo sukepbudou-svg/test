@@ -362,9 +362,9 @@ def _predict_one_race(
         arare = rec.get("arare_reasons", "")
         if label not in ("見送り", ""):
             has_bet = True
-            print(f"  → [{label}] {rec['combination']} 確率:{rec['prob']} 荒れ:{arare}")
+            print(f"  → [{label}/{tier}] {rec['combination']} オッズ:{rec['odds']} エッジ:{rec['edge']} 荒れ:{arare}")
         else:
-            print(f"  → [見送り/{tier}] {rec['combination']} 確率:{rec['prob']}")
+            print(f"  → [見送り/{tier}] {rec['combination']} オッズ:{rec['odds']} エッジ:{rec['edge']}")
         # 全行（見送り含む）を成績記録対象に追加
         pred_rows.append({
             "日付": date_str,
