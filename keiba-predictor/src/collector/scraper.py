@@ -668,13 +668,20 @@ def _parse_odds_html(html: str, n_horses: int = 18) -> dict:
 
 def _fetch_odds_api(race_id: str, odds_type: str = "b4", timeout: int = 15) -> dict:
     """netkeiba内部JSONAPIからオッズを取得する"""
+    referer = f"https://race.netkeiba.com/race/odds.html?race_id={race_id}"
+    api_headers = {
+        **HEADERS,
+        "Referer": referer,
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "X-Requested-With": "XMLHttpRequest",
+    }
     urls = [
         f"https://race.netkeiba.com/api/api_get_jra_odds.html?race_id={race_id}&type={odds_type}&action=init",
         f"https://race.netkeiba.com/api/api_get_jra_odds.html?race_id={race_id}&type={odds_type}&action=update",
     ]
     for url in urls:
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=timeout)
+            resp = requests.get(url, headers=api_headers, timeout=timeout)
             if resp.status_code != 200:
                 continue
             try:
@@ -701,7 +708,7 @@ def _fetch_odds_api(race_id: str, odds_type: str = "b4", timeout: int = 15) -> d
                                 odds[key] = o
                         except (ValueError, TypeError):
                             continue
-            if len(odds) > 5:
+            if odds:
                 return odds
         except requests.RequestException:
             pass
