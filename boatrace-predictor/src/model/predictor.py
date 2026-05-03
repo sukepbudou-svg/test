@@ -26,7 +26,7 @@ MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
 PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
 
 # 荒れ条件: 対象レースとして選出するための最低スコア
-ARARE_MIN_SCORE = 4
+ARARE_MIN_SCORE = 5
 
 # 荒れやすい会場の加点（江戸川のみ2点、他は1点）
 ARARE_VENUES = {
@@ -75,18 +75,18 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None) -> tuple[int, l
         score += 2
         reasons.append("1号B級")
 
-    # ── 外艇(4-6号)の展示タイムが全艇中TOP3内（2点） ──
+    # ── 外艇(4-6号)の最速タイムが全艇1位（2点） ──
+    # 「TOP3内」だと6艇中95%の確率で成立してしまうため、より厳格に判定
     et_vals = {}
     for bn in range(1, 7):
         v = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
         if v and v > 0:
             et_vals[bn] = v
     if len(et_vals) >= 4:
-        top3_boats = {b for b, _ in sorted(et_vals.items(), key=lambda x: x[1])[:3]}
-        outer_top3 = top3_boats & {4, 5, 6}
-        if outer_top3:
+        fastest_boat = min(et_vals, key=lambda b: et_vals[b])
+        if fastest_boat in {4, 5, 6}:
             score += 2
-            reasons.append(f"外艇展示上位({','.join(map(str, sorted(outer_top3)))}号)")
+            reasons.append(f"{fastest_boat}号艇展示最速({et_vals[fastest_boat]:.2f}s)")
 
     # ── 補助条件（各1点） ──
     n2_1 = _safe_float(race_row.get("boat1_national_2rate"))
@@ -467,8 +467,12 @@ def get_recommendations(
 
         # 荒れ条件チェック: スコア不足のレースはスキップ
         arare_score, arare_reasons = _calc_arare_score(race_row, weather)
+        venue_name_log = race_row.get("venue_name", "")
         if arare_score < ARARE_MIN_SCORE:
+            print(f"  [荒れ対象外] {venue_name_log} {race_no}R スコア{arare_score}/{ARARE_MIN_SCORE}"
+                  + (f" 条件:[{', '.join(arare_reasons)}]" if arare_reasons else ""))
             continue
+        print(f"  [荒れ対象] {venue_name_log} {race_no}R スコア{arare_score} 条件:[{', '.join(arare_reasons)}]")
 
         predictions = predict_race(model, race_row, payout_lookup, live_odds, weather, absent_boats)
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
@@ -480,6 +484,8 @@ def get_recommendations(
             1号艇固定なし。モデルが自由に最良の組み合わせを判断する。
             """
             filtered = pool.copy()
+            filtered["odds_value"] = pd.to_numeric(filtered["odds_value"], errors="coerce")
+            filtered = filtered.dropna(subset=["odds_value"])
             if min_odds > 0:
                 filtered = filtered[filtered["odds_value"] >= min_odds]
             if max_odds is not None:
