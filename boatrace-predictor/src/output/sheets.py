@@ -17,8 +17,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-RESULT_SHEET = "成績7"
-SUMMARY_SHEET = "サマリー7"
+RESULT_SHEET = "成績8"
+SUMMARY_SHEET = "サマリー8"
 
 
 def _retry_get_records(sheet, max_attempts: int = 3) -> list:
