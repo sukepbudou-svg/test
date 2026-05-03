@@ -663,71 +663,55 @@ def _parse_odds_html(html: str, n_horses: int = 18) -> dict:
             if key not in odds:
                 odds[key] = o
 
-    return odds
+    # 少数ヒットはフェイクデータの可能性が高いため破棄
+    return odds if len(odds) >= 10 else {}
 
 
 def _fetch_odds_api(race_id: str, odds_type: str = "b4", timeout: int = 15) -> dict:
-    """netkeiba内部JSONAPIからオッズを取得する（セッションクッキー付き）"""
+    """netkeiba内部JSONAPIからオッズを取得する（status=OKのみ処理）"""
+    import time as _t
     referer = f"https://race.netkeiba.com/race/odds.html?race_id={race_id}"
-    session = requests.Session()
-    session.headers.update(HEADERS)
-    # オッズページを先に取得してクッキーを確立
-    try:
-        session.get(referer, timeout=8)
-    except requests.RequestException:
-        pass
-
     api_headers = {
+        **HEADERS,
         "Referer": referer,
         "Accept": "application/json, text/javascript, */*; q=0.01",
         "X-Requested-With": "XMLHttpRequest",
     }
-    import time as _t
     ts = int(_t.time() * 1000)
-    urls = [
-        f"https://race.netkeiba.com/api/api_get_jra_odds.html?race_id={race_id}&type={odds_type}&action=init&_={ts}",
-    ]
-    for url in urls:
-        try:
-            resp = session.get(url, headers=api_headers, timeout=timeout)
-            if resp.status_code != 200:
-                print(f"  [DEBUG odds] status={resp.status_code} url={url}")
-                continue
-            try:
-                data = resp.json()
-            except ValueError:
-                print(f"  [DEBUG odds] JSON解析失敗 type={odds_type} body={resp.text[:200]!r}")
-                continue
-            print(f"  [DEBUG odds] type={odds_type} response_keys={list(data.keys())[:5]} sample={str(data)[:150]}")
-            raw_odds = (data.get("data") or {}).get("odds", {})
-            print(f"  [DEBUG odds] raw_oddsキー数={len(raw_odds)}")
-            odds = {}
-            if isinstance(raw_odds, dict):
-                for h1_str, inner in raw_odds.items():
-                    if not isinstance(inner, dict):
-                        continue
+    url = (f"https://race.netkeiba.com/api/api_get_jra_odds.html"
+           f"?race_id={race_id}&type={odds_type}&action=init&_={ts}")
+    try:
+        resp = requests.get(url, headers=api_headers, timeout=timeout)
+        if resp.status_code != 200:
+            return {}
+        data = resp.json()
+        if (data.get("status") or "").upper() != "OK":
+            return {}
+        raw_odds = (data.get("data") or {}).get("odds", {})
+        odds = {}
+        if isinstance(raw_odds, dict):
+            for h1_str, inner in raw_odds.items():
+                if not isinstance(inner, dict):
+                    continue
+                try:
+                    h1 = int(h1_str)
+                except ValueError:
+                    continue
+                for h2_str, o_val in inner.items():
                     try:
-                        h1 = int(h1_str)
-                    except ValueError:
+                        h2 = int(h2_str)
+                        if isinstance(o_val, str) and "-" in o_val:
+                            o = float(o_val.split("-")[0])
+                        else:
+                            o = float(o_val)
+                        if h1 != h2 and o > 1.0:
+                            key = f"{min(h1,h2)}-{max(h1,h2)}"
+                            odds[key] = o
+                    except (ValueError, TypeError):
                         continue
-                    for h2_str, o_val in inner.items():
-                        try:
-                            h2 = int(h2_str)
-                            # ワイドは "2.3-4.5" 形式の範囲 → 最小値を使う
-                            if isinstance(o_val, str) and "-" in o_val:
-                                o = float(o_val.split("-")[0])
-                            else:
-                                o = float(o_val)
-                            if h1 != h2 and o > 1.0:
-                                key = f"{min(h1,h2)}-{max(h1,h2)}"
-                                odds[key] = o
-                        except (ValueError, TypeError):
-                            continue
-            if odds:
-                return odds
-        except requests.RequestException as e:
-            print(f"  [DEBUG odds] 通信エラー type={odds_type}: {e}")
-    return {}
+        return odds
+    except (requests.RequestException, ValueError):
+        return {}
 
 
 def _parse_jockey_stats(soup: BeautifulSoup) -> dict:
