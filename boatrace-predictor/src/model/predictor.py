@@ -465,14 +465,15 @@ def get_recommendations(
         weather = all_weather.get((venue_code, race_no)) if all_weather else None
         absent_boats = all_absent.get((venue_code, race_no)) if all_absent else None
 
-        # 荒れ条件チェック: スコア不足のレースはスキップ
+        # 荒れ条件チェック: スコア不足でも予想は生成するが見送りになる
         arare_score, arare_reasons = _calc_arare_score(race_row, weather)
+        arare_ok = arare_score >= ARARE_MIN_SCORE
         venue_name_log = race_row.get("venue_name", "")
-        if arare_score < ARARE_MIN_SCORE:
+        if arare_ok:
+            print(f"  [荒れ対象] {venue_name_log} {race_no}R スコア{arare_score} 条件:[{', '.join(arare_reasons)}]")
+        else:
             print(f"  [荒れ対象外] {venue_name_log} {race_no}R スコア{arare_score}/{ARARE_MIN_SCORE}"
                   + (f" 条件:[{', '.join(arare_reasons)}]" if arare_reasons else ""))
-            continue
-        print(f"  [荒れ対象] {venue_name_log} {race_no}R スコア{arare_score} 条件:[{', '.join(arare_reasons)}]")
 
         predictions = predict_race(model, race_row, payout_lookup, live_odds, weather, absent_boats)
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
@@ -523,7 +524,8 @@ def get_recommendations(
             continue  # 欠場艇が多い等でプールにデータなし
 
         def _make_row(rec, star_lv, second):
-            if star_lv >= 3:
+            effective_star = star_lv if arare_ok else 0
+            if effective_star >= 3:
                 confidence, bet_label = "★★★★", "灼熱"
             else:
                 confidence, bet_label = "★☆☆☆", "見送り"
