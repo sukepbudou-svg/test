@@ -252,8 +252,12 @@ def fetch_horse_past_results(horse_id: str, n: int = 5, timeout: int = 15) -> li
     result = _parse_horse_results(soup, n)
     if not result:
         tables = soup.find_all("table")
-        table_classes = [t.get("class") for t in tables[:5]]
-        print(f"  [DEBUG] 馬成績パース失敗 {horse_id}: テーブル数={len(tables)} classes={table_classes}")
+        has_only_prof = all(
+            "db_prof_table" in (t.get("class") or []) for t in tables
+        )
+        if not has_only_prof:
+            table_classes = [t.get("class") for t in tables[:3]]
+            print(f"  [WARN] 馬成績パース失敗 {horse_id}: テーブル数={len(tables)} classes={table_classes}")
     return result
 
 
