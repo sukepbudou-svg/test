@@ -683,14 +683,16 @@ def _fetch_odds_api(race_id: str, odds_type: str = "b4", timeout: int = 15) -> d
         try:
             resp = requests.get(url, headers=api_headers, timeout=timeout)
             if resp.status_code != 200:
+                print(f"  [DEBUG odds] status={resp.status_code} url={url}")
                 continue
             try:
                 data = resp.json()
             except ValueError:
+                print(f"  [DEBUG odds] JSON解析失敗 type={odds_type} body={resp.text[:200]!r}")
                 continue
-            odds = {}
-            # {"data": {"odds": {"1": {"2": "15.3", ...}, ...}}}
             raw_odds = (data.get("data") or {}).get("odds", {})
+            print(f"  [DEBUG odds] type={odds_type} raw_oddsキー数={len(raw_odds)} sample={str(raw_odds)[:120]}")
+            odds = {}
             if isinstance(raw_odds, dict):
                 for h1_str, inner in raw_odds.items():
                     if not isinstance(inner, dict):
@@ -702,7 +704,11 @@ def _fetch_odds_api(race_id: str, odds_type: str = "b4", timeout: int = 15) -> d
                     for h2_str, o_val in inner.items():
                         try:
                             h2 = int(h2_str)
-                            o = float(o_val)
+                            # ワイドは "2.3-4.5" 形式の範囲 → 最小値を使う
+                            if isinstance(o_val, str) and "-" in o_val:
+                                o = float(o_val.split("-")[0])
+                            else:
+                                o = float(o_val)
                             if h1 != h2 and o > 1.0:
                                 key = f"{min(h1,h2)}-{max(h1,h2)}"
                                 odds[key] = o
@@ -710,8 +716,8 @@ def _fetch_odds_api(race_id: str, odds_type: str = "b4", timeout: int = 15) -> d
                             continue
             if odds:
                 return odds
-        except requests.RequestException:
-            pass
+        except requests.RequestException as e:
+            print(f"  [DEBUG odds] 通信エラー type={odds_type}: {e}")
     return {}
 
 

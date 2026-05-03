@@ -200,8 +200,7 @@ def _predict_one_race(
     # リアルタイムオッズ取得（馬連・ワイド）
     live_odds = fetch_odds_quinella(today, venue_code, race_no, race_id=race_id)
     live_wide_odds = fetch_odds_wide(today, venue_code, race_no, race_id=race_id)
-    if live_wide_odds:
-        print(f"  ワイドオッズ: {len(live_wide_odds)}通り取得")
+    print(f"  馬連オッズ: {len(live_odds)}通り / ワイドオッズ: {len(live_wide_odds)}通り取得")
 
     # 予想生成
     recs = get_recommendations(model, df_race, live_odds, live_wide_odds=live_wide_odds)
