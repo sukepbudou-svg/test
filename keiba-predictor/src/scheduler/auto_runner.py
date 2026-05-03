@@ -187,7 +187,8 @@ def _predict_one_race(
                 horse_histories[horse_name] = history
             time.sleep(0.5)
 
-    print(f"  騎手:{len(jockey_stats)}名 馬:{len(horse_histories)}頭 の成績取得完了")
+    odds_known = sum(1 for h in card["horses"] if h.get("win_odds", 0.0) > 0)
+    print(f"  騎手:{len(jockey_stats)}名 馬:{len(horse_histories)}頭 単勝オッズ:{odds_known}頭分 の成績取得完了")
 
     # 特徴量生成（騎手・馬の実績を渡す）
     df_race = build_race_features(card,

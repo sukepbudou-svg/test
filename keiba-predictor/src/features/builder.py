@@ -41,18 +41,27 @@ def build_race_features(race_card: dict, jockey_stats: dict = None,
     surface_num = SURFACE_NUM.get(race_card.get("surface", "芝"), 1)
     distance = int(race_card.get("distance", 2000))
 
-    # 人気順位: win_odds昇順でランク付け（0.0=不明は最下位扱い）
+    # 人気順位: win_odds昇順でランク付け
+    # オッズ不明馬が過半数の場合は全馬に中間順位を割り当て（馬番との誤相関を防ぐ）
     horses = race_card["horses"]
     n_horses = len(horses)
-    sorted_by_odds = sorted(
-        range(n_horses),
-        key=lambda i: horses[i].get("win_odds", 0.0) or float("inf")
-    )
+    known = [h for h in horses if h.get("win_odds", 0.0) and h.get("win_odds", 0.0) > 0]
     popularity_map: dict[str, int] = {}
-    for pop_rank, idx in enumerate(sorted_by_odds, 1):
-        name = horses[idx].get("horse_name", "")
-        if name:
-            popularity_map[name] = pop_rank
+    if len(known) >= n_horses // 2:
+        sorted_by_odds = sorted(
+            range(n_horses),
+            key=lambda i: horses[i].get("win_odds", 0.0) or float("inf")
+        )
+        for pop_rank, idx in enumerate(sorted_by_odds, 1):
+            name = horses[idx].get("horse_name", "")
+            if name:
+                popularity_map[name] = pop_rank
+    else:
+        neutral = (n_horses + 1) // 2
+        for h in horses:
+            name = h.get("horse_name", "")
+            if name:
+                popularity_map[name] = neutral
 
     rows = []
     for horse in horses:
