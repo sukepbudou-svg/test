@@ -359,9 +359,10 @@ def _predict_one_race(
                               race_count=daily_race_count)
         label = rec.get("bet_label", "")
         tier  = rec.get("tier", "")
+        arare = rec.get("arare_reasons", "")
         if label not in ("見送り", ""):
             has_bet = True
-            print(f"  → [{label}] {rec['combination']} 確率:{rec['prob']}")
+            print(f"  → [{label}] {rec['combination']} 確率:{rec['prob']} 荒れ:{arare}")
         else:
             print(f"  → [見送り/{tier}] {rec['combination']} 確率:{rec['prob']}")
         # 全行（見送り含む）を成績記録対象に追加

@@ -25,6 +25,112 @@ WEIGHT_MOTOR  = 0.15  # モーター状態エージェント
 MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
 PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
 
+# 荒れ条件: 対象レースとして選出するための最低スコア
+ARARE_MIN_SCORE = 4
+
+# 荒れやすい会場の加点（江戸川のみ2点、他は1点）
+ARARE_VENUES = {
+    "03": 2,  # 江戸川（河川・最難関）
+    "02": 1,  # 戸田
+    "04": 1,  # 平和島
+    "14": 1,  # 鳴門
+    "10": 1,  # 三国
+    "19": 1,  # 下関
+}
+
+
+def _safe_float(v) -> float | None:
+    if v is None:
+        return None
+    try:
+        f = float(v)
+        return None if f != f else f  # NaN → None
+    except (TypeError, ValueError):
+        return None
+
+
+def _calc_arare_score(race_row: pd.Series, weather: dict = None) -> tuple[int, list[str]]:
+    """
+    荒れ条件スコアを計算する。
+    2点条件: 1号艇の展示ST遅い / モーター不良 / B級 / 外艇展示タイム上位
+    1点条件: 1号艇の全国2連率低い / 外艇A1選手 / 外艇ST速い / 風速強 / 波高 / 荒れ会場 / 一般戦
+    Returns: (score, [条件説明リスト])
+    """
+    score = 0
+    reasons = []
+
+    # ── 1号艇の弱点（各2点） ──
+    st1 = _safe_float(race_row.get("boat1_exhibition_st"))
+    if st1 is not None and st1 >= 0.18:
+        score += 2
+        reasons.append(f"1号ST{st1:.2f}")
+
+    m1 = _safe_float(race_row.get("boat1_motor_2rate"))
+    if m1 is not None and m1 < 0.35:
+        score += 2
+        reasons.append(f"1号M{m1:.0%}")
+
+    g1 = _safe_float(race_row.get("boat1_grade_num"))
+    if g1 is not None and g1 <= 2:
+        score += 2
+        reasons.append("1号B級")
+
+    # ── 外艇(4-6号)の展示タイムが全艇中TOP3内（2点） ──
+    et_vals = {}
+    for bn in range(1, 7):
+        v = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
+        if v and v > 0:
+            et_vals[bn] = v
+    if len(et_vals) >= 4:
+        top3_boats = {b for b, _ in sorted(et_vals.items(), key=lambda x: x[1])[:3]}
+        outer_top3 = top3_boats & {4, 5, 6}
+        if outer_top3:
+            score += 2
+            reasons.append(f"外艇展示上位({','.join(map(str, sorted(outer_top3)))}号)")
+
+    # ── 補助条件（各1点） ──
+    n2_1 = _safe_float(race_row.get("boat1_national_2rate"))
+    if n2_1 is not None and n2_1 < 0.40:
+        score += 1
+        reasons.append(f"1号2率{n2_1:.0%}")
+
+    for bn in [4, 5, 6]:
+        g = _safe_float(race_row.get(f"boat{bn}_grade_num"))
+        if g is not None and g >= 4:
+            score += 1
+            reasons.append(f"{bn}号A1")
+            break
+
+    for bn in [4, 5, 6]:
+        st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+        if st is not None and st <= 0.12:
+            score += 1
+            reasons.append(f"{bn}号ST速({st:.2f})")
+            break
+
+    wind = _safe_float((weather or {}).get("wind_speed"))
+    if wind and wind >= 5:
+        score += 1
+        reasons.append(f"風速{int(wind)}m")
+
+    wave = _safe_float((weather or {}).get("wave_height"))
+    if wave and wave >= 15:
+        score += 1
+        reasons.append(f"波高{int(wave)}cm")
+
+    vc = str(race_row.get("venue_code", "")).zfill(2)
+    venue_pts = ARARE_VENUES.get(vc, 0)
+    if venue_pts:
+        score += venue_pts
+        reasons.append("江戸川(最難関)" if venue_pts == 2 else "荒れ会場")
+
+    mg = _safe_float(race_row.get("meet_grade_num"))
+    if mg is not None and mg <= 1:
+        score += 1
+        reasons.append("一般戦")
+
+    return score, reasons
+
 
 def build_payout_lookup(df_payout: pd.DataFrame, model: lgb.Booster, df_features: pd.DataFrame) -> dict:
     """
@@ -359,6 +465,11 @@ def get_recommendations(
         weather = all_weather.get((venue_code, race_no)) if all_weather else None
         absent_boats = all_absent.get((venue_code, race_no)) if all_absent else None
 
+        # 荒れ条件チェック: スコア不足のレースはスキップ
+        arare_score, arare_reasons = _calc_arare_score(race_row, weather)
+        if arare_score < ARARE_MIN_SCORE:
+            continue
+
         predictions = predict_race(model, race_row, payout_lookup, live_odds, weather, absent_boats)
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
 
@@ -425,6 +536,8 @@ def get_recommendations(
                 "tier": rec.get("tier", ""),
                 "bet_label": bet_label,
                 "edge": str(edge_val),
+                "arare_score": arare_score,
+                "arare_reasons": " / ".join(arare_reasons),
             }
 
         # 本命穴の灼熱は超穴のedge（cho_ana_star）に連動する
