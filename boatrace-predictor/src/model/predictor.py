@@ -514,10 +514,10 @@ def get_recommendations(
             by_prob, "本命穴", n=2, min_odds=100, max_odds=150,
             hot_threshold=99, fire_threshold=3.0)
 
-        # 超穴: 150〜300倍 から上位2点（edge≥5.0で灼熱: 300倍でも2×ランダム以上を保証）
+        # 超穴: 150〜250倍 から上位2点（edge≥3.0で灼熱）
         cho_ana_recs, cho_ana_star, _, _ = pick_by_edge(
-            by_prob, "超穴", n=2, min_odds=150, max_odds=300,
-            hot_threshold=99, fire_threshold=5.0)
+            by_prob, "超穴", n=2, min_odds=150, max_odds=250,
+            hot_threshold=99, fire_threshold=3.0)
 
         if honmei_ana_recs.empty and cho_ana_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
