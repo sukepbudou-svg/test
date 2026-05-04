@@ -520,7 +520,12 @@ def get_recommendations(
             by_prob, "超穴", n=2, min_odds=150, max_odds=250,
             hot_threshold=99, fire_threshold=4.0)
 
-        if honmei_ana_recs.empty and cho_ana_recs.empty:
+        # 激穴: 251倍〜制限なし から上位1点（edge≥4.0で灼熱）
+        geki_ana_recs, geki_ana_star, _, _ = pick_by_edge(
+            by_prob, "激穴", n=1, min_odds=251, max_odds=None,
+            hot_threshold=99, fire_threshold=4.0)
+
+        if honmei_ana_recs.empty and cho_ana_recs.empty and geki_ana_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
 
         def _make_row(rec, star_lv, second):
@@ -548,11 +553,13 @@ def get_recommendations(
                 "arare_reasons": " / ".join(arare_reasons),
             }
 
-        # 本命穴・超穴それぞれ独立してedge≥4.0で灼熱
+        # 本命穴・超穴・激穴それぞれ独立してedge≥4.0で灼熱
         for _, rec in honmei_ana_recs.iterrows():
             all_recommendations.append(_make_row(rec, honmei_ana_star, None))
         for _, rec in cho_ana_recs.iterrows():
             all_recommendations.append(_make_row(rec, cho_ana_star, None))
+        for _, rec in geki_ana_recs.iterrows():
+            all_recommendations.append(_make_row(rec, geki_ana_star, None))
 
     return pd.DataFrame(all_recommendations)
 

@@ -728,10 +728,20 @@ def update_summary_sheet(
         return (str(rec.get("狙い", "")) == "超穴" and
                 str(rec.get("勝負推奨", "")) == "見送り")
 
+    def is_geki_ana_hot(rec) -> bool:
+        return (str(rec.get("狙い", "")) == "激穴" and
+                str(rec.get("勝負推奨", "")) == "灼熱")
+
+    def is_geki_ana_pass(rec) -> bool:
+        return (str(rec.get("狙い", "")) == "激穴" and
+                str(rec.get("勝負推奨", "")) == "見送り")
+
     honmei_ana_hot_stats  = _compute_tier_stats(records, is_honmei_ana_hot)
     honmei_ana_pass_stats = _compute_tier_stats(records, is_honmei_ana_pass)
     cho_ana_hot_stats     = _compute_tier_stats(records, is_cho_ana_hot)
     cho_ana_pass_stats    = _compute_tier_stats(records, is_cho_ana_pass)
+    geki_ana_hot_stats    = _compute_tier_stats(records, is_geki_ana_hot)
+    geki_ana_pass_stats   = _compute_tier_stats(records, is_geki_ana_pass)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     NUM_COLS = 9
@@ -780,6 +790,8 @@ def update_summary_sheet(
         (honmei_ana_pass_stats, "本命穴 見送り"),
         (cho_ana_hot_stats,     "超穴 灼熱"),
         (cho_ana_pass_stats,    "超穴 見送り"),
+        (geki_ana_hot_stats,    "激穴 灼熱"),
+        (geki_ana_pass_stats,   "激穴 見送り"),
     ]:
         rows.extend(_section(stats, title))
 
@@ -830,7 +842,8 @@ def update_summary_sheet(
     print(
         f"[OK] {SUMMARY_SHEET}更新: "
         f"本命穴灼熱 {honmei_ana_hot_stats['pred_races']}R ROI={_roi_str(honmei_ana_hot_stats)} / "
-        f"超穴灼熱 {cho_ana_hot_stats['pred_races']}R ROI={_roi_str(cho_ana_hot_stats)}"
+        f"超穴灼熱 {cho_ana_hot_stats['pred_races']}R ROI={_roi_str(cho_ana_hot_stats)} / "
+        f"激穴灼熱 {geki_ana_hot_stats['pred_races']}R ROI={_roi_str(geki_ana_hot_stats)}"
     )
 
 
