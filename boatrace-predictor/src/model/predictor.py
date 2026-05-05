@@ -519,10 +519,26 @@ def get_recommendations(
             by_prob, "本命穴", n=1, min_odds=100, max_odds=150,
             hot_threshold=99, fire_threshold=4.0)
 
-        # 超穴: 151〜400倍 から上位2点（edge≥4.0で灼熱）
-        cho_ana_recs, cho_ana_star, _, _ = pick_by_edge(
-            by_prob, "超穴", n=2, min_odds=151, max_odds=400,
+        # 超穴: 151〜400倍
+        # 1点目: 1号艇含む・含まない問わず最高edge
+        cho_any_recs, cho_any_star, _, _ = pick_by_edge(
+            by_prob, "超穴", n=1, min_odds=151, max_odds=400,
             hot_threshold=99, fire_threshold=4.0)
+        # 2点目: 1号艇を含まない組み合わせの中で最高edge
+        cho_no1_recs, cho_no1_star, _, _ = pick_by_edge(
+            by_prob, "超穴", n=1, min_odds=151, max_odds=400,
+            hot_threshold=99, fire_threshold=4.0, exclude_boats=[1])
+        # 重複除去して結合
+        used_combos = set()
+        cho_ana_rows = []
+        for recs_part in (cho_any_recs, cho_no1_recs):
+            for _, row in recs_part.iterrows():
+                c = row["combination"]
+                if c not in used_combos:
+                    used_combos.add(c)
+                    cho_ana_rows.append(row)
+        cho_ana_recs = pd.DataFrame(cho_ana_rows).reset_index(drop=True) if cho_ana_rows else pd.DataFrame()
+        cho_ana_star = max(cho_any_star, cho_no1_star)
 
         # 激穴: 401倍〜制限なし から上位1点・1号艇除外（edge≥4.0で灼熱）
         geki_ana_recs, geki_ana_star, _, _ = pick_by_edge(
