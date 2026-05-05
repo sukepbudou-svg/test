@@ -523,14 +523,14 @@ def get_recommendations(
             by_prob, "本命穴", n=1, min_odds=100, max_odds=150,
             hot_threshold=99, fire_threshold=4.0)
 
-        # 超穴: 151〜400倍
+        # 超穴: 151〜300倍
         # 1点目: 1号艇含む・含まない問わず最高edge
         cho_any_recs, cho_any_star, _, _ = pick_by_edge(
-            by_prob, "超穴", n=1, min_odds=151, max_odds=400,
+            by_prob, "超穴", n=1, min_odds=151, max_odds=300,
             hot_threshold=99, fire_threshold=4.0)
         # 2点目: 1号艇を含まない組み合わせの中で最高edge
         cho_no1_recs, cho_no1_star, _, _ = pick_by_edge(
-            by_prob, "超穴", n=1, min_odds=151, max_odds=400,
+            by_prob, "超穴", n=1, min_odds=151, max_odds=300,
             hot_threshold=99, fire_threshold=4.0, exclude_boats=[1])
         # 重複除去して結合
         used_combos = set()
