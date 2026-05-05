@@ -479,10 +479,10 @@ def get_recommendations(
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
 
         def pick_by_edge(pool, tier_name, n=2, min_odds=0, max_odds=None,
-                         hot_threshold=2.0, fire_threshold=3.0):
+                         hot_threshold=2.0, fire_threshold=3.0, exclude_boats=None):
             """
             指定オッズ範囲の組み合わせからエッジ上位n点を返す。
-            1号艇固定なし。モデルが自由に最良の組み合わせを判断する。
+            exclude_boats: 除外する号艇番号のリスト（いずれかの着順に含まれる組み合わせを除外）
             """
             filtered = pool.copy()
             filtered["odds_value"] = pd.to_numeric(filtered["odds_value"], errors="coerce")
@@ -491,6 +491,10 @@ def get_recommendations(
                 filtered = filtered[filtered["odds_value"] >= min_odds]
             if max_odds is not None:
                 filtered = filtered[filtered["odds_value"] <= max_odds]
+            if exclude_boats:
+                for col in ("boat1", "boat2", "boat3"):
+                    if col in filtered.columns:
+                        filtered = filtered[~filtered[col].isin(exclude_boats)]
             if filtered.empty:
                 return pd.DataFrame(), 0, False, None
             filtered["edge_score"] = filtered["prob"] * filtered["odds_value"]
@@ -520,10 +524,10 @@ def get_recommendations(
             by_prob, "超穴", n=2, min_odds=151, max_odds=400,
             hot_threshold=99, fire_threshold=4.0)
 
-        # 激穴: 401倍〜制限なし から上位1点（edge≥4.0で灼熱）
+        # 激穴: 401倍〜制限なし から上位1点・1号艇除外（edge≥4.0で灼熱）
         geki_ana_recs, geki_ana_star, _, _ = pick_by_edge(
             by_prob, "激穴", n=1, min_odds=401, max_odds=None,
-            hot_threshold=99, fire_threshold=4.0)
+            hot_threshold=99, fire_threshold=4.0, exclude_boats=[1])
 
         if honmei_ana_recs.empty and cho_ana_recs.empty and geki_ana_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
