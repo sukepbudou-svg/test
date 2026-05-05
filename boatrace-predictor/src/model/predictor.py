@@ -528,27 +528,36 @@ def get_recommendations(
         cho_any_recs, cho_any_star, _, _ = pick_by_edge(
             by_prob, "超穴", n=1, min_odds=151, max_odds=300,
             hot_threshold=99, fire_threshold=4.0)
-        # 2点目: 1号艇を含まない組み合わせの中で最高edge
-        cho_no1_recs, cho_no1_star, _, _ = pick_by_edge(
-            by_prob, "超穴", n=1, min_odds=151, max_odds=300,
+        # 2点目候補: 1号艇を含まない組み合わせを複数取得（重複時は次点を使う）
+        cho_no1_pool, cho_no1_star, _, _ = pick_by_edge(
+            by_prob, "超穴", n=10, min_odds=151, max_odds=300,
             hot_threshold=99, fire_threshold=4.0, exclude_boats=[1])
-        # 重複除去して結合
+        # 重複除去して結合（1点目優先、2点目は1号艇除外の中で重複しない最高edge）
         used_combos = set()
         cho_ana_rows = []
-        for recs_part in (cho_any_recs, cho_no1_recs):
-            for _, row in recs_part.iterrows():
-                c = row["combination"]
-                if c not in used_combos:
-                    used_combos.add(c)
-                    cho_ana_rows.append(row)
+        for _, row in cho_any_recs.iterrows():
+            c = row["combination"]
+            if c not in used_combos:
+                used_combos.add(c)
+                cho_ana_rows.append(row)
+        for _, row in cho_no1_pool.iterrows():
+            c = row["combination"]
+            if c not in used_combos:
+                used_combos.add(c)
+                cho_ana_rows.append(row)
+                break  # 2点目は1点のみ
         cho_ana_recs = pd.DataFrame(cho_ana_rows).reset_index(drop=True) if cho_ana_rows else pd.DataFrame()
         cho_ana_star = max(cho_any_star, cho_no1_star)
 
-        # 激穴: 401倍〜制限なし から上位1点・1号艇除外・最低確率フィルター付き（edge≥4.0で灼熱）
-        geki_ana_recs, geki_ana_star, _, _ = pick_by_edge(
+        # 激穴: 401倍〜制限なし から上位1点・1号艇除外（記録は常に行う）
+        # min_prob(1/120)を満たさない場合はstar=0に強制して見送り扱いにする
+        geki_ana_recs, geki_ana_star_raw, _, _ = pick_by_edge(
             by_prob, "激穴", n=1, min_odds=401, max_odds=None,
-            hot_threshold=99, fire_threshold=4.0, exclude_boats=[1],
-            min_prob=1/120)
+            hot_threshold=99, fire_threshold=4.0, exclude_boats=[1])
+        if not geki_ana_recs.empty and float(geki_ana_recs.iloc[0]["prob"]) < 1/120:
+            geki_ana_star = 0  # 確率不足 → 見送り強制
+        else:
+            geki_ana_star = geki_ana_star_raw
 
         if honmei_ana_recs.empty and cho_ana_recs.empty and geki_ana_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
