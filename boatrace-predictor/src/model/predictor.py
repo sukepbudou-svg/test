@@ -549,15 +549,11 @@ def get_recommendations(
         cho_ana_recs = pd.DataFrame(cho_ana_rows).reset_index(drop=True) if cho_ana_rows else pd.DataFrame()
         cho_ana_star = max(cho_any_star, cho_no1_star)
 
-        # 激穴: 401倍〜制限なし から上位1点・1号艇除外（記録は常に行う）
-        # min_prob(1/120)を満たさない場合はstar=0に強制して見送り扱いにする
-        geki_ana_recs, geki_ana_star_raw, _, _ = pick_by_edge(
-            by_prob, "激穴", n=1, min_odds=401, max_odds=None,
-            hot_threshold=99, fire_threshold=4.0, exclude_boats=[1])
-        if not geki_ana_recs.empty and float(geki_ana_recs.iloc[0]["prob"]) < 1/120:
-            geki_ana_star = 0  # 確率不足 → 見送り強制
-        else:
-            geki_ana_star = geki_ana_star_raw
+        # 激穴: 401〜1000倍・1号艇除外・確率0.83%以上のみ対象（edge≥4.0で灼熱）
+        geki_ana_recs, geki_ana_star, _, _ = pick_by_edge(
+            by_prob, "激穴", n=1, min_odds=401, max_odds=1000,
+            hot_threshold=99, fire_threshold=4.0, exclude_boats=[1],
+            min_prob=1/120)
 
         if honmei_ana_recs.empty and cho_ana_recs.empty and geki_ana_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
