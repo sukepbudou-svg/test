@@ -419,7 +419,7 @@ def cmd_backtest():
     from src.collector.parser import parse_all_programs, parse_all_results
     from src.features.builder import build_features
     from src.model.trainer import load_model
-    from src.model.predictor import get_recommendations, calculate_roi_history
+    from src.model.predictor import get_recommendations
 
     print("=== バックテスト開始 ===")
     df_program = parse_all_programs(RAW_DIR / "B")
@@ -431,17 +431,84 @@ def cmd_backtest():
         print("[ERROR] モデルが見つかりません")
         return
 
-    # 直近30日分でバックテスト
-    recent_dates = sorted(df_features["date"].unique())[-30:]
+    # 直近60日分でバックテスト
+    recent_dates = sorted(df_features["date"].unique())[-60:]
     df_recent = df_features[df_features["date"].isin(recent_dates)]
+    print(f"対象期間: {recent_dates[0]} 〜 {recent_dates[-1]}（{len(recent_dates)}日間）")
 
     recommendations = get_recommendations(model, df_recent)
-    roi_history = calculate_roi_history(df_rank, df_payout, recommendations)
+    if recommendations.empty:
+        print("[WARN] 推奨買い目が生成されませんでした")
+        return
 
-    print(f"\n=== バックテスト結果（直近{len(recent_dates)}日間） ===")
-    print(f"総購入額  : ¥{roi_history['total_bet']:,}")
-    print(f"総払戻額  : ¥{roi_history['total_return']:,}")
-    print(f"実際の回収率: {roi_history['roi_pct']}")
+    # 払戻データをキー付きdictに変換（高速化）
+    payout_dict = {}
+    for _, row in df_payout[df_payout["bet_type"] == "３連単"].iterrows():
+        key = (row["date"], row.get("venue_name", ""), int(row["race_no"]), row["combination"])
+        payout_dict[key] = int(row["payout"])
+
+    tiers = ["本命穴", "超穴", "激穴"]
+    stats = {t: {"bets": 0, "hits": 0, "ret": 0, "hit_combos": []} for t in tiers}
+    stats["合計"] = {"bets": 0, "hits": 0, "ret": 0, "hit_combos": []}
+
+    for _, rec in recommendations.iterrows():
+        combo = rec.get("combination", "")
+        if not combo or combo in ("見送り", "-", ""):
+            continue
+        tier = rec.get("tier", "")
+        if tier not in tiers:
+            continue
+
+        key = (rec["date"], rec["venue_name"], int(rec["race_no"]), combo)
+        payout = payout_dict.get(key, 0)
+
+        stats[tier]["bets"] += 100
+        stats["合計"]["bets"] += 100
+        if payout > 0:
+            stats[tier]["hits"] += 1
+            stats[tier]["ret"] += payout
+            stats[tier]["hit_combos"].append(
+                f"  {rec['date']} {rec['venue_name']} {rec['race_no']}R "
+                f"{combo} → ¥{payout:,}"
+            )
+            stats["合計"]["hits"] += 1
+            stats["合計"]["ret"] += payout
+
+    print(f"\n{'='*55}")
+    print(f"{'tier':<8} {'点数':>5} {'的中':>5} {'的中率':>7} {'払戻合計':>10} {'回収率':>7}")
+    print(f"{'-'*55}")
+    for t in tiers + ["合計"]:
+        s = stats[t]
+        b, h, r = s["bets"], s["hits"], s["ret"]
+        hr = f"{h/b*100*100:.2f}%" if b > 0 else "  -  "  # 100円×点数
+        roi = f"{r/b*100:.1f}%" if b > 0 else "  -  "
+        marker = " ◀" if t == "合計" else ""
+        print(f"{t:<8} {b//100:>5} {h:>5} {hr:>7} {r:>10,} {roi:>7}{marker}")
+
+    print(f"{'='*55}")
+
+    for t in tiers:
+        if stats[t]["hit_combos"]:
+            print(f"\n【{t} 的中内訳】")
+            for line in stats[t]["hit_combos"]:
+                print(line)
+
+    # モデル精度チェック: 高edge買い目の的中率
+    hot_recs = recommendations[recommendations["bet_label"] == "灼熱"]
+    if not hot_recs.empty:
+        hot_bets, hot_hits, hot_ret = 0, 0, 0
+        for _, rec in hot_recs.iterrows():
+            combo = rec.get("combination", "")
+            if not combo or combo in ("見送り", "-", ""):
+                continue
+            key = (rec["date"], rec["venue_name"], int(rec["race_no"]), combo)
+            payout = payout_dict.get(key, 0)
+            hot_bets += 100
+            if payout > 0:
+                hot_hits += 1
+                hot_ret += payout
+        hot_roi = f"{hot_ret/hot_bets*100:.1f}%" if hot_bets > 0 else "-"
+        print(f"\n【灼熱ラベルのみ】 {hot_bets//100}点 / {hot_hits}的中 / ROI {hot_roi}")
 
 
 if __name__ == "__main__":
