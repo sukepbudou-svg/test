@@ -26,7 +26,7 @@ MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
 PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
 
 # 荒れ条件: 対象レースとして選出するための最低スコア
-ARARE_MIN_SCORE = 6
+ARARE_MIN_SCORE = 7
 
 # 荒れやすい会場の加点（江戸川のみ2点、他は1点）
 ARARE_VENUES = {
