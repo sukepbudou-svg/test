@@ -247,16 +247,16 @@ def append_prediction_row(
         }}]
 
         if not is_skip:
-            # 勝負推奨（L列=index11）: 灼熱=赤、激熱=オレンジ
+            # 勝負推奨（L列=index11）: 神熱=赤、激熱=オレンジ
             bet_label = row.get("bet_label", "")
-            if bet_label == "灼熱":
+            if bet_label == "神熱":
                 reqs.append({"repeatCell": {
                     "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
                               "startColumnIndex": 11, "endColumnIndex": 12},
                     "cell": {"userEnteredFormat": {
-                        "backgroundColor": {"red": 0.95, "green": 0.3, "blue": 0.3},
+                        "backgroundColor": {"red": 1.0, "green": 0.84, "blue": 0.0},
                         "textFormat": {"bold": True,
-                                       "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
+                                       "foregroundColor": {"red": 0.2, "green": 0.1, "blue": 0.0}},
                     }},
                     "fields": "userEnteredFormat(backgroundColor,textFormat)",
                 }})
@@ -692,7 +692,7 @@ def update_summary_sheet(
 ) -> None:
     """
     RESULT_SHEETを集計してSUMMARY_SHEETを更新する
-    小穴激熱+灼熱 / 小穴見送り / 大穴灼熱 / 大穴見送り の4セクション
+    小穴激熱+神熱 / 小穴見送り / 大穴神熱 / 大穴見送り の4セクション
     条件付き書式を使用するため行追加によるレイアウト崩れなし
     """
     client = get_client(credentials_path)
@@ -714,7 +714,7 @@ def update_summary_sheet(
 
     def is_honmei_ana_hot(rec) -> bool:
         return (str(rec.get("狙い", "")) == "本命穴" and
-                str(rec.get("勝負推奨", "")) == "灼熱")
+                str(rec.get("勝負推奨", "")) == "神熱")
 
     def is_honmei_ana_pass(rec) -> bool:
         return (str(rec.get("狙い", "")) == "本命穴" and
@@ -722,7 +722,7 @@ def update_summary_sheet(
 
     def is_cho_ana_hot(rec) -> bool:
         return (str(rec.get("狙い", "")) == "超穴" and
-                str(rec.get("勝負推奨", "")) == "灼熱")
+                str(rec.get("勝負推奨", "")) == "神熱")
 
     def is_cho_ana_pass(rec) -> bool:
         return (str(rec.get("狙い", "")) == "超穴" and
@@ -730,7 +730,7 @@ def update_summary_sheet(
 
     def is_geki_ana_hot(rec) -> bool:
         return (str(rec.get("狙い", "")) == "激穴" and
-                str(rec.get("勝負推奨", "")) == "灼熱")
+                str(rec.get("勝負推奨", "")) == "神熱")
 
     def is_geki_ana_pass(rec) -> bool:
         return (str(rec.get("狙い", "")) == "激穴" and
@@ -786,11 +786,11 @@ def update_summary_sheet(
         return sec
 
     for stats, title in [
-        (honmei_ana_hot_stats,  "本命穴 灼熱"),
+        (honmei_ana_hot_stats,  "本命穴 神熱"),
         (honmei_ana_pass_stats, "本命穴 見送り"),
-        (cho_ana_hot_stats,     "超穴 灼熱"),
+        (cho_ana_hot_stats,     "超穴 神熱"),
         (cho_ana_pass_stats,    "超穴 見送り"),
-        (geki_ana_hot_stats,    "激穴 灼熱"),
+        (geki_ana_hot_stats,    "激穴 神熱"),
         (geki_ana_pass_stats,   "激穴 見送り"),
     ]:
         rows.extend(_section(stats, title))
@@ -841,9 +841,9 @@ def update_summary_sheet(
 
     print(
         f"[OK] {SUMMARY_SHEET}更新: "
-        f"本命穴灼熱 {honmei_ana_hot_stats['pred_races']}R ROI={_roi_str(honmei_ana_hot_stats)} / "
-        f"超穴灼熱 {cho_ana_hot_stats['pred_races']}R ROI={_roi_str(cho_ana_hot_stats)} / "
-        f"激穴灼熱 {geki_ana_hot_stats['pred_races']}R ROI={_roi_str(geki_ana_hot_stats)}"
+        f"本命穴神熱 {honmei_ana_hot_stats['pred_races']}R ROI={_roi_str(honmei_ana_hot_stats)} / "
+        f"超穴神熱 {cho_ana_hot_stats['pred_races']}R ROI={_roi_str(cho_ana_hot_stats)} / "
+        f"激穴神熱 {geki_ana_hot_stats['pred_races']}R ROI={_roi_str(geki_ana_hot_stats)}"
     )
 
 

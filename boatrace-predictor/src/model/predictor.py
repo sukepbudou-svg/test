@@ -26,7 +26,7 @@ MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
 PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
 
 # 荒れ条件: 対象レースとして選出するための最低スコア
-ARARE_MIN_SCORE = 4
+ARARE_MIN_SCORE = 6
 
 # 荒れやすい会場の加点（江戸川のみ2点、他は1点）
 ARARE_VENUES = {
@@ -529,20 +529,20 @@ def get_recommendations(
             second_b2 = int(filtered.iloc[n]["boat2"]) if len(filtered) > n else None
             return topN.reset_index(drop=True), star_level, is_confident, second_b2
 
-        # 本命穴: 100〜150倍 から上位1点（edge≥4.0で灼熱）
+        # 本命穴: 100〜150倍 から確率順上位3点
         honmei_ana_recs, honmei_ana_star, _, _ = pick_by_edge(
-            by_prob, "本命穴", n=1, min_odds=100, max_odds=150,
-            hot_threshold=99, fire_threshold=4.0)
+            by_prob, "本命穴", n=3, min_odds=100, max_odds=150,
+            hot_threshold=99, fire_threshold=4.0, sort_by="prob")
 
-        # 超穴: 151〜300倍
-        # 1点目: 1号艇含む・含まない問わず最高edge
+        # 超穴: 200〜300倍
+        # 1点目: 確率順1位（any boat）
         cho_any_recs, cho_any_star, _, _ = pick_by_edge(
-            by_prob, "超穴", n=1, min_odds=151, max_odds=300,
-            hot_threshold=99, fire_threshold=4.0)
+            by_prob, "超穴", n=1, min_odds=200, max_odds=300,
+            hot_threshold=99, fire_threshold=4.0, sort_by="prob")
         # 2点目候補: 1号艇を含まない組み合わせを複数取得（重複時は次点を使う）
         cho_no1_pool, cho_no1_star, _, _ = pick_by_edge(
-            by_prob, "超穴", n=10, min_odds=151, max_odds=300,
-            hot_threshold=99, fire_threshold=4.0, exclude_boats=[1])
+            by_prob, "超穴", n=10, min_odds=200, max_odds=300,
+            hot_threshold=99, fire_threshold=4.0, exclude_boats=[1], sort_by="prob")
         # 重複除去して結合（1点目優先、2点目は1号艇除外の中で重複しない最高edge）
         used_combos = set()
         cho_ana_rows = []
@@ -570,9 +570,8 @@ def get_recommendations(
             continue  # 欠場艇が多い等でプールにデータなし
 
         def _make_row(rec, star_lv, second):
-            effective_star = star_lv if arare_ok else 0
-            if effective_star >= 3:
-                confidence, bet_label = "★★★★", "灼熱"
+            if arare_ok:
+                confidence, bet_label = "★★★★", "神熱"
             else:
                 confidence, bet_label = "★☆☆☆", "見送り"
             src = rec.get("odds_source", "history")
