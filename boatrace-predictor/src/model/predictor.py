@@ -560,9 +560,9 @@ def get_recommendations(
         cho_ana_recs = pd.DataFrame(cho_ana_rows).reset_index(drop=True) if cho_ana_rows else pd.DataFrame()
         cho_ana_star = max(cho_any_star, cho_no1_star)
 
-        # 激穴: 301〜1300倍・1号艇全着順除外・6号艇1着除外・確率×edgeのブレンド順
+        # 激穴: 301〜1900倍・1号艇全着順除外・6号艇1着除外・確率×edgeのブレンド順
         geki_ana_recs, geki_ana_star, _, _ = pick_by_edge(
-            by_prob, "激穴", n=1, min_odds=301, max_odds=1300,
+            by_prob, "激穴", n=1, min_odds=301, max_odds=1900,
             hot_threshold=99, fire_threshold=4.0,
             exclude_boats=[1], exclude_first_boats=[6], sort_by="blend")
 
