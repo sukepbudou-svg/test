@@ -508,6 +508,10 @@ def get_recommendations(
             filtered["edge_score"] = filtered["prob"] * filtered["odds_value"]
             if sort_by == "prob":
                 filtered = filtered.sort_values("prob", ascending=False).reset_index(drop=True)
+            elif sort_by == "blend":
+                # 確率とedgeの幾何平均（両方バランスよく高い組み合わせを優先）
+                filtered["blend_score"] = (filtered["prob"] * filtered["edge_score"]) ** 0.5
+                filtered = filtered.sort_values("blend_score", ascending=False).reset_index(drop=True)
             else:
                 filtered = filtered.sort_values("edge_score", ascending=False).reset_index(drop=True)
             top_edge = float(filtered.iloc[0]["edge_score"])
@@ -556,11 +560,11 @@ def get_recommendations(
         cho_ana_recs = pd.DataFrame(cho_ana_rows).reset_index(drop=True) if cho_ana_rows else pd.DataFrame()
         cho_ana_star = max(cho_any_star, cho_no1_star)
 
-        # 激穴: 301〜1300倍・1号艇全着順除外・6号艇1着除外
+        # 激穴: 301〜1300倍・1号艇全着順除外・6号艇1着除外・確率×edgeのブレンド順
         geki_ana_recs, geki_ana_star, _, _ = pick_by_edge(
             by_prob, "激穴", n=1, min_odds=301, max_odds=1300,
             hot_threshold=99, fire_threshold=4.0,
-            exclude_boats=[1], exclude_first_boats=[6])
+            exclude_boats=[1], exclude_first_boats=[6], sort_by="blend")
 
         if honmei_ana_recs.empty and cho_ana_recs.empty and geki_ana_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
