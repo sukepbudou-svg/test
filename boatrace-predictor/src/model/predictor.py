@@ -480,11 +480,13 @@ def get_recommendations(
 
         def pick_by_edge(pool, tier_name, n=2, min_odds=0, max_odds=None,
                          hot_threshold=2.0, fire_threshold=3.0, exclude_boats=None,
-                         min_prob=None):
+                         min_prob=None, exclude_first_boats=None, sort_by="edge"):
             """
             指定オッズ範囲の組み合わせからエッジ上位n点を返す。
             exclude_boats: 除外する号艇番号のリスト（いずれかの着順に含まれる組み合わせを除外）
+            exclude_first_boats: 1着から除外する号艇番号のリスト
             min_prob: 最低確率フィルター（これ未満の組み合わせを除外）
+            sort_by: "edge"（エッジ順）または"prob"（確率順）
             """
             filtered = pool.copy()
             filtered["odds_value"] = pd.to_numeric(filtered["odds_value"], errors="coerce")
@@ -497,12 +499,17 @@ def get_recommendations(
                 for col in ("boat1", "boat2", "boat3"):
                     if col in filtered.columns:
                         filtered = filtered[~filtered[col].isin(exclude_boats)]
+            if exclude_first_boats and "boat1" in filtered.columns:
+                filtered = filtered[~filtered["boat1"].isin(exclude_first_boats)]
             if min_prob is not None:
                 filtered = filtered[filtered["prob"] >= min_prob]
             if filtered.empty:
                 return pd.DataFrame(), 0, False, None
             filtered["edge_score"] = filtered["prob"] * filtered["odds_value"]
-            filtered = filtered.sort_values("edge_score", ascending=False).reset_index(drop=True)
+            if sort_by == "prob":
+                filtered = filtered.sort_values("prob", ascending=False).reset_index(drop=True)
+            else:
+                filtered = filtered.sort_values("edge_score", ascending=False).reset_index(drop=True)
             top_edge = float(filtered.iloc[0]["edge_score"])
             if top_edge >= fire_threshold:
                 star_level = 3   # ★★★★ 灼熱
@@ -549,11 +556,12 @@ def get_recommendations(
         cho_ana_recs = pd.DataFrame(cho_ana_rows).reset_index(drop=True) if cho_ana_rows else pd.DataFrame()
         cho_ana_star = max(cho_any_star, cho_no1_star)
 
-        # 激穴: 401〜1000倍・1号艇除外・確率0.83%以上のみ対象（edge≥4.0で灼熱）
+        # 激穴: 301〜1300倍・1号艇全着順除外・6号艇1着除外・確率順で選出
         geki_ana_recs, geki_ana_star, _, _ = pick_by_edge(
-            by_prob, "激穴", n=1, min_odds=401, max_odds=1000,
-            hot_threshold=99, fire_threshold=4.0, exclude_boats=[1],
-            min_prob=1/120)
+            by_prob, "激穴", n=1, min_odds=301, max_odds=1300,
+            hot_threshold=99, fire_threshold=4.0,
+            exclude_boats=[1], exclude_first_boats=[6],
+            min_prob=1/120, sort_by="prob")
 
         if honmei_ana_recs.empty and cho_ana_recs.empty and geki_ana_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
