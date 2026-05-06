@@ -77,7 +77,11 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
         b2  = float(race_row.get(f"boat{boat}_boat_2rate",        BASELINE_BOAT_2)       or BASELINE_BOAT_2)
         n3  = float(race_row.get(f"boat{boat}_national_3rate",    BASELINE_NATIONAL_3)   or BASELINE_NATIONAL_3)
         rf  = float(race_row.get(f"boat{boat}_recent_form_score", BASELINE_RECENT_FORM)  or BASELINE_RECENT_FORM)
-        gn  = int(race_row.get(f"boat{boat}_grade_num", 2) or 2)
+        gn_raw = race_row.get(f"boat{boat}_grade_num", 2)
+        try:
+            gn = int(float(gn_raw)) if gn_raw == gn_raw and gn_raw is not None else 2
+        except (TypeError, ValueError):
+            gn = 2
 
         # 各指標を基準値からの比率でスコア化
         score = (
