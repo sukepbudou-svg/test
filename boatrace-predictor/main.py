@@ -493,8 +493,8 @@ def cmd_backtest():
             for line in stats[t]["hit_combos"]:
                 print(line)
 
-    # モデル精度チェック: 高edge買い目の的中率
-    hot_recs = recommendations[recommendations["bet_label"] == "灼熱"]
+    # モデル精度チェック: 神熱ラベルの的中率
+    hot_recs = recommendations[recommendations["bet_label"] == "神熱"]
     if not hot_recs.empty:
         hot_bets, hot_hits, hot_ret = 0, 0, 0
         for _, rec in hot_recs.iterrows():
@@ -508,7 +508,74 @@ def cmd_backtest():
                 hot_hits += 1
                 hot_ret += payout
         hot_roi = f"{hot_ret/hot_bets*100:.1f}%" if hot_bets > 0 else "-"
-        print(f"\n【灼熱ラベルのみ】 {hot_bets//100}点 / {hot_hits}的中 / ROI {hot_roi}")
+        print(f"\n【神熱ラベルのみ】 {hot_bets//100}点 / {hot_hits}的中 / ROI {hot_roi}")
+
+    # ── 荒れ条件分析: 条件クリア時に実際に100倍以上が出るか ──
+    print(f"\n{'='*60}")
+    print("【荒れ条件分析】荒れ条件クリア時の実際の払戻分布")
+    print(f"{'='*60}")
+
+    from src.model.predictor import _calc_arare_score, ARARE_MIN_SCORE
+
+    # レースごとにユニークにする
+    race_keys_seen = set()
+    arare_races      = []   # スコア≥ARARE_MIN_SCORE のレース
+    non_arare_races  = []   # スコア<ARARE_MIN_SCORE のレース
+
+    for _, row in df_recent.iterrows():
+        date_    = row.get("date", "")
+        venue_   = row.get("venue_name", "")
+        race_no_ = int(row.get("race_no", 0))
+        key_ = (date_, venue_, race_no_)
+        if key_ in race_keys_seen:
+            continue
+        race_keys_seen.add(key_)
+
+        score, _ = _calc_arare_score(row, None)
+
+        # 実際の3連単払戻を取得（そのレースの全組み合わせ）
+        race_payouts = [
+            v for (d, vn, rn, _), v in payout_dict.items()
+            if d == date_ and vn == venue_ and rn == race_no_
+        ]
+        winning_payout = max(race_payouts) if race_payouts else 0
+
+        entry = {"score": score, "payout": winning_payout}
+        if score >= ARARE_MIN_SCORE:
+            arare_races.append(entry)
+        else:
+            non_arare_races.append(entry)
+
+    def _payout_stats(races, label):
+        total = len(races)
+        if total == 0:
+            print(f"\n{label}: データなし")
+            return
+        over100  = sum(1 for r in races if r["payout"] >= 10_000)
+        over150  = sum(1 for r in races if r["payout"] >= 15_000)
+        over200  = sum(1 for r in races if r["payout"] >= 20_000)
+        over300  = sum(1 for r in races if r["payout"] >= 30_000)
+        under100 = total - over100
+        avg_pay  = sum(r["payout"] for r in races) / total
+        print(f"\n{label}（{total}レース）")
+        print(f"  払戻 100倍以上(≥¥10,000): {over100}R / {over100/total*100:.1f}%")
+        print(f"  払戻 150倍以上(≥¥15,000): {over150}R / {over150/total*100:.1f}%")
+        print(f"  払戻 200倍以上(≥¥20,000): {over200}R / {over200/total*100:.1f}%")
+        print(f"  払戻 300倍以上(≥¥30,000): {over300}R / {over300/total*100:.1f}%")
+        print(f"  払戻 100倍未満(本命決着) : {under100}R / {under100/total*100:.1f}%")
+        print(f"  平均払戻              : ¥{avg_pay:,.0f}")
+
+    _payout_stats(arare_races,     f"■ 荒れ条件クリア(スコア≥{ARARE_MIN_SCORE})")
+    _payout_stats(non_arare_races, f"■ 荒れ条件未達 (スコア<{ARARE_MIN_SCORE})")
+
+    if arare_races and non_arare_races:
+        a_rate = sum(1 for r in arare_races     if r["payout"] >= 10_000) / len(arare_races)
+        n_rate = sum(1 for r in non_arare_races if r["payout"] >= 10_000) / len(non_arare_races)
+        print(f"\n→ 荒れ条件クリア時の100倍以上率: {a_rate*100:.1f}%")
+        print(f"→ 荒れ条件未達時の100倍以上率 : {n_rate*100:.1f}%")
+        if n_rate > 0:
+            print(f"→ 荒れ条件クリアの優位性     : {a_rate/n_rate:.2f}倍")
+
 
 
 if __name__ == "__main__":
