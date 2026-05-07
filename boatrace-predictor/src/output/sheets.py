@@ -225,7 +225,16 @@ def append_prediction_row(
     values.append(row.get("bet_label", ""))
     values.append(row.get("edge", ""))
     values.append(row.get("arare_reasons", ""))
-    sheet.append_row(values, value_input_option="RAW")
+    for attempt in range(4):
+        try:
+            sheet.append_row(values, value_input_option="RAW")
+            break
+        except gspread.exceptions.APIError as e:
+            if attempt == 3:
+                raise
+            wait = 2 ** attempt
+            print(f"  [WARN] Sheets API エラー ({e}) → {wait}秒後にリトライ ({attempt+1}/4)")
+            time.sleep(wait)
 
     # 行全体の色 + 勝負推奨色 + エッジ色を1回のbatch_updateで適用
     last_row = len(sheet.get_all_values())
