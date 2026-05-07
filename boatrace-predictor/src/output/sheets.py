@@ -214,7 +214,7 @@ def append_prediction_row(
     except gspread.WorksheetNotFound:
         sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=13)
         headers = ["日付", "競艇場", "レース", "狙い", "買い目（3連単）", "的中確率",
-                   "オッズ", "期待回収率", "信頼度", "オッズ元", "本日レース数", "勝負推奨", "エッジ", "荒れPT"]
+                   "オッズ", "期待回収率", "信頼度", "オッズ元", "本日レース数", "勝負推奨", "荒れPT", "荒れ条件"]
         sheet.update("A1", [headers])
         _format_header(spreadsheet, sheet, num_cols=14)
 
@@ -223,8 +223,8 @@ def append_prediction_row(
     values = [row.get(c, "-") for c in cols]
     values.append(race_count if race_count is not None else "-")
     values.append(row.get("bet_label", ""))
-    values.append(row.get("edge", ""))
     values.append(row.get("arare_score", ""))
+    values.append(row.get("arare_reasons", ""))
     for attempt in range(4):
         try:
             sheet.append_row(values, value_input_option="RAW")
