@@ -17,8 +17,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-RESULT_SHEET = "成績9"
-SUMMARY_SHEET = "サマリー9"
+RESULT_SHEET = "成績10"
+SUMMARY_SHEET = "サマリー10"
 
 
 def _retry_get_records(sheet, max_attempts: int = 3) -> list:
@@ -702,8 +702,7 @@ def update_summary_sheet(
 ) -> None:
     """
     RESULT_SHEETを集計してSUMMARY_SHEETを更新する
-    小穴激熱+神熱 / 小穴見送り / 大穴神熱 / 大穴見送り の4セクション
-    条件付き書式を使用するため行追加によるレイアウト崩れなし
+    神熱（全ティア合計）/ 見送り（全ティア合計）の2セクション
     """
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
@@ -722,36 +721,11 @@ def update_summary_sheet(
     if not records:
         return
 
-    def is_honmei_ana_hot(rec) -> bool:
-        return (str(rec.get("狙い", "")) == "本命穴" and
-                str(rec.get("勝負推奨", "")) == "神熱")
+    is_hot  = lambda rec: str(rec.get("勝負推奨", "")) == "神熱"
+    is_pass = lambda rec: str(rec.get("勝負推奨", "")) == "見送り"
 
-    def is_honmei_ana_pass(rec) -> bool:
-        return (str(rec.get("狙い", "")) == "本命穴" and
-                str(rec.get("勝負推奨", "")) == "見送り")
-
-    def is_cho_ana_hot(rec) -> bool:
-        return (str(rec.get("狙い", "")) == "超穴" and
-                str(rec.get("勝負推奨", "")) == "神熱")
-
-    def is_cho_ana_pass(rec) -> bool:
-        return (str(rec.get("狙い", "")) == "超穴" and
-                str(rec.get("勝負推奨", "")) == "見送り")
-
-    def is_geki_ana_hot(rec) -> bool:
-        return (str(rec.get("狙い", "")) == "激穴" and
-                str(rec.get("勝負推奨", "")) == "神熱")
-
-    def is_geki_ana_pass(rec) -> bool:
-        return (str(rec.get("狙い", "")) == "激穴" and
-                str(rec.get("勝負推奨", "")) == "見送り")
-
-    honmei_ana_hot_stats  = _compute_tier_stats(records, is_honmei_ana_hot)
-    honmei_ana_pass_stats = _compute_tier_stats(records, is_honmei_ana_pass)
-    cho_ana_hot_stats     = _compute_tier_stats(records, is_cho_ana_hot)
-    cho_ana_pass_stats    = _compute_tier_stats(records, is_cho_ana_pass)
-    geki_ana_hot_stats    = _compute_tier_stats(records, is_geki_ana_hot)
-    geki_ana_pass_stats   = _compute_tier_stats(records, is_geki_ana_pass)
+    hot_stats  = _compute_tier_stats(records, is_hot)
+    pass_stats = _compute_tier_stats(records, is_pass)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     NUM_COLS = 9
@@ -759,11 +733,6 @@ def update_summary_sheet(
     def _r(*args):
         lst = list(args)
         return lst + [""] * (NUM_COLS - len(lst))
-
-    rows: list = []
-    rows.append(_r("【予想成績サマリー】"))
-    rows.append(_r("集計日時", now))
-    rows.append(_r())
 
     def _section(stats, title):
         sec = []
@@ -774,7 +743,7 @@ def update_summary_sheet(
         pp   = bets // 100
         hitr = f"{hr/pr*100:.1f}%" if pr > 0 else "0.0%"
         roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
-        pft  = ret - bets  # 数値で保持（CF条件で色分け）
+        pft  = ret - bets
 
         sec.append(_r(f"■ {title}  全期間合計"))
         sec.append(_r("予想点数", "予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
@@ -789,21 +758,18 @@ def update_summary_sheet(
             h   = len(dd["hit_race_keys"])
             r   = dd["ret"]
             dr  = f"{h/dpr*100:.1f}%" if dpr > 0 else "0.0%"
-            dp  = r - dd["bets"]  # 数値で保持
+            dp  = r - dd["bets"]
             sec.append(_r(d, n, dpr, h, dr, f"¥{r:,}", dp))
         sec.append(_r())
         sec.append(_r())
         return sec
 
-    for stats, title in [
-        (honmei_ana_hot_stats,  "本命穴 神熱"),
-        (honmei_ana_pass_stats, "本命穴 見送り"),
-        (cho_ana_hot_stats,     "超穴 神熱"),
-        (cho_ana_pass_stats,    "超穴 見送り"),
-        (geki_ana_hot_stats,    "激穴 神熱"),
-        (geki_ana_pass_stats,   "激穴 見送り"),
-    ]:
-        rows.extend(_section(stats, title))
+    rows: list = []
+    rows.append(_r("【予想成績サマリー】"))
+    rows.append(_r("集計日時", now))
+    rows.append(_r())
+    rows.extend(_section(hot_stats,  "神熱"))
+    rows.extend(_section(pass_stats, "見送り"))
 
     # シートへ書き込み
     try:
@@ -812,16 +778,15 @@ def update_summary_sheet(
         s_sheet = spreadsheet.add_worksheet(title=SUMMARY_SHEET, rows=500, cols=NUM_COLS)
 
     s_sheet.clear()
-    # USER_ENTERED: 数値は数値として保存（CF の NUMBER_GREATER/LESS が効く）
     s_sheet.update("A1", rows, value_input_option="USER_ENTERED")
 
-    # 条件付き書式を設定（既存ルールを削除してから再設定）
+    # 条件付き書式
     sid = s_sheet.id
     max_rows = 500
     full_range   = {"sheetId": sid, "startRowIndex": 0, "endRowIndex": max_rows,
                     "startColumnIndex": 0, "endColumnIndex": NUM_COLS}
     profit_range = {"sheetId": sid, "startRowIndex": 0, "endRowIndex": max_rows,
-                    "startColumnIndex": 6, "endColumnIndex": 7}  # G列
+                    "startColumnIndex": 6, "endColumnIndex": 7}
 
     try:
         url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet.id}"
@@ -830,11 +795,9 @@ def update_summary_sheet(
         )
         sheet_data = response.json()
         target = next(
-            (s for s in sheet_data.get("sheets", []) if s["properties"]["sheetId"] == sid),
-            {}
+            (s for s in sheet_data.get("sheets", []) if s["properties"]["sheetId"] == sid), {}
         )
         num_existing = len(target.get("conditionalFormats", []))
-
         reqs = []
         for i in range(num_existing - 1, -1, -1):
             reqs.append({"deleteConditionalFormatRule": {"sheetId": sid, "index": i}})
@@ -851,9 +814,8 @@ def update_summary_sheet(
 
     print(
         f"[OK] {SUMMARY_SHEET}更新: "
-        f"本命穴神熱 {honmei_ana_hot_stats['pred_races']}R ROI={_roi_str(honmei_ana_hot_stats)} / "
-        f"超穴神熱 {cho_ana_hot_stats['pred_races']}R ROI={_roi_str(cho_ana_hot_stats)} / "
-        f"激穴神熱 {geki_ana_hot_stats['pred_races']}R ROI={_roi_str(geki_ana_hot_stats)}"
+        f"神熱 {hot_stats['pred_races']}R ROI={_roi_str(hot_stats)} / "
+        f"見送り {pass_stats['pred_races']}R ROI={_roi_str(pass_stats)}"
     )
 
 
