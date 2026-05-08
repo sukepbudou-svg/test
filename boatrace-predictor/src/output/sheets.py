@@ -359,16 +359,16 @@ def update_result_row(
     spreadsheet = client.open_by_key(spreadsheet_id)
 
     RESULT_HEADERS = ["日付", "競艇場", "レース", "狙い", "予想買い目", "的中確率", "期待回収率",
-                      "実際の結果", "実際の払戻", "的中", "収支（円）", "本日レース数", "信頼度", "勝負推奨"]
+                      "実際の結果", "実際の払戻", "的中", "収支（円）", "本日レース数", "信頼度", "勝負推奨", "荒れPT"]
     try:
         r_sheet = spreadsheet.worksheet(RESULT_SHEET)
         if not r_sheet.get_all_values():
             r_sheet.update("A1", [RESULT_HEADERS])
-            _format_header(spreadsheet, r_sheet, num_cols=14)
+            _format_header(spreadsheet, r_sheet, num_cols=15)
     except gspread.WorksheetNotFound:
-        r_sheet = spreadsheet.add_worksheet(title=RESULT_SHEET, rows=2000, cols=14)
+        r_sheet = spreadsheet.add_worksheet(title=RESULT_SHEET, rows=2000, cols=15)
         r_sheet.update("A1", [RESULT_HEADERS])
-        _format_header(spreadsheet, r_sheet, num_cols=14)
+        _format_header(spreadsheet, r_sheet, num_cols=15)
 
     # メモリキャッシュ（auto_runner から渡された場合）を優先使用
     # → Google Sheets API 503 エラーを回避するため
@@ -431,11 +431,11 @@ def update_result_row(
     if not race_preds:
         r_sheet.append_row(
             [date, venue_name, race_no, "-", "（予想なし）", "-", "-",
-             actual_combination, actual_payout, "-", 0, rc, "-", ""],
+             actual_combination, actual_payout, "-", 0, rc, "-", "", ""],
             value_input_option="RAW"
         )
         _color_result_row(spreadsheet, r_sheet, len(r_sheet.get_all_values()), venue_name, "-",
-                          num_cols=14)
+                          num_cols=15)
         return
 
     for pred in race_preds:
@@ -443,6 +443,7 @@ def update_result_row(
         tier = pred.get("狙い", "-")
         confidence = pred.get("信頼度", "-")
         bet_label = pred.get("勝負推奨", "")
+        arare_pt = pred.get("荒れPT", "")
         hit = "○" if combination == actual_combination else "×"
         payout = actual_payout if hit == "○" else 0
         profit = payout - 100
@@ -450,11 +451,11 @@ def update_result_row(
         r_sheet.append_row(
             [date, venue_name, race_no, tier, combination,
              pred.get("的中確率", "-"), pred.get("期待回収率", "-"),
-             actual_combination, actual_payout, hit, profit, rc, confidence, bet_label],
+             actual_combination, actual_payout, hit, profit, rc, confidence, bet_label, arare_pt],
             value_input_option="RAW"
         )
         _color_result_row(spreadsheet, r_sheet, len(r_sheet.get_all_values()), venue_name, hit,
-                          num_cols=14)
+                          num_cols=15)
 
     print(f"[OK] 成績記録: {venue_name} {race_no}R 結果={actual_combination} 払戻={actual_payout}円")
 
