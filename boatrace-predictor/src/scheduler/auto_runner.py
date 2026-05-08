@@ -376,6 +376,7 @@ def _predict_one_race(
             "期待回収率": rec.get("expected_roi", "-"),
             "信頼度": rec.get("confidence", "-"),
             "勝負推奨": label,
+            "荒れPT": rec.get("arare_score", ""),
         })
     if not has_bet:
         print(f"  → 見送り（参考予想のみ）")
