@@ -237,7 +237,19 @@ def append_prediction_row(
             time.sleep(wait)
 
     # 行全体の色 + 勝負推奨色 + エッジ色を1回のbatch_updateで適用
-    last_row = len(sheet.get_all_values())
+    for attempt in range(4):
+        try:
+            last_row = len(sheet.get_all_values())
+            break
+        except gspread.exceptions.APIError as e:
+            if attempt == 3:
+                last_row = None
+            else:
+                wait = 2 ** attempt
+                print(f"  [WARN] Sheets API エラー ({e}) → {wait}秒後にリトライ ({attempt+1}/4)")
+                time.sleep(wait)
+    if last_row is None:
+        return  # 色付けは諦めるがデータは書き込み済み
     try:
         sid = sheet.id
         is_skip = row.get("bet_label", "") == "見送り"
