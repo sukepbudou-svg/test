@@ -739,6 +739,34 @@ def update_summary_sheet(
     hot_stats  = _compute_tier_stats(records, is_hot)
     pass_stats = _compute_tier_stats(records, is_pass)
 
+    # 荒れPT別集計（1〜6、7以上）
+    def _arare_pt_stats(records):
+        buckets = {1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, "7以上": {}}
+        for rec in records:
+            combination = rec.get("予想買い目", "")
+            if combination in ("", "（予想なし）", "見送り", "-"):
+                continue
+            try:
+                pt = int(float(str(rec.get("荒れPT", "0") or "0")))
+            except (ValueError, TypeError):
+                continue
+            key = pt if pt <= 6 else "7以上"
+            if key not in buckets:
+                continue
+            b = buckets[key]
+            b["bets"]   = b.get("bets", 0) + 100
+            b["ret"]    = b.get("ret", 0)
+            b["hits"]   = b.get("hits", 0)
+            if rec.get("的中", "") == "○":
+                b["hits"] += 1
+                try:
+                    b["ret"] += int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+                except (ValueError, TypeError):
+                    pass
+        return buckets
+
+    pt_buckets = _arare_pt_stats(records)
+
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     NUM_COLS = 9
 
@@ -782,6 +810,22 @@ def update_summary_sheet(
     rows.append(_r())
     rows.extend(_section(hot_stats,  "神熱"))
     rows.extend(_section(pass_stats, "見送り"))
+
+    # 荒れPT別集計セクション
+    rows.append(_r("■ 荒れPT別 的中集計"))
+    rows.append(_r("荒れPT", "予想点数", "的中数", "的中率", "払戻合計", "回収率", "収支"))
+    for key in [1, 2, 3, 4, 5, 6, "7以上"]:
+        b = pt_buckets.get(key, {})
+        bets = b.get("bets", 0)
+        hits = b.get("hits", 0)
+        ret  = b.get("ret", 0)
+        pp   = bets // 100
+        hitr = f"{hits/pp*100:.1f}%" if pp > 0 else "0.0%"
+        roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
+        pft  = ret - bets
+        label = f"{key}PT" if isinstance(key, int) else f"{key}（神熱）"
+        rows.append(_r(label, pp, hits, hitr, f"¥{ret:,}", roi, pft))
+    rows.append(_r())
 
     # シートへ書き込み
     try:
