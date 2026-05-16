@@ -576,6 +576,59 @@ def cmd_backtest():
         if n_rate > 0:
             print(f"→ 荒れ条件クリアの優位性     : {a_rate/n_rate:.2f}倍")
 
+    # ── 荒れPT別の万舟出現率 ──
+    print(f"\n{'='*65}")
+    print("【荒れPT別 万舟(100倍以上)出現率】")
+    print(f"{'='*65}")
+
+    # PT別にレースをバケツ分け（0〜6個別、7以上をまとめる）
+    pt_buckets_bt = {pt: [] for pt in range(0, 7)}
+    pt_buckets_bt["7以上"] = []
+
+    race_keys_seen2 = set()
+    for _, row in df_recent.iterrows():
+        date_    = row.get("date", "")
+        venue_   = row.get("venue_name", "")
+        race_no_ = int(row.get("race_no", 0))
+        key_ = (date_, venue_, race_no_)
+        if key_ in race_keys_seen2:
+            continue
+        race_keys_seen2.add(key_)
+
+        score, _ = _calc_arare_score(row, None)
+        race_payouts = [
+            v for (d, vn, rn, _), v in payout_dict.items()
+            if d == date_ and vn == venue_ and rn == race_no_
+        ]
+        winning_payout = max(race_payouts) if race_payouts else 0
+
+        bucket_key = score if score <= 6 else "7以上"
+        if bucket_key in pt_buckets_bt:
+            pt_buckets_bt[bucket_key].append(winning_payout)
+
+    print(f"{'PT':<8} {'レース数':>8} {'万舟率':>8} {'150倍+率':>9} {'300倍+率':>9} {'平均払戻':>10}")
+    print(f"{'-'*65}")
+    for pt_key in list(range(0, 7)) + ["7以上"]:
+        races_in_bucket = pt_buckets_bt[pt_key]
+        total = len(races_in_bucket)
+        if total == 0:
+            label = f"{pt_key}PT" if isinstance(pt_key, int) else f"{pt_key}（神熱）"
+            print(f"{label:<8} {'0':>8} {'-':>8} {'-':>9} {'-':>9} {'-':>10}")
+            continue
+        over100 = sum(1 for p in races_in_bucket if p >= 10_000)
+        over150 = sum(1 for p in races_in_bucket if p >= 15_000)
+        over300 = sum(1 for p in races_in_bucket if p >= 30_000)
+        avg_pay = sum(races_in_bucket) / total
+        label = f"{pt_key}PT" if isinstance(pt_key, int) else f"{pt_key}（神熱）"
+        print(
+            f"{label:<8} {total:>8} "
+            f"{over100/total*100:>7.1f}% "
+            f"{over150/total*100:>8.1f}% "
+            f"{over300/total*100:>8.1f}% "
+            f"{avg_pay:>10,.0f}"
+        )
+    print(f"{'='*65}")
+
 
 
 if __name__ == "__main__":
