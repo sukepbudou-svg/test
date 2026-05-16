@@ -517,10 +517,19 @@ def cmd_backtest():
 
     from src.model.predictor import _calc_arare_score, ARARE_MIN_SCORE
 
-    # レースごとにユニークにする
+    # 払戻を (date, venue, race_no) → 払戻額 に事前変換（高速化）
+    race_payout_map = {}
+    for (d, vn, rn, _), v in payout_dict.items():
+        rk = (d, vn, rn)
+        if rk not in race_payout_map or v > race_payout_map[rk]:
+            race_payout_map[rk] = v
+
+    # レースごとに1回だけ処理（arare分析 + PT別を同時に集計）
     race_keys_seen = set()
-    arare_races      = []   # スコア≥ARARE_MIN_SCORE のレース
-    non_arare_races  = []   # スコア<ARARE_MIN_SCORE のレース
+    arare_races     = []
+    non_arare_races = []
+    pt_buckets_bt   = {pt: [] for pt in range(0, 7)}
+    pt_buckets_bt["7以上"] = []
 
     for _, row in df_recent.iterrows():
         date_    = row.get("date", "")
@@ -532,19 +541,17 @@ def cmd_backtest():
         race_keys_seen.add(key_)
 
         score, _ = _calc_arare_score(row, None)
-
-        # 実際の3連単払戻を取得（そのレースの全組み合わせ）
-        race_payouts = [
-            v for (d, vn, rn, _), v in payout_dict.items()
-            if d == date_ and vn == venue_ and rn == race_no_
-        ]
-        winning_payout = max(race_payouts) if race_payouts else 0
+        winning_payout = race_payout_map.get(key_, 0)
 
         entry = {"score": score, "payout": winning_payout}
         if score >= ARARE_MIN_SCORE:
             arare_races.append(entry)
         else:
             non_arare_races.append(entry)
+
+        bucket_key = score if score <= 6 else "7以上"
+        if bucket_key in pt_buckets_bt:
+            pt_buckets_bt[bucket_key].append(winning_payout)
 
     def _payout_stats(races, label):
         total = len(races)
@@ -580,31 +587,6 @@ def cmd_backtest():
     print(f"\n{'='*65}")
     print("【荒れPT別 万舟(100倍以上)出現率】")
     print(f"{'='*65}")
-
-    # PT別にレースをバケツ分け（0〜6個別、7以上をまとめる）
-    pt_buckets_bt = {pt: [] for pt in range(0, 7)}
-    pt_buckets_bt["7以上"] = []
-
-    race_keys_seen2 = set()
-    for _, row in df_recent.iterrows():
-        date_    = row.get("date", "")
-        venue_   = row.get("venue_name", "")
-        race_no_ = int(row.get("race_no", 0))
-        key_ = (date_, venue_, race_no_)
-        if key_ in race_keys_seen2:
-            continue
-        race_keys_seen2.add(key_)
-
-        score, _ = _calc_arare_score(row, None)
-        race_payouts = [
-            v for (d, vn, rn, _), v in payout_dict.items()
-            if d == date_ and vn == venue_ and rn == race_no_
-        ]
-        winning_payout = max(race_payouts) if race_payouts else 0
-
-        bucket_key = score if score <= 6 else "7以上"
-        if bucket_key in pt_buckets_bt:
-            pt_buckets_bt[bucket_key].append(winning_payout)
 
     print(f"{'PT':<8} {'レース数':>8} {'万舟率':>8} {'150倍+率':>9} {'300倍+率':>9} {'平均払戻':>10}")
     print(f"{'-'*65}")
