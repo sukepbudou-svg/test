@@ -529,21 +529,21 @@ def get_recommendations(
             second_b2 = int(filtered.iloc[n]["boat2"]) if len(filtered) > n else None
             return topN.reset_index(drop=True), star_level, is_confident, second_b2
 
-        # 本命穴: 100〜150倍 から確率順上位3点
+        # 本命穴: 100〜199倍 から確率順上位4点
         honmei_ana_recs, honmei_ana_star, _, _ = pick_by_edge(
-            by_prob, "本命穴", n=3, min_odds=100, max_odds=150,
+            by_prob, "本命穴", n=4, min_odds=100, max_odds=199,
             hot_threshold=99, fire_threshold=4.0, sort_by="prob")
 
-        # 超穴: 200〜300倍
+        # 超穴: 200〜350倍
         # 1点目: 確率順1位（any boat）
         cho_any_recs, cho_any_star, _, _ = pick_by_edge(
-            by_prob, "超穴", n=1, min_odds=200, max_odds=300,
+            by_prob, "超穴", n=1, min_odds=200, max_odds=350,
             hot_threshold=99, fire_threshold=4.0, sort_by="prob")
         # 2点目候補: 1号艇を含まない組み合わせを複数取得（重複時は次点を使う）
         cho_no1_pool, cho_no1_star, _, _ = pick_by_edge(
-            by_prob, "超穴", n=10, min_odds=200, max_odds=300,
+            by_prob, "超穴", n=10, min_odds=200, max_odds=350,
             hot_threshold=99, fire_threshold=4.0, exclude_boats=[1], sort_by="prob")
-        # 重複除去して結合（1点目優先、2点目は1号艇除外の中で重複しない最高edge）
+        # 重複除去して結合（1点目優先、2点目は1号艇除外の中で重複しない最高prob）
         used_combos = set()
         cho_ana_rows = []
         for _, row in cho_any_recs.iterrows():
@@ -560,13 +560,7 @@ def get_recommendations(
         cho_ana_recs = pd.DataFrame(cho_ana_rows).reset_index(drop=True) if cho_ana_rows else pd.DataFrame()
         cho_ana_star = max(cho_any_star, cho_no1_star)
 
-        # 激穴: 301〜1900倍・1号艇全着順除外・6号艇1着除外・確率×edgeのブレンド順
-        geki_ana_recs, geki_ana_star, _, _ = pick_by_edge(
-            by_prob, "激穴", n=1, min_odds=301, max_odds=1900,
-            hot_threshold=99, fire_threshold=4.0,
-            exclude_boats=[1], exclude_first_boats=[6], sort_by="blend")
-
-        if honmei_ana_recs.empty and cho_ana_recs.empty and geki_ana_recs.empty:
+        if honmei_ana_recs.empty and cho_ana_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
 
         def _make_row(rec, star_lv, second):
@@ -593,13 +587,10 @@ def get_recommendations(
                 "arare_reasons": " / ".join(arare_reasons),
             }
 
-        # 本命穴・超穴・激穴それぞれ独立してedge≥4.0で灼熱
         for _, rec in honmei_ana_recs.iterrows():
             all_recommendations.append(_make_row(rec, honmei_ana_star, None))
         for _, rec in cho_ana_recs.iterrows():
             all_recommendations.append(_make_row(rec, cho_ana_star, None))
-        for _, rec in geki_ana_recs.iterrows():
-            all_recommendations.append(_make_row(rec, geki_ana_star, None))
 
     return pd.DataFrame(all_recommendations)
 
