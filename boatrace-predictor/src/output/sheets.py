@@ -17,8 +17,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-RESULT_SHEET = "成績10"
-SUMMARY_SHEET = "サマリー10"
+RESULT_SHEET = "成績11"
+SUMMARY_SHEET = "サマリー11"
 
 
 def _retry_get_records(sheet, max_attempts: int = 3) -> list:
@@ -754,9 +754,16 @@ def update_summary_sheet(
             if key not in buckets:
                 continue
             b = buckets[key]
-            b["bets"]   = b.get("bets", 0) + 100
-            b["ret"]    = b.get("ret", 0)
-            b["hits"]   = b.get("hits", 0)
+            b["bets"] = b.get("bets", 0) + 100
+            b["ret"]  = b.get("ret", 0)
+            b["hits"] = b.get("hits", 0)
+            # 予想R数（ユニークレース数）を追跡
+            d  = str(rec.get("日付", ""))
+            v  = str(rec.get("競艇場", ""))
+            rn = str(rec.get("レース", ""))
+            if "race_keys" not in b:
+                b["race_keys"] = set()
+            b["race_keys"].add((d, v, rn))
             if rec.get("的中", "") == "○":
                 b["hits"] += 1
                 try:
@@ -813,18 +820,19 @@ def update_summary_sheet(
 
     # 荒れPT別集計セクション
     rows.append(_r("■ 荒れPT別 的中集計"))
-    rows.append(_r("荒れPT", "予想点数", "的中数", "的中率", "払戻合計", "回収率", "収支"))
+    rows.append(_r("荒れPT", "予想点数", "予想R数", "的中数", "的中率", "払戻合計", "回収率", "収支"))
     for key in [1, 2, 3, 4, 5, 6, "7以上"]:
         b = pt_buckets.get(key, {})
         bets = b.get("bets", 0)
         hits = b.get("hits", 0)
         ret  = b.get("ret", 0)
         pp   = bets // 100
-        hitr = f"{hits/pp*100:.1f}%" if pp > 0 else "0.0%"
+        race_count = len(b.get("race_keys", set()))
+        hitr = f"{hits/race_count*100:.1f}%" if race_count > 0 else "0.0%"
         roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
         pft  = ret - bets
         label = f"{key}PT" if isinstance(key, int) else f"{key}（神熱）"
-        rows.append(_r(label, pp, hits, hitr, f"¥{ret:,}", roi, pft))
+        rows.append(_r(label, pp, race_count, hits, hitr, f"¥{ret:,}", roi, pft))
     rows.append(_r())
 
     # シートへ書き込み
