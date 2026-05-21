@@ -757,25 +757,46 @@ def update_summary_sheet(
             b["bets"] = b.get("bets", 0) + 100
             b["ret"]  = b.get("ret", 0)
             b["hits"] = b.get("hits", 0)
-            # 予想R数（ユニークレース数）を追跡
             d  = str(rec.get("日付", ""))
             v  = str(rec.get("競艇場", ""))
             rn = str(rec.get("レース", ""))
+            race_key = (d, v, rn)
+            # 予想R数（ユニークレース数）を追跡
             if "race_keys" not in b:
                 b["race_keys"] = set()
-            b["race_keys"].add((d, v, rn))
+            b["race_keys"].add(race_key)
+            # 順序付きレースリスト（連続外れ計算用）
+            if "ordered_races" not in b:
+                b["ordered_races"] = []
+                b["ordered_race_set"] = set()
+            if race_key not in b["ordered_race_set"]:
+                b["ordered_race_set"].add(race_key)
+                b["ordered_races"].append(race_key)
+            # 万舟追跡（実際の払戻 >= 10000円）
+            if "manshu_races" not in b:
+                b["manshu_races"] = set()
+            try:
+                pay_str = str(rec.get("実際の払戻", "0") or "0").replace(",", "").replace("¥", "").strip()
+                if pay_str and int(pay_str) >= 10000:
+                    b["manshu_races"].add(race_key)
+            except (ValueError, TypeError):
+                pass
             if rec.get("的中", "") == "○":
                 b["hits"] += 1
                 try:
                     b["ret"] += int(str(rec.get("実際の払戻", 0)).replace(",", ""))
                 except (ValueError, TypeError):
                     pass
+                # 的中レース記録（連続外れ計算用）
+                if "hit_races" not in b:
+                    b["hit_races"] = set()
+                b["hit_races"].add(race_key)
         return buckets
 
     pt_buckets = _arare_pt_stats(records)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    NUM_COLS = 9
+    NUM_COLS = 12
 
     def _r(*args):
         lst = list(args)
@@ -820,7 +841,7 @@ def update_summary_sheet(
 
     # 荒れPT別集計セクション
     rows.append(_r("■ 荒れPT別 的中集計"))
-    rows.append(_r("荒れPT", "予想点数", "予想R数", "的中数", "的中率", "払戻合計", "回収率", "収支"))
+    rows.append(_r("荒れPT", "予想点数", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "連続外れ", "払戻合計", "回収率", "収支"))
     for key in [1, 2, 3, 4, 5, 6, "7以上"]:
         b = pt_buckets.get(key, {})
         bets = b.get("bets", 0)
@@ -832,7 +853,21 @@ def update_summary_sheet(
         roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
         pft  = ret - bets
         label = f"{key}PT" if isinstance(key, int) else f"{key}（神熱）"
-        rows.append(_r(label, pp, race_count, hits, hitr, f"¥{ret:,}", roi, pft))
+        # 何回に1回当たる
+        interval = f"{race_count/hits:.1f}回に1回" if hits > 0 else "未的中"
+        # 万舟出現率（実際の払戻 >= 10000円のレース）
+        manshu_count = len(b.get("manshu_races", set()))
+        manshu_rate = f"{manshu_count/race_count*100:.1f}%" if race_count > 0 else "0.0%"
+        # 連続外れカウント（最後の的中以降の連続レース数）
+        ordered   = b.get("ordered_races", [])
+        hit_races = b.get("hit_races", set())
+        streak = 0
+        for rk in reversed(ordered):
+            if rk in hit_races:
+                break
+            streak += 1
+        streak_str = f"{streak}連続外れ" if streak > 0 else "直近的中"
+        rows.append(_r(label, pp, race_count, hits, hitr, interval, manshu_count, manshu_rate, streak_str, f"¥{ret:,}", roi, pft))
     rows.append(_r())
 
     # シートへ書き込み
