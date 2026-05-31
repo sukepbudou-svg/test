@@ -217,67 +217,74 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
 
     try:
         while True:
-            now = datetime.now()
-            all_done = all(r["predicted"] and r["result_fetched"] for r in schedule)
-            if all_done:
-                print("\n=== 本日の全レース処理完了 ===")
-                apply_colors_to_results_sheet(spreadsheet_id, credentials_path)
-                update_summary_sheet(spreadsheet_id, credentials_path)
-                break
+            try:
+                now = datetime.now()
+                all_done = all(r["predicted"] and r["result_fetched"] for r in schedule)
+                if all_done:
+                    print("\n=== 本日の全レース処理完了 ===")
+                    apply_colors_to_results_sheet(spreadsheet_id, credentials_path)
+                    update_summary_sheet(spreadsheet_id, credentials_path)
+                    break
 
-            for race in schedule:
-                scheduled_dt = race["scheduled_dt"]
+                for race in schedule:
+                    scheduled_dt = race["scheduled_dt"]
 
-                # ── 予想タイミング: 発走10分前 ──
-                predict_at = scheduled_dt - timedelta(minutes=PREDICT_BEFORE_MIN)
-                if not race["predicted"] and now >= predict_at:
-                    daily_race_count += 1
-                    pred_rows = _predict_one_race(
-                        race, df_program, model, payout_lookup,
-                        today, spreadsheet_id, credentials_path,
-                        fetch_beforeinfo_for_races, fetch_odds_for_races,
-                        build_features, get_recommendations, append_prediction_row,
-                        daily_race_count=daily_race_count,
-                        recent_form_lookup=recent_form_lookup,
-                        border_lookup=border_lookup,
-                    )
-                    race["pred_rows"] = pred_rows or []
-                    race["daily_race_count"] = daily_race_count
-                    race["predicted"] = True
-
-                # ── 結果取得タイミング: 発走12分後（2分間隔でリトライ、最大10回）──
-                result_at = scheduled_dt + timedelta(minutes=RESULT_AFTER_MIN)
-                last_attempt = race.get("last_result_attempt")
-                retry_ok = (last_attempt is None or
-                            now >= last_attempt + timedelta(minutes=2))
-                attempts = race.get("result_fetch_attempts", 0)
-                if race["predicted"] and not race["result_fetched"] and now >= result_at and retry_ok:
-                    if attempts >= MAX_RESULT_RETRIES:
-                        # 上限到達: 諦めてスキップ
-                        print(f"\n  [SKIP] {race['venue_name']} {race['race_no']}R: "
-                              f"結果取得{MAX_RESULT_RETRIES}回失敗のためスキップ")
-                        race["result_fetched"] = True
-                    else:
-                        race["last_result_attempt"] = now
-                        race["result_fetch_attempts"] = attempts + 1
-                        success = _fetch_and_record_result(
-                            race, today, spreadsheet_id, credentials_path,
-                            fetch_race_result, update_result_row,
-                            pred_rows_override=race.get("pred_rows", []),
-                            race_count=race.get("daily_race_count"),
+                    # ── 予想タイミング: 発走10分前 ──
+                    predict_at = scheduled_dt - timedelta(minutes=PREDICT_BEFORE_MIN)
+                    if not race["predicted"] and now >= predict_at:
+                        daily_race_count += 1
+                        pred_rows = _predict_one_race(
+                            race, df_program, model, payout_lookup,
+                            today, spreadsheet_id, credentials_path,
+                            fetch_beforeinfo_for_races, fetch_odds_for_races,
+                            build_features, get_recommendations, append_prediction_row,
+                            daily_race_count=daily_race_count,
+                            recent_form_lookup=recent_form_lookup,
+                            border_lookup=border_lookup,
                         )
-                        if success:
+                        race["pred_rows"] = pred_rows or []
+                        race["daily_race_count"] = daily_race_count
+                        race["predicted"] = True
+
+                    # ── 結果取得タイミング: 発走12分後（2分間隔でリトライ、最大10回）──
+                    result_at = scheduled_dt + timedelta(minutes=RESULT_AFTER_MIN)
+                    last_attempt = race.get("last_result_attempt")
+                    retry_ok = (last_attempt is None or
+                                now >= last_attempt + timedelta(minutes=2))
+                    attempts = race.get("result_fetch_attempts", 0)
+                    if race["predicted"] and not race["result_fetched"] and now >= result_at and retry_ok:
+                        if attempts >= MAX_RESULT_RETRIES:
+                            # 上限到達: 諦めてスキップ
+                            print(f"\n  [SKIP] {race['venue_name']} {race['race_no']}R: "
+                                  f"結果取得{MAX_RESULT_RETRIES}回失敗のためスキップ")
                             race["result_fetched"] = True
-                            update_summary_sheet(spreadsheet_id, credentials_path)
+                        else:
+                            race["last_result_attempt"] = now
+                            race["result_fetch_attempts"] = attempts + 1
+                            success = _fetch_and_record_result(
+                                race, today, spreadsheet_id, credentials_path,
+                                fetch_race_result, update_result_row,
+                                pred_rows_override=race.get("pred_rows", []),
+                                race_count=race.get("daily_race_count"),
+                            )
+                            if success:
+                                race["result_fetched"] = True
+                                update_summary_sheet(spreadsheet_id, credentials_path)
 
-            # 次の予想・結果取得までの待機時間を表示
-            next_action = _next_action_time(schedule, now)
-            if next_action:
-                wait_sec = max(0, (next_action - now).total_seconds())
-                print(f"  [{now.strftime('%H:%M:%S')}] 次のアクションまで {int(wait_sec//60)}分{int(wait_sec%60)}秒待機...",
-                      end="\r")
+                # 次の予想・結果取得までの待機時間を表示
+                next_action = _next_action_time(schedule, now)
+                if next_action:
+                    wait_sec = max(0, (next_action - now).total_seconds())
+                    print(f"  [{now.strftime('%H:%M:%S')}] 次のアクションまで {int(wait_sec//60)}分{int(wait_sec%60)}秒待機...",
+                          end="\r")
 
-            time.sleep(LOOP_INTERVAL_SEC)
+                time.sleep(LOOP_INTERVAL_SEC)
+
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                print(f"\n  [WARN] ループエラー: {e} → 30秒後に再試行")
+                time.sleep(30)
 
     except KeyboardInterrupt:
         print("\n\n自動予想を停止しました")
