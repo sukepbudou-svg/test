@@ -21,6 +21,25 @@ RESULT_SHEET = "成績11"
 SUMMARY_SHEET = "サマリー11"
 
 
+def _expand_formation(formation_str: str) -> set:
+    """
+    "2-13-1356" → {"2-1-3", "2-1-5", "2-1-6", "2-3-1", "2-3-5", "2-3-6"}
+    """
+    parts = formation_str.split("-")
+    if len(parts) != 3:
+        return set()
+    combos = set()
+    for f in parts[0]:
+        for s in parts[1]:
+            if s == f:
+                continue
+            for t in parts[2]:
+                if t == f or t == s:
+                    continue
+                combos.add(f"{f}-{s}-{t}")
+    return combos
+
+
 def _retry_get_records(sheet, max_attempts: int = 3) -> list:
     """API エラー時にリトライして records を取得する"""
     for attempt in range(max_attempts):
@@ -459,9 +478,16 @@ def update_result_row(
         confidence = pred.get("信頼度", "-")
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
-        hit = "○" if combination == actual_combination else "×"
-        payout = actual_payout if hit == "○" else 0
-        profit = payout - 100
+        # フォーメーション: 展開して照合
+        if tier == "フォーメーション":
+            form_combos = _expand_formation(combination)
+            hit    = "○" if actual_combination in form_combos else "×"
+            payout = actual_payout if hit == "○" else 0
+            profit = payout - 600   # 6枚×100円
+        else:
+            hit    = "○" if combination == actual_combination else "×"
+            payout = actual_payout if hit == "○" else 0
+            profit = payout - 100
 
         r_sheet.append_row(
             [date, venue_name, race_no, tier, combination,
@@ -938,6 +964,66 @@ def update_summary_sheet(
         mc = len(v["manshu_races"])
         mr = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
         rows.append(_r(venue, rc, mc, mr))
+    rows.append(_r())
+    rows.append(_r())
+
+    # フォーメーション PT別集計セクション
+    def _formation_pt_stats(recs):
+        fb = {4: {}, 5: {}, 6: {}, "7以上": {}}
+        for rec in recs:
+            if str(rec.get("狙い", "")) != "フォーメーション":
+                continue
+            try:
+                pt = int(float(str(rec.get("荒れPT", "0") or "0")))
+            except (ValueError, TypeError):
+                continue
+            key = pt if pt <= 6 else "7以上"
+            if key not in fb:
+                continue
+            b = fb[key]
+            b["bets"] = b.get("bets", 0) + 600
+            b["ret"]  = b.get("ret", 0)
+            b["hits"] = b.get("hits", 0)
+            d  = str(rec.get("日付", ""))
+            v  = str(rec.get("競艇場", ""))
+            rn = str(rec.get("レース", ""))
+            race_key = (d, v, rn)
+            if "race_keys" not in b:
+                b["race_keys"] = set()
+            b["race_keys"].add(race_key)
+            if "manshu_races" not in b:
+                b["manshu_races"] = set()
+            try:
+                pay_str = str(rec.get("実際の払戻", "0") or "0").replace(",", "").replace("¥", "").strip()
+                if pay_str and int(pay_str) >= 10000:
+                    b["manshu_races"].add(race_key)
+            except (ValueError, TypeError):
+                pass
+            if rec.get("的中", "") == "○":
+                b["hits"] += 1
+                try:
+                    b["ret"] += int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+                except (ValueError, TypeError):
+                    pass
+        return fb
+
+    form_buckets = _formation_pt_stats(records)
+    rows.append(_r("■ フォーメーション PT別集計（4PT以上・中穴狙い）"))
+    rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
+    for key in [4, 5, 6, "7以上"]:
+        b = form_buckets.get(key, {})
+        bets = b.get("bets", 0)
+        hits = b.get("hits", 0)
+        ret  = b.get("ret", 0)
+        rc   = len(b.get("race_keys", set()))
+        hitr = f"{hits/rc*100:.1f}%" if rc > 0 else "0.0%"
+        ivl  = f"{rc/hits:.1f}回に1回" if hits > 0 else "未的中"
+        mc   = len(b.get("manshu_races", set()))
+        mr   = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
+        roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
+        pft  = ret - bets
+        label = f"{key}PT" if isinstance(key, int) else f"{key}（神熱）"
+        rows.append(_r(label, rc, hits, hitr, ivl, mc, mr, f"¥{ret:,}", roi, pft))
     rows.append(_r())
     rows.append(_r())
 
