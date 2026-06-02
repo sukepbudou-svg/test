@@ -252,10 +252,13 @@ def append_prediction_row(
         return  # 色付けは諦めるがデータは書き込み済み
     try:
         sid = sheet.id
-        is_skip = row.get("bet_label", "") == "見送り"
+        is_skip       = row.get("bet_label", "") == "見送り"
+        is_formation  = row.get("tier", "") == "フォーメーション"
 
-        # 見送り行: 全体を薄いグレーで目立たなくする
-        if is_skip:
+        # フォーメーション行: 薄い緑で区別
+        if is_formation:
+            row_bg = {"red": 0.88, "green": 0.97, "blue": 0.84}
+        elif is_skip:
             row_bg = {"red": 0.91, "green": 0.91, "blue": 0.91}
         else:
             row_bg = _VENUE_BG_COLORS.get(str(row.get("venue_name", "")), _DEFAULT_BG)

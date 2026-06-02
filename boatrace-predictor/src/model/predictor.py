@@ -592,6 +592,51 @@ def get_recommendations(
         for _, rec in cho_ana_recs.iterrows():
             all_recommendations.append(_make_row(rec, cho_ana_star, None))
 
+        # フォーメーション予想（PT 4以上）
+        if arare_score >= 4:
+            boat_win_probs = {}
+            for bn in range(1, 7):
+                if absent_boats and bn in absent_boats:
+                    continue
+                mask = by_prob["boat1"] == bn
+                boat_win_probs[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
+            if len(boat_win_probs) >= 4:
+                ranked = sorted(boat_win_probs, key=lambda b: boat_win_probs[b], reverse=True)
+                # 1着: スコア1位、ただし1号艇が1位なら2位を選ぶ
+                first = ranked[1] if ranked[0] == 1 else ranked[0]
+                # 2着: 1着≠①→①+次点、1着=①→2位+3位
+                rest = [b for b in ranked if b != first]
+                if first != 1 and 1 in rest:
+                    nxt = next((b for b in rest if b != 1), None)
+                    second = sorted([1, nxt]) if nxt else rest[:2]
+                else:
+                    second = rest[:2]
+                # 3着: 残り5艇からスコア最低を除いた4艇
+                rem5 = [b for b in ranked if b != first]
+                third = rem5[:-1]
+                formation_str = (
+                    f"{first}-"
+                    f"{''.join(str(b) for b in second)}-"
+                    f"{''.join(str(b) for b in sorted(third))}"
+                )
+                bet_label = "神熱" if arare_ok else "見送り"
+                all_recommendations.append({
+                    "date":         race_row.get("date", ""),
+                    "venue_name":   race_row.get("venue_name", ""),
+                    "race_no":      race_row.get("race_no", ""),
+                    "combination":  formation_str,
+                    "prob":         "-",
+                    "odds":         "-",
+                    "expected_roi": "-",
+                    "confidence":   "フォーメーション",
+                    "odds_source":  "-",
+                    "tier":         "フォーメーション",
+                    "bet_label":    bet_label,
+                    "edge":         "-",
+                    "arare_score":  arare_score,
+                    "arare_reasons": " / ".join(arare_reasons),
+                })
+
     return pd.DataFrame(all_recommendations)
 
 
