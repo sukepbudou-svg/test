@@ -584,19 +584,20 @@ def cmd_backtest():
             print(f"→ 荒れ条件クリアの優位性     : {a_rate/n_rate:.2f}倍")
 
     # ── 荒れPT別の万舟出現率 ──
-    print(f"\n{'='*65}")
-    print("【荒れPT別 万舟(100倍以上)出現率】")
-    print(f"{'='*65}")
+    print(f"\n{'='*75}")
+    print("【荒れPT別 払戻分布】")
+    print(f"{'='*75}")
 
-    print(f"{'PT':<8} {'レース数':>8} {'万舟率':>8} {'150倍+率':>9} {'300倍+率':>9} {'平均払戻':>10}")
-    print(f"{'-'*65}")
+    print(f"{'PT':<8} {'レース数':>8} {'中穴率20-99倍':>13} {'万舟率100倍+':>12} {'150倍+率':>9} {'300倍+率':>9} {'平均払戻':>10}")
+    print(f"{'-'*75}")
     for pt_key in list(range(0, 7)) + ["7以上"]:
         races_in_bucket = pt_buckets_bt[pt_key]
         total = len(races_in_bucket)
         if total == 0:
             label = f"{pt_key}PT" if isinstance(pt_key, int) else f"{pt_key}（神熱）"
-            print(f"{label:<8} {'0':>8} {'-':>8} {'-':>9} {'-':>9} {'-':>10}")
+            print(f"{label:<8} {'0':>8} {'-':>13} {'-':>12} {'-':>9} {'-':>9} {'-':>10}")
             continue
+        chuana  = sum(1 for p in races_in_bucket if 2_000 <= p < 10_000)
         over100 = sum(1 for p in races_in_bucket if p >= 10_000)
         over150 = sum(1 for p in races_in_bucket if p >= 15_000)
         over300 = sum(1 for p in races_in_bucket if p >= 30_000)
@@ -604,12 +605,13 @@ def cmd_backtest():
         label = f"{pt_key}PT" if isinstance(pt_key, int) else f"{pt_key}（神熱）"
         print(
             f"{label:<8} {total:>8} "
-            f"{over100/total*100:>7.1f}% "
+            f"{chuana/total*100:>12.1f}% "
+            f"{over100/total*100:>11.1f}% "
             f"{over150/total*100:>8.1f}% "
             f"{over300/total*100:>8.1f}% "
             f"{avg_pay:>10,.0f}"
         )
-    print(f"{'='*65}")
+    print(f"{'='*75}")
 
 
 
