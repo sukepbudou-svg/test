@@ -795,6 +795,43 @@ def update_summary_sheet(
 
     pt_buckets = _arare_pt_stats(records)
 
+    # 会場別集計
+    def _venue_stats(filter_fn):
+        venues = {}
+        for rec in records:
+            if not filter_fn(rec):
+                continue
+            combination = rec.get("予想買い目", "")
+            if combination in ("", "（予想なし）", "見送り", "-"):
+                continue
+            venue = str(rec.get("競艇場", "不明"))
+            if venue not in venues:
+                venues[venue] = {"bets": 0, "ret": 0, "hits": 0,
+                                 "race_keys": set(), "manshu_races": set(), "hit_races": set()}
+            v = venues[venue]
+            v["bets"] += 100
+            d  = str(rec.get("日付", ""))
+            rn = str(rec.get("レース", ""))
+            race_key = (d, venue, rn)
+            v["race_keys"].add(race_key)
+            try:
+                pay_str = str(rec.get("実際の払戻", "0") or "0").replace(",", "").replace("¥", "").strip()
+                if pay_str and int(pay_str) >= 10000:
+                    v["manshu_races"].add(race_key)
+            except (ValueError, TypeError):
+                pass
+            if rec.get("的中", "") == "○":
+                v["hits"] += 1
+                try:
+                    v["ret"] += int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+                except (ValueError, TypeError):
+                    pass
+                v["hit_races"].add(race_key)
+        return venues
+
+    hot_venue  = _venue_stats(is_hot)
+    pass_venue = _venue_stats(is_pass)
+
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     NUM_COLS = 12
 
@@ -870,11 +907,42 @@ def update_summary_sheet(
         rows.append(_r(label, pp, race_count, hits, hitr, interval, manshu_count, manshu_rate, streak_str, f"¥{ret:,}", roi, pft))
     rows.append(_r())
 
+    # 会場別集計セクション（神熱）
+    rows.append(_r("■ 会場別 集計（神熱）"))
+    rows.append(_r("会場", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
+    for venue in sorted(hot_venue.keys()):
+        v = hot_venue[venue]
+        bets = v["bets"]
+        hits = v["hits"]
+        ret  = v["ret"]
+        rc   = len(v["race_keys"])
+        hitr = f"{hits/rc*100:.1f}%" if rc > 0 else "0.0%"
+        ivl  = f"{rc/hits:.1f}回に1回" if hits > 0 else "未的中"
+        mc   = len(v["manshu_races"])
+        mr   = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
+        roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
+        pft  = ret - bets
+        rows.append(_r(venue, rc, hits, hitr, ivl, mc, mr, f"¥{ret:,}", roi, pft))
+    rows.append(_r())
+    rows.append(_r())
+
+    # 会場別集計セクション（見送り）
+    rows.append(_r("■ 会場別 集計（見送り）"))
+    rows.append(_r("会場", "予想R数", "万舟数", "万舟率"))
+    for venue in sorted(pass_venue.keys()):
+        v = pass_venue[venue]
+        rc = len(v["race_keys"])
+        mc = len(v["manshu_races"])
+        mr = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
+        rows.append(_r(venue, rc, mc, mr))
+    rows.append(_r())
+    rows.append(_r())
+
     # シートへ書き込み
     try:
         s_sheet = spreadsheet.worksheet(SUMMARY_SHEET)
     except gspread.WorksheetNotFound:
-        s_sheet = spreadsheet.add_worksheet(title=SUMMARY_SHEET, rows=500, cols=NUM_COLS)
+        s_sheet = spreadsheet.add_worksheet(title=SUMMARY_SHEET, rows=800, cols=NUM_COLS)
 
     s_sheet.clear()
     s_sheet.update("A1", rows, value_input_option="USER_ENTERED")
