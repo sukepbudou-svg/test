@@ -601,11 +601,10 @@ def get_recommendations(
                 mask = by_prob["boat1"] == bn
                 boat_win_probs[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
             ranked_all  = sorted(boat_win_probs, key=lambda b: boat_win_probs[b], reverse=True)
-            ranked_no1  = [b for b in ranked_all if b != 1]
-            if len(ranked_no1) >= 2:
-                # 1着: 1号艇除外のスコア上位2艇
-                first_boats = ranked_no1[:2]
-                # 2着: 1着候補2艇 ＋ スコア3位の艇（1号艇固定なし・完全確率順）
+            if len(ranked_all) >= 2:
+                # 1着: スコア上位2艇（1号艇含む・完全確率順）
+                first_boats = ranked_all[:2]
+                # 2着: 1着候補2艇 ＋ スコア3位の艇（完全確率順）
                 nxt_second = next((b for b in ranked_all if b not in set(first_boats)), None)
                 second_boats = sorted(set(first_boats) | {nxt_second}) if nxt_second else sorted(first_boats)
                 # 3着: 2着候補3艇 ＋ 次点1艇（合計4艇）
