@@ -17,8 +17,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-RESULT_SHEET = "成績11"
-SUMMARY_SHEET = "サマリー11"
+RESULT_SHEET = "成績12"
+SUMMARY_SHEET = "サマリー12"
 
 
 def _expand_formation(formation_str: str) -> set:
@@ -898,12 +898,66 @@ def update_summary_sheet(
         sec.append(_r())
         return sec
 
+    # ─── ティア別グループ統計を事前計算 ───
+    TIER_GROUPS = [
+        ("本命穴・超穴",     {"本命穴", "超穴"}),
+        ("新本命穴・新超穴", {"新本命穴", "新超穴"}),
+        ("地熊目",           {"地熊目"}),
+        ("フォーメーション", {"フォーメーション"}),
+    ]
+    tier_group_stats = [
+        (name, _compute_tier_stats(records, lambda rec, t=tiers: str(rec.get("狙い", "")) in t))
+        for name, tiers in TIER_GROUPS
+    ]
+
     rows: list = []
     rows.append(_r("【予想成績サマリー】"))
     rows.append(_r("集計日時", now))
     rows.append(_r())
     rows.extend(_section(hot_stats,  "神熱"))
     rows.extend(_section(pass_stats, "見送り"))
+
+    # ─── ティア別グループ比較（勝負先検討用）───
+    rows.append(_r("■ ティア別グループ比較（神熱＋見送り全件）"))
+    rows.append(_r("グループ", "予想点数", "予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
+    for name, tgs in tier_group_stats:
+        bets = tgs["total_bets"]
+        ret  = tgs["total_return"]
+        pr   = tgs["pred_races"]
+        hr   = tgs["hit_races"]
+        pp   = bets // 100
+        hitr = f"{hr/pr*100:.1f}%" if pr > 0 else "0.0%"
+        roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
+        pft  = ret - bets
+        rows.append(_r(name, pp, pr, hr, hitr, f"¥{ret:,}", roi, pft))
+    rows.append(_r())
+
+    for name, tgs in tier_group_stats:
+        bets = tgs["total_bets"]
+        ret  = tgs["total_return"]
+        pr   = tgs["pred_races"]
+        hr   = tgs["hit_races"]
+        pp   = bets // 100
+        hitr = f"{hr/pr*100:.1f}%" if pr > 0 else "0.0%"
+        roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
+        pft  = ret - bets
+        rows.append(_r(f"▶ {name}  全期間合計"))
+        rows.append(_r("予想点数", "予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
+        rows.append(_r(pp, pr, hr, hitr, f"¥{ret:,}", roi, pft))
+        rows.append(_r())
+        rows.append(_r(f"▶ {name}  日付別内訳"))
+        rows.append(_r("日付", "予想点数", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
+        for d in sorted(tgs["daily"].keys()):
+            dd  = tgs["daily"][d]
+            n   = dd["bets"] // 100
+            dpr = len(dd["race_keys"])
+            h   = len(dd["hit_race_keys"])
+            r   = dd["ret"]
+            dr  = f"{h/dpr*100:.1f}%" if dpr > 0 else "0.0%"
+            dp  = r - dd["bets"]
+            rows.append(_r(d, n, dpr, h, dr, f"¥{r:,}", dp))
+        rows.append(_r())
+        rows.append(_r())
 
     # 荒れPT別集計セクション
     rows.append(_r("■ 荒れPT別 的中集計"))

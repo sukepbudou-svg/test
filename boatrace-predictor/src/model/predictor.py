@@ -713,14 +713,14 @@ def get_recommendations(
             by_prob, "超穴", n=1, min_odds=200, max_odds=350,
             hot_threshold=99, fire_threshold=4.0, exclude_boats=[1], sort_by="prob")
 
-        # ラッキー: 倍率制限なし・全120通りからprob上位2点（PT4以上・他ティアと重複除外）
+        # 地熊目: 倍率制限なし・全120通りからprob上位2点（他ティアと重複除外）
         used_combos = set()
         for _, r in honmei_ana_recs.iterrows():
             used_combos.add(r["combination"])
         for _, r in cho_ana_recs.iterrows():
             used_combos.add(r["combination"])
         lucky_pool, lucky_star, _, _ = pick_by_edge(
-            by_prob, "ラッキー", n=20, min_odds=0,
+            by_prob, "地熊目", n=20, min_odds=0,
             hot_threshold=99, fire_threshold=4.0, sort_by="prob")
         lucky_rows = []
         for _, row in lucky_pool.iterrows():
