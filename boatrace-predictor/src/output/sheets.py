@@ -189,7 +189,7 @@ def write_predictions(
         sheet = spreadsheet.add_worksheet(title=sheet_name, rows=200, cols=10)
 
     # ヘッダー行
-    headers = ["日付", "競艇場", "レース", "狙い", "買い目（3連単）", "的中確率", "オッズ", "期待回収率", "信頼度", "オッズ元", "勝負推奨"]
+    headers = ["日付", "競艇場", "レース", "狙い", "買い目（3連単）", "的中確率", "オッズ", "期待回収率", "信頼度", "1号逃げ率", "勝負推奨"]
     sheet.update("A1", [headers])
     _format_header(spreadsheet, sheet, num_cols=11)
 

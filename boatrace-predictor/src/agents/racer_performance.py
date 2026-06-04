@@ -16,7 +16,10 @@ _RACER_STYLE: dict = {}
 if _STYLE_PATH.exists():
     try:
         with open(_STYLE_PATH) as _f:
-            _RACER_STYLE = {int(k): float(v) for k, v in json.load(_f).items()}
+            _raw = json.load(_f)
+        # 旧フォーマット（float）と新フォーマット（dict）の両方に対応
+        for _k, _v in _raw.items():
+            _RACER_STYLE[int(_k)] = _v if isinstance(_v, dict) else {"aggression_score": float(_v)}
         print(f"[INFO] 戦術スタイル: {len(_RACER_STYLE)}選手分読み込み済み")
     except Exception as _e:
         print(f"[WARN] 戦術スタイル読み込みエラー: {_e}")
@@ -135,7 +138,8 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
         # アウト（3-6番）: 積極系は最大+15%、守備系は最大-7.5%の補正
         racer_no = int(race_row.get(f"boat{boat}_racer_no", 0) or 0)
         if racer_no in _RACER_STYLE and boat >= 3:
-            aggression = _RACER_STYLE[racer_no]
+            style_data = _RACER_STYLE[racer_no]
+            aggression = style_data.get("aggression_score", 1.0) if isinstance(style_data, dict) else float(style_data)
             style_factor = 0.85 + 0.15 * min(aggression, 2.0)
             score *= style_factor
 

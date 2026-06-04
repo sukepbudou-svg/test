@@ -13,7 +13,7 @@ import pandas as pd
 
 from src.features.builder import get_feature_columns, add_course_advantage
 from src.agents.course_strategy import predict_win_probs as course_win_probs
-from src.agents.racer_performance import predict_win_probs as racer_win_probs
+from src.agents.racer_performance import predict_win_probs as racer_win_probs, _RACER_STYLE
 from src.agents.motor_form import predict_win_probs as motor_win_probs
 
 # エージェントの重み（合計1.0）
@@ -153,6 +153,71 @@ def _pick_condition_based_ana(
         shinchoana = None
 
     return shinhonmei, shinchoana
+
+
+# 各会場のイン逃げ率（全国統計ベース）
+_VENUE_INNER_ESCAPE = {
+    "01": 0.580, "02": 0.520, "03": 0.420, "04": 0.510, "05": 0.560,
+    "06": 0.590, "07": 0.590, "08": 0.570, "09": 0.570, "10": 0.530,
+    "11": 0.590, "12": 0.600, "13": 0.590, "14": 0.540, "15": 0.580,
+    "16": 0.580, "17": 0.600, "18": 0.590, "19": 0.540, "20": 0.590,
+    "21": 0.580, "22": 0.560, "23": 0.590, "24": 0.570,
+}
+# レース番号補正（早いレースほど逃げやすい）
+_RACE_NO_NIGERATE_FACTOR = {
+    1: 1.06, 2: 1.04, 3: 1.02, 4: 1.01, 5: 1.00, 6: 0.99,
+    7: 0.98, 8: 0.97, 9: 0.96, 10: 0.95, 11: 0.94, 12: 0.93,
+}
+# 全国平均 コース1番逃げ率（選手個人データのベースライン）
+_INNER_WIN_BASELINE = 0.55
+# 全国平均 コース2番2着内率（差し圧力のベースライン）
+_COURSE2_PRESSURE_BASELINE = 0.45
+
+
+def _calc_nigerate(race_row: pd.Series) -> str:
+    """
+    1号艇のイン逃げ推定率を計算して "逃げ推定XX%" 文字列で返す。
+
+    会場ベース × レース番号補正 × 選手逃げ率補正 × 展示ST補正 × 2号艇差し圧力補正
+    """
+    venue_code = str(race_row.get("venue_code", "")).zfill(2)
+    race_no = int(race_row.get("race_no", 6) or 6)
+
+    base = _VENUE_INNER_ESCAPE.get(venue_code, 0.570)
+    rn_factor = _RACE_NO_NIGERATE_FACTOR.get(race_no, 1.00)
+
+    # 一般戦は1号艇が弱くなりやすい → 微減
+    mg = _safe_float(race_row.get("meet_grade_num"))
+    series_factor = 0.97 if mg is not None and mg <= 1 else 1.00
+
+    # 選手1号艇の逃げ率実績補正
+    racer1_no = int(race_row.get("boat1_racer_no", 0) or 0)
+    racer1_inner = _INNER_WIN_BASELINE
+    if racer1_no in _RACER_STYLE:
+        sd = _RACER_STYLE[racer1_no]
+        if isinstance(sd, dict) and "inner_win_rate" in sd:
+            racer1_inner = sd["inner_win_rate"]
+    inner_factor = np.clip(0.70 + 0.60 * (racer1_inner / _INNER_WIN_BASELINE), 0.65, 1.35)
+
+    # 展示ST補正（速いほど逃げやすい）
+    st1 = _safe_float(race_row.get("boat1_exhibition_st"))
+    if st1 and st1 > 0:
+        st_factor = np.clip(1.0 + (0.155 - st1) * 2.5, 0.70, 1.30)
+    else:
+        st_factor = 1.0
+
+    # 2号艇の差し圧力補正（高いほど1号艇逃げ率が下がる）
+    racer2_no = int(race_row.get("boat2_racer_no", 0) or 0)
+    c2_pressure = _COURSE2_PRESSURE_BASELINE
+    if racer2_no in _RACER_STYLE:
+        sd = _RACER_STYLE[racer2_no]
+        if isinstance(sd, dict) and "course2_pressure" in sd:
+            c2_pressure = sd["course2_pressure"]
+    pressure_factor = np.clip(1.0 - 0.4 * (c2_pressure - _COURSE2_PRESSURE_BASELINE), 0.80, 1.10)
+
+    nigerate = base * rn_factor * series_factor * inner_factor * st_factor * pressure_factor
+    nigerate = max(0.05, min(0.95, nigerate))
+    return f"逃げ推定{int(round(nigerate * 100))}%"
 
 
 def _calc_arare_score(race_row: pd.Series, weather: dict = None) -> tuple[int, list[str]]:
@@ -571,6 +636,9 @@ def get_recommendations(
         weather = all_weather.get((venue_code, race_no)) if all_weather else None
         absent_boats = all_absent.get((venue_code, race_no)) if all_absent else None
 
+        # 1号艇逃げ推定率（J列表示用）
+        nigerate_str = _calc_nigerate(race_row)
+
         # 荒れ条件チェック: スコア不足でも予想は生成するが見送りになる
         arare_score, arare_reasons = _calc_arare_score(race_row, weather)
         arare_ok = arare_score >= ARARE_MIN_SCORE
@@ -682,7 +750,7 @@ def get_recommendations(
                 "odds": f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)",
                 "expected_roi": f"{rec['expected_roi']*100:.0f}%",
                 "confidence": confidence,
-                "odds_source": "リアルタイム" if src == "live" else "履歴平均",
+                "odds_source": nigerate_str,
                 "tier": rec.get("tier", ""),
                 "bet_label": bet_label,
                 "edge": str(edge_val),
@@ -714,7 +782,7 @@ def get_recommendations(
                         "odds":          "-",
                         "expected_roi":  "-",
                         "confidence":    "★★★★" if arare_ok else "★☆☆☆",
-                        "odds_source":   "-",
+                        "odds_source":   nigerate_str,
                         "tier":          tier_name,
                         "bet_label":     "神熱" if arare_ok else "見送り",
                         "edge":          "-",
@@ -756,7 +824,7 @@ def get_recommendations(
                     "odds":          "-",
                     "expected_roi":  "-",
                     "confidence":    "フォーメーション",
-                    "odds_source":   "-",
+                    "odds_source":   nigerate_str,
                     "tier":          "フォーメーション",
                     "bet_label":     bet_label,
                     "edge":          "-",
