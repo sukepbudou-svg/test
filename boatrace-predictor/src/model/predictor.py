@@ -197,7 +197,7 @@ def _calc_nigerate(race_row: pd.Series) -> str:
         sd = _RACER_STYLE[racer1_no]
         if isinstance(sd, dict) and "inner_win_rate" in sd:
             racer1_inner = sd["inner_win_rate"]
-    inner_factor = np.clip(0.70 + 0.60 * (racer1_inner / _INNER_WIN_BASELINE), 0.65, 1.35)
+    inner_factor = np.clip(racer1_inner / _INNER_WIN_BASELINE, 0.65, 1.35)
 
     # 展示ST補正（速いほど逃げやすい）
     st1 = _safe_float(race_row.get("boat1_exhibition_st"))
