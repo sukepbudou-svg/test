@@ -1,11 +1,25 @@
 """
 選手成績エージェント
-全国勝率・当地勝率・モーター2連率・選手グレード・展示STをもとに
+全国勝率・当地勝率・モーター2連率・選手グレード・展示ST・戦術スタイルをもとに
 各艇の勝利確率を計算する
 """
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
+
+# 選手戦術スタイル（積極性スコア）の読み込み
+_STYLE_PATH = Path(__file__).parent.parent.parent / "data" / "models" / "racer_style.json"
+_RACER_STYLE: dict = {}
+if _STYLE_PATH.exists():
+    try:
+        with open(_STYLE_PATH) as _f:
+            _RACER_STYLE = {int(k): float(v) for k, v in json.load(_f).items()}
+        print(f"[INFO] 戦術スタイル: {len(_RACER_STYLE)}選手分読み込み済み")
+    except Exception as _e:
+        print(f"[WARN] 戦術スタイル読み込みエラー: {_e}")
 
 # ─── グレード係数（A1が最強）───
 GRADE_FACTOR = {4: 1.20, 3: 1.05, 2: 0.90, 1: 0.75, 0: 0.85}
@@ -116,6 +130,14 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
         if boat in exh_rank and len(exh_times) >= 3:
             rank_factor = EXHTIME_RANK_FACTOR.get(exh_rank[boat], 1.0)
             score *= (1.0 + (rank_factor - 1.0) * W_EXHTIME * 10)
+
+        # 戦術スタイル補正（アウトコース積極性）
+        # アウト（3-6番）: 積極系は最大+15%、守備系は最大-7.5%の補正
+        racer_no = int(race_row.get(f"boat{boat}_racer_no", 0) or 0)
+        if racer_no in _RACER_STYLE and boat >= 3:
+            aggression = _RACER_STYLE[racer_no]
+            style_factor = 0.85 + 0.15 * min(aggression, 2.0)
+            score *= style_factor
 
         scores[boat - 1] = max(score, 0.001)
 

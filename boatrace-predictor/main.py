@@ -413,6 +413,26 @@ def cmd_results(date_str: str = None):
     print(f"  → スプレッドシートの「成績」「サマリー」シートを更新しました")
 
 
+def cmd_build_racer_stats():
+    """選手の戦術スタイル統計（積極性スコア）を K-file から構築する"""
+    from src.collector.racer_stats_builder import build_racer_style_lookup, save_racer_style_stats
+
+    k_dir = RAW_DIR / "K"
+    if not k_dir.exists() or not list(k_dir.glob("k*.txt")):
+        print("[ERROR] K-fileがありません。先に python main.py --mode download_history を実行してください")
+        return
+
+    print("=== 選手戦術スタイル統計を構築中 ===")
+    stats = build_racer_style_lookup(k_dir)
+    if not stats:
+        print("[ERROR] 統計の構築に失敗しました（データ不足の可能性）")
+        return
+
+    save_racer_style_stats(stats)
+    print(f"=== 完了: {len(stats)}選手の戦術スタイルを保存しました ===")
+    print("次回の予想から自動で反映されます（git pull → python main.py --mode auto）")
+
+
 def cmd_backtest():
     """バックテスト（過去データで回収率検証）"""
     import pandas as pd
@@ -619,7 +639,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="競艇3連単予想ツール")
     parser.add_argument(
         "--mode",
-        choices=["download", "download_history", "train", "predict", "backtest", "auto", "results", "nirentan"],
+        choices=["download", "download_history", "train", "predict", "backtest", "auto", "results", "nirentan", "build_racer_stats"],
         required=True,
         help="実行モード"
     )
@@ -644,6 +664,8 @@ if __name__ == "__main__":
         cmd_auto()
     elif args.mode == "results":
         cmd_results()
+    elif args.mode == "build_racer_stats":
+        cmd_build_racer_stats()
     elif args.mode == "nirentan":
         from src.output.sheets import analyze_nirentan
         target_date = args.date or datetime.now().strftime("%Y-%m-%d")

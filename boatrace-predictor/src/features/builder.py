@@ -331,6 +331,7 @@ def _pivot_program(df_program: pd.DataFrame, recent_form_lookup: dict = None,
             row[f"boat{bn}_national_3rate"] = round(n2 * 1.30, 2)
             # 直近調子スコア（過去N走の着順から計算）
             racer_no = int(racer.get("racer_no", 0) or 0)
+            row[f"boat{bn}_racer_no"] = racer_no
             row[f"boat{bn}_recent_form_score"] = (
                 recent_form_lookup.get(racer_no, 0.583)
                 if recent_form_lookup else 0.583
