@@ -385,26 +385,52 @@ def load_payout_lookup() -> dict:
 
 def _apply_weather_adjustment(win_probs: np.ndarray, weather: dict) -> np.ndarray:
     """
-    天候・風速・波高に基づいて艇別勝率を微調整する。
-    一般則: 風強・波高 → 内コース（1,2番）有利、外コース（5,6番）不利
-    """
-    wind = weather.get("wind_speed", 0) or 0
-    wave = weather.get("wave_height", 0) or 0
-    cond = weather.get("weather") or ""
+    天候・風速・風向・波高に基づいて艇別勝率を調整する。
 
-    # 各艇への調整量（合計ゼロで正規化不要）
+    風速5m以上: 1m刻みでスケール（5m=1単位, 6m=2単位, ..., 11m以上=7単位）
+    向かい風: 内コース有利（逃げやすい）、外コース不利（まくり届かない）
+    追い風: 外コース有利（まくり速度が増す）、内コース不利（逃げにくい）
+    風向不明: 内有利の保守的な値
+    """
+    wind     = float(weather.get("wind_speed", 0) or 0)
+    wave     = float(weather.get("wave_height", 0) or 0)
+    cond     = weather.get("weather") or ""
+    wind_dir = weather.get("wind_direction") or ""
+
     adj = np.zeros(6)
 
     if wind >= 5:
-        adj += np.array([+0.025, +0.015, +0.005, 0.0, -0.015, -0.030])
-    elif wind >= 3:
-        adj += np.array([+0.010, +0.007, +0.003, 0.0, -0.007, -0.013])
+        # 強度: 5m=1, 6m=2, ..., 11m以上=7（上限）
+        intensity = min(wind - 4, 7)
 
+        if wind_dir == "head":
+            # 向かい風: 内艇が逃げやすく、外艇がまくれない
+            # 1号艇 >> 2号艇 > 3号艇 ≈ 4号艇 < 5号艇 << 6号艇
+            per_unit = np.array([+0.009, +0.006, +0.002, -0.001, -0.006, -0.010])
+        elif wind_dir == "tail":
+            # 追い風: 外艇まくり有利、内艇逃げにくい
+            # 1号艇 << 2号艇 < 3号艇 < 4・5号艇 > 6号艇
+            per_unit = np.array([-0.007, -0.004, +0.001, +0.005, +0.006, +0.004])
+        elif wind_dir == "side":
+            # 横風: 1マーク乱流、やや外有利・全体に混戦化
+            per_unit = np.array([-0.002, +0.001, +0.002, +0.003, +0.002, -0.001])
+        else:
+            # 不明: 内有利の保守的な値（旧来の挙動を踏襲しつつスケール）
+            per_unit = np.array([+0.004, +0.003, +0.001, 0.0, -0.003, -0.005])
+
+        adj += intensity * per_unit
+
+    elif wind >= 3:
+        # 3〜4m: 方向不問で微弱な内コース有利
+        adj += np.array([+0.008, +0.005, +0.002, 0.0, -0.005, -0.010])
+
+    # 波高補正（独立）
     if wave >= 20:
         adj += np.array([+0.015, +0.010, +0.005, 0.0, -0.010, -0.020])
     elif wave >= 10:
         adj += np.array([+0.008, +0.005, +0.002, 0.0, -0.005, -0.010])
 
+    # 雨天補正
     if cond == "rain":
         adj += np.array([+0.005, +0.003, +0.001, 0.0, -0.003, -0.006])
 

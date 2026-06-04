@@ -47,8 +47,8 @@ def fetch_beforeinfo(date: datetime, venue_code: str, race_no: int, timeout: int
 
 
 def _parse_weather_conditions(soup: BeautifulSoup) -> dict:
-    """直前情報ページから天候・風速・波高をパースする"""
-    conditions = {"weather": None, "wind_speed": 0, "wave_height": 0}
+    """直前情報ページから天候・風速・波高・風向をパースする"""
+    conditions = {"weather": None, "wind_speed": 0, "wave_height": 0, "wind_direction": None}
 
     # weather系クラスの要素を優先、なければページ全体のテキスト
     weather_el = soup.find(class_=re.compile(r'weather', re.I))
@@ -66,6 +66,30 @@ def _parse_weather_conditions(soup: BeautifulSoup) -> dict:
         if kw in text:
             conditions["weather"] = code
             break
+
+    # 風向パース（テキスト優先 → CSSクラス回転角フォールバック）
+    if "向かい" in text:
+        conditions["wind_direction"] = "head"
+    elif "追い" in text:
+        conditions["wind_direction"] = "tail"
+    elif "横" in text and "風" in text:
+        conditions["wind_direction"] = "side"
+    else:
+        # boatrace.jp は is-windN クラスの回転角で風向を表示する場合がある
+        wind_el = soup.find(class_=re.compile(r'is-wind', re.I))
+        if wind_el:
+            style = wind_el.get("style", "")
+            m2 = re.search(r'rotate\(([\d.]+)deg\)', style)
+            if m2:
+                deg = float(m2.group(1)) % 360
+                # 回転0°=北、追い風(南北コース)は0°or180°、向かい風はその逆
+                # 簡易判定: 315〜45° or 135〜225° → headwind/tailwind として扱う
+                if 315 <= deg or deg < 45:
+                    conditions["wind_direction"] = "head"
+                elif 135 <= deg < 225:
+                    conditions["wind_direction"] = "tail"
+                else:
+                    conditions["wind_direction"] = "side"
 
     return conditions
 
@@ -119,7 +143,8 @@ def _parse_beforeinfo(soup: BeautifulSoup, venue_code: str, race_no: int) -> dic
     boat_count = sum(1 for k in result if isinstance(k, int))
     if boat_count > 0:
         w = weather
-        weather_str = (f" 天候:{w['weather']} 風速:{w['wind_speed']}m 波高:{w['wave_height']}cm"
+        dir_label = {"head": "向かい風", "tail": "追い風", "side": "横風"}.get(w.get("wind_direction"), "")
+        weather_str = (f" 天候:{w['weather']} 風速:{w['wind_speed']}m{dir_label} 波高:{w['wave_height']}cm"
                        if w.get("wind_speed") else "")
         absent_str = f" 欠場:{absent_boats}" if absent_boats else ""
         print(f"  [OK] 直前情報 場{venue_code} R{race_no}: {boat_count}艇分{weather_str}{absent_str}")
