@@ -969,7 +969,7 @@ def update_summary_sheet(
 
     # フォーメーション PT別集計セクション
     def _formation_pt_stats(recs):
-        fb = {4: {}, 5: {}, 6: {}, "7以上": {}}
+        fb = {5: {}, 6: {}, "7以上": {}}
         for rec in recs:
             if str(rec.get("狙い", "")) != "フォーメーション":
                 continue
@@ -1008,9 +1008,9 @@ def update_summary_sheet(
         return fb
 
     form_buckets = _formation_pt_stats(records)
-    rows.append(_r("■ フォーメーション PT別集計（4PT以上・中穴狙い）"))
+    rows.append(_r("■ フォーメーション PT別集計（5PT以上・カスケード・中穴狙い）"))
     rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
-    for key in [4, 5, 6, "7以上"]:
+    for key in [5, 6, "7以上"]:
         b = form_buckets.get(key, {})
         bets = b.get("bets", 0)
         hits = b.get("hits", 0)
