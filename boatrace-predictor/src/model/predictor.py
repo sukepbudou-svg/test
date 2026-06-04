@@ -529,38 +529,35 @@ def get_recommendations(
             second_b2 = int(filtered.iloc[n]["boat2"]) if len(filtered) > n else None
             return topN.reset_index(drop=True), star_level, is_confident, second_b2
 
-        # 本命穴: 100〜199倍 から確率順上位4点
+        # 本命穴: 100〜199倍 から確率順上位1点
         honmei_ana_recs, honmei_ana_star, _, _ = pick_by_edge(
-            by_prob, "本命穴", n=4, min_odds=100, max_odds=199,
+            by_prob, "本命穴", n=1, min_odds=100, max_odds=199,
             hot_threshold=99, fire_threshold=4.0, sort_by="prob")
 
-        # 超穴: 200〜350倍
-        # 1点目: 確率順1位（any boat）
-        cho_any_recs, cho_any_star, _, _ = pick_by_edge(
+        # 超穴: 200〜350倍・1号艇除外のprob最高1点
+        cho_ana_recs, cho_ana_star, _, _ = pick_by_edge(
             by_prob, "超穴", n=1, min_odds=200, max_odds=350,
-            hot_threshold=99, fire_threshold=4.0, sort_by="prob")
-        # 2点目候補: 1号艇を含まない組み合わせを複数取得（重複時は次点を使う）
-        cho_no1_pool, cho_no1_star, _, _ = pick_by_edge(
-            by_prob, "超穴", n=10, min_odds=200, max_odds=350,
             hot_threshold=99, fire_threshold=4.0, exclude_boats=[1], sort_by="prob")
-        # 重複除去して結合（1点目優先、2点目は1号艇除外の中で重複しない最高prob）
-        used_combos = set()
-        cho_ana_rows = []
-        for _, row in cho_any_recs.iterrows():
-            c = row["combination"]
-            if c not in used_combos:
-                used_combos.add(c)
-                cho_ana_rows.append(row)
-        for _, row in cho_no1_pool.iterrows():
-            c = row["combination"]
-            if c not in used_combos:
-                used_combos.add(c)
-                cho_ana_rows.append(row)
-                break  # 2点目は1点のみ
-        cho_ana_recs = pd.DataFrame(cho_ana_rows).reset_index(drop=True) if cho_ana_rows else pd.DataFrame()
-        cho_ana_star = max(cho_any_star, cho_no1_star)
 
-        if honmei_ana_recs.empty and cho_ana_recs.empty:
+        # 確率穴: 倍率制限なし・全120通りからprob上位2点（他ティアと重複する組み合わせは除外）
+        used_combos = set()
+        for _, r in honmei_ana_recs.iterrows():
+            used_combos.add(r["combination"])
+        for _, r in cho_ana_recs.iterrows():
+            used_combos.add(r["combination"])
+        kakuritu_pool, kakuritu_star, _, _ = pick_by_edge(
+            by_prob, "確率穴", n=20, min_odds=0,
+            hot_threshold=99, fire_threshold=4.0, sort_by="prob")
+        kakuritu_rows = []
+        for _, row in kakuritu_pool.iterrows():
+            if row["combination"] not in used_combos:
+                used_combos.add(row["combination"])
+                kakuritu_rows.append(row)
+            if len(kakuritu_rows) >= 2:
+                break
+        kakuritu_recs = pd.DataFrame(kakuritu_rows).reset_index(drop=True) if kakuritu_rows else pd.DataFrame()
+
+        if honmei_ana_recs.empty and cho_ana_recs.empty and kakuritu_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
 
         def _make_row(rec, star_lv, second):
@@ -591,6 +588,8 @@ def get_recommendations(
             all_recommendations.append(_make_row(rec, honmei_ana_star, None))
         for _, rec in cho_ana_recs.iterrows():
             all_recommendations.append(_make_row(rec, cho_ana_star, None))
+        for _, rec in kakuritu_recs.iterrows():
+            all_recommendations.append(_make_row(rec, kakuritu_star, None))
 
         # フォーメーション予想（PT 5以上・カスケード方式）
         if arare_score >= 5:
