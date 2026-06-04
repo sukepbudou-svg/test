@@ -769,9 +769,11 @@ def update_summary_sheet(
     pass_stats = _compute_tier_stats(records, is_pass)
 
     # 荒れPT別集計（1〜6、7以上）
-    def _arare_pt_stats(records):
+    def _arare_pt_stats(records, tiers=None):
         buckets = {1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, "7以上": {}}
         for rec in records:
+            if tiers is not None and str(rec.get("狙い", "")) not in tiers:
+                continue
             combination = rec.get("予想買い目", "")
             if combination in ("", "（予想なし）", "見送り", "-"):
                 continue
@@ -906,7 +908,7 @@ def update_summary_sheet(
         ("フォーメーション", {"フォーメーション"}),
     ]
     tier_group_stats = [
-        (name, _compute_tier_stats(records, lambda rec, t=tiers: str(rec.get("狙い", "")) in t))
+        (name, tiers, _compute_tier_stats(records, lambda rec, t=tiers: str(rec.get("狙い", "")) in t))
         for name, tiers in TIER_GROUPS
     ]
 
@@ -920,7 +922,7 @@ def update_summary_sheet(
     # ─── ティア別グループ比較（勝負先検討用）───
     rows.append(_r("■ ティア別グループ比較（神熱＋見送り全件）"))
     rows.append(_r("グループ", "予想点数", "予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
-    for name, tgs in tier_group_stats:
+    for name, tiers, tgs in tier_group_stats:
         bets = tgs["total_bets"]
         ret  = tgs["total_return"]
         pr   = tgs["pred_races"]
@@ -932,7 +934,7 @@ def update_summary_sheet(
         rows.append(_r(name, pp, pr, hr, hitr, f"¥{ret:,}", roi, pft))
     rows.append(_r())
 
-    for name, tgs in tier_group_stats:
+    for name, tiers, tgs in tier_group_stats:
         bets = tgs["total_bets"]
         ret  = tgs["total_return"]
         pr   = tgs["pred_races"]
@@ -956,6 +958,25 @@ def update_summary_sheet(
             dr  = f"{h/dpr*100:.1f}%" if dpr > 0 else "0.0%"
             dp  = r - dd["bets"]
             rows.append(_r(d, n, dpr, h, dr, f"¥{r:,}", dp))
+        rows.append(_r())
+        rows.append(_r(f"▶ {name}  荒れPT別集計"))
+        rows.append(_r("荒れPT", "予想点数", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
+        pt_b = _arare_pt_stats(records, tiers)
+        for key in [1, 2, 3, 4, 5, 6, "7以上"]:
+            b    = pt_b.get(key, {})
+            bts  = b.get("bets", 0)
+            hts  = b.get("hits", 0)
+            rtn  = b.get("ret", 0)
+            n    = bts // 100
+            rc   = len(b.get("race_keys", set()))
+            hitr = f"{hts/rc*100:.1f}%" if rc > 0 else "0.0%"
+            roi  = f"{rtn/bts*100:.1f}%" if bts > 0 else "0.0%"
+            pft  = rtn - bts
+            lbl  = f"{key}PT" if isinstance(key, int) else str(key)
+            ivl  = f"{rc/hts:.1f}回に1回" if hts > 0 else "未的中"
+            mc   = len(b.get("manshu_races", set()))
+            mr   = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
+            rows.append(_r(lbl, n, rc, hts, hitr, ivl, mc, mr, f"¥{rtn:,}", roi, pft))
         rows.append(_r())
         rows.append(_r())
 
