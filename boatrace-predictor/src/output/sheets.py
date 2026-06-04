@@ -959,7 +959,7 @@ def update_summary_sheet(
             rows.append(_r(d, n, dpr, h, dr, f"¥{r:,}", dp))
         rows.append(_r())
         rows.append(_r(f"▶ {name}  荒れPT別集計"))
-        rows.append(_r("荒れPT", "予想点数", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
+        rows.append(_r("荒れPT", "予想点数", "予想R数", "的中数", "的中率", "間隔", "払戻平均", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
         pt_b = _arare_pt_stats(records, tiers)
         for key in [1, 2, 3, 4, 5, 6, "7以上"]:
             b    = pt_b.get(key, {})
@@ -973,15 +973,16 @@ def update_summary_sheet(
             pft  = rtn - bts
             lbl  = f"{key}PT" if isinstance(key, int) else str(key)
             ivl  = f"{rc/hts:.1f}回に1回" if hts > 0 else "未的中"
+            avg_pay = f"¥{rtn//hts:,}" if hts > 0 else "-"
             mc   = len(b.get("manshu_races", set()))
             mr   = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
-            rows.append(_r(lbl, n, rc, hts, hitr, ivl, mc, mr, f"¥{rtn:,}", roi, pft))
+            rows.append(_r(lbl, n, rc, hts, hitr, ivl, avg_pay, mc, mr, f"¥{rtn:,}", roi, pft))
         rows.append(_r())
         rows.append(_r())
 
     # 荒れPT別集計セクション
     rows.append(_r("■ 荒れPT別 的中集計"))
-    rows.append(_r("荒れPT", "予想点数", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "連続外れ", "払戻合計", "回収率", "収支"))
+    rows.append(_r("荒れPT", "予想点数", "予想R数", "的中数", "的中率", "間隔", "払戻平均", "万舟数", "万舟率", "連続外れ", "払戻合計", "回収率", "収支"))
     for key in [1, 2, 3, 4, 5, 6, "7以上"]:
         b = pt_buckets.get(key, {})
         bets = b.get("bets", 0)
@@ -993,12 +994,10 @@ def update_summary_sheet(
         roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
         pft  = ret - bets
         label = f"{key}PT" if isinstance(key, int) else f"{key}（神熱）"
-        # 何回に1回当たる
         interval = f"{race_count/hits:.1f}回に1回" if hits > 0 else "未的中"
-        # 万舟出現率（実際の払戻 >= 10000円のレース）
+        avg_pay = f"¥{ret//hits:,}" if hits > 0 else "-"
         manshu_count = len(b.get("manshu_races", set()))
         manshu_rate = f"{manshu_count/race_count*100:.1f}%" if race_count > 0 else "0.0%"
-        # 連続外れカウント（最後の的中以降の連続レース数）
         ordered   = b.get("ordered_races", [])
         hit_races = b.get("hit_races", set())
         streak = 0
@@ -1007,7 +1006,7 @@ def update_summary_sheet(
                 break
             streak += 1
         streak_str = f"{streak}連続外れ" if streak > 0 else "直近的中"
-        rows.append(_r(label, pp, race_count, hits, hitr, interval, manshu_count, manshu_rate, streak_str, f"¥{ret:,}", roi, pft))
+        rows.append(_r(label, pp, race_count, hits, hitr, interval, avg_pay, manshu_count, manshu_rate, streak_str, f"¥{ret:,}", roi, pft))
     rows.append(_r())
 
     # 会場別集計セクション（神熱）
@@ -1083,7 +1082,7 @@ def update_summary_sheet(
 
     form_buckets = _formation_pt_stats(records)
     rows.append(_r("■ フォーメーション PT別集計（5PT以上・カスケード・中穴狙い）"))
-    rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
+    rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "払戻平均", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
     for key in [5, 6, "7以上"]:
         b = form_buckets.get(key, {})
         bets = b.get("bets", 0)
@@ -1092,12 +1091,13 @@ def update_summary_sheet(
         rc   = len(b.get("race_keys", set()))
         hitr = f"{hits/rc*100:.1f}%" if rc > 0 else "0.0%"
         ivl  = f"{rc/hits:.1f}回に1回" if hits > 0 else "未的中"
+        avg_pay = f"¥{ret//hits:,}" if hits > 0 else "-"
         mc   = len(b.get("manshu_races", set()))
         mr   = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
         roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
         pft  = ret - bets
         label = f"{key}PT" if isinstance(key, int) else f"{key}（神熱）"
-        rows.append(_r(label, rc, hits, hitr, ivl, mc, mr, f"¥{ret:,}", roi, pft))
+        rows.append(_r(label, rc, hits, hitr, ivl, avg_pay, mc, mr, f"¥{ret:,}", roi, pft))
     rows.append(_r())
     rows.append(_r())
 
