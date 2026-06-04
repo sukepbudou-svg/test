@@ -380,6 +380,14 @@ def _pivot_exhibition(exh_df: pd.DataFrame) -> pd.DataFrame:
                 row[f"boat{bn}_meet_avg_rank"] = None
                 row[f"boat{bn}_meet_wins"]     = 0
                 row[f"boat{bn}_meet_races"]    = 0
+            # 追加: 今節ST
+            sts = r.get("meet_sts", [])
+            if isinstance(sts, list) and sts:
+                row[f"boat{bn}_meet_avg_st"]   = sum(sts) / len(sts)
+                row[f"boat{bn}_meet_st_count"] = len(sts)
+            else:
+                row[f"boat{bn}_meet_avg_st"]   = None
+                row[f"boat{bn}_meet_st_count"] = 0
         rows.append(row)
     return pd.DataFrame(rows)
 

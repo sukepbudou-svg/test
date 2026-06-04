@@ -125,6 +125,7 @@ def _parse_beforeinfo(soup: BeautifulSoup, venue_code: str, race_no: int) -> dic
             exh_time = _extract_exhibition_time(cells)
             exh_st = _extract_exhibition_st(cells)
             meet_ranks = _extract_meet_ranks(cells)
+            meet_sts = _extract_meet_sts(cells)
 
             if exh_time is not None:
                 result[boat_no] = {
@@ -132,6 +133,7 @@ def _parse_beforeinfo(soup: BeautifulSoup, venue_code: str, race_no: int) -> dic
                     "exhibition_st": exh_st,
                     "actual_course": actual_course,
                     "meet_ranks": meet_ranks,
+                    "meet_sts": meet_sts,
                 }
 
     if not result:
@@ -206,6 +208,29 @@ def _extract_meet_ranks(cells: list) -> list[int]:
         if 1 <= len(digits) <= 6:
             return digits
     return []
+
+
+def _extract_meet_sts(cells: list) -> list[float]:
+    """今節の実際のST値リストを抽出する。展示タイム以降のセルは除外して誤検知を防ぐ。"""
+    # 展示タイムセルの位置を特定して、それ以降（展示ST含む）は検索対象外にする
+    exh_time_pos = None
+    for i, cell in enumerate(cells):
+        text = cell.get_text(strip=True)
+        if re.match(r'^[67]\.\d{2}$', text):
+            exh_time_pos = i
+            break
+    search_end = exh_time_pos if exh_time_pos is not None else max(len(cells) - 2, 2)
+    search_cells = cells[2:search_end]  # 艇番・コース除外 ＋ 展示タイム以降除外
+
+    sts = []
+    for cell in search_cells:
+        text = cell.get_text(strip=True)
+        m = re.match(r'^(0\.[0-3]\d)$', text)  # 0.00〜0.39（有効ST範囲）
+        if m:
+            val = float(m.group(1))
+            if 0.01 <= val <= 0.39:
+                sts.append(val)
+    return sts
 
 
 def _extract_exhibition_time(cells: list) -> float | None:

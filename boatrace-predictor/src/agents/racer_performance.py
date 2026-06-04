@@ -135,6 +135,23 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
             except (TypeError, ValueError):
                 pass
 
+        # 今節ST補正（今節の実際のスタートタイミング平均）
+        meet_avg_st = race_row.get(f"boat{boat}_meet_avg_st")
+        meet_st_count = int(race_row.get(f"boat{boat}_meet_st_count", 0) or 0)
+        if meet_avg_st is not None and meet_st_count >= 1:
+            try:
+                meet_avg_st_f = float(meet_avg_st)
+                # 0.150が平均。低い（速い）ほど有利: 0.10→+15%, 0.20→-15%
+                BASELINE_MEET_ST = 0.150
+                meet_st_factor = 1.0 + (BASELINE_MEET_ST - meet_avg_st_f) * 3.0
+                meet_st_factor = np.clip(meet_st_factor, 0.80, 1.20)
+                # データ数が少ない時は効果を弱める（1走=33%, 2走=67%, 3走+=100%）
+                weight = min(meet_st_count / 3.0, 1.0)
+                meet_st_factor = 1.0 + (meet_st_factor - 1.0) * weight
+                score *= meet_st_factor
+            except (TypeError, ValueError):
+                pass
+
         # 展示ST補正（枠番別基準値と比較）
         exh_st = race_row.get(f"boat{boat}_exhibition_st")
         if exh_st is not None and not (isinstance(exh_st, float) and np.isnan(exh_st)):
