@@ -49,6 +49,112 @@ def _safe_float(v) -> float | None:
         return None
 
 
+def _pick_condition_based_ana(
+    race_row: pd.Series,
+    arare_reasons: list[str],
+    absent_boats: list | None,
+) -> tuple[str | None, str | None]:
+    """
+    展示タイム・ST・グレード・モーターから脅威アウト艇を特定し、
+    新本命穴・新超穴の組み合わせを返す
+
+    Returns:
+        (新本命穴コンボ, 新超穴コンボ) or (None, None)
+    """
+    available = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
+    outer_boats = [b for b in [3, 4, 5, 6] if b in available]
+    if len(outer_boats) < 1:
+        return None, None
+
+    # 展示タイム・STを収集
+    et_vals: dict[int, float] = {}
+    st_vals: dict[int, float] = {}
+    for bn in available:
+        et = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
+        if et and et > 0:
+            et_vals[bn] = et
+        st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+        if st is not None and st > 0:
+            st_vals[bn] = st
+
+    # 展示タイムを速い順にランク付け（全艇）
+    et_sorted = sorted(et_vals.values())
+
+    # アウト艇をスコアリング
+    outer_scores: dict[int, float] = {}
+    for bn in outer_boats:
+        s = 0.0
+        if bn in et_vals:
+            rank = et_sorted.index(et_vals[bn])
+            s += max(0, 3 - rank)          # 1位+3、2位+2、3位+1
+        if st_vals.get(bn, 9.9) <= 0.12:
+            s += 1.5                        # 積極的スタート
+        grade = _safe_float(race_row.get(f"boat{bn}_grade_num")) or 0
+        if grade >= 4:
+            s += 1.0                        # A1
+        elif grade >= 3:
+            s += 0.5                        # A2
+        motor = _safe_float(race_row.get(f"boat{bn}_motor_2rate")) or 0
+        if motor >= 0.40:
+            s += 0.5
+        outer_scores[bn] = s
+
+    if not outer_scores:
+        return None, None
+
+    ranked = sorted(outer_scores, key=lambda b: outer_scores[b], reverse=True)
+    threat1 = ranked[0]
+    threat2 = ranked[1] if len(ranked) >= 2 else None
+
+    # 1号艇の弱さを判定（ST遅い・B級・モーター不良）
+    boat1_weak = any("1号ST" in r or "1号B" in r or "1号M" in r for r in arare_reasons)
+
+    def _best_third(used: set) -> int | None:
+        cands = sorted(
+            [(b, et_vals.get(b, 9.99)) for b in available if b not in used],
+            key=lambda x: x[1],
+        )
+        return cands[0][0] if cands else None
+
+    # ── 新本命穴: 脅威艇1着 × 1号艇2着 × 残り展示上位3着 ──
+    if 1 in available and not boat1_weak:
+        second_h = 1
+    elif threat2:
+        second_h = threat2
+    else:
+        others = [b for b in available if b != threat1]
+        second_h = others[0] if others else None
+
+    if second_h is None:
+        return None, None
+    third_h = _best_third({threat1, second_h})
+    if third_h is None:
+        return None, None
+    shinhonmei = f"{threat1}-{second_h}-{third_h}"
+
+    # ── 新超穴: 脅威艇1着 × 1号艇除外の2番目候補2着 × 残り3着 ──
+    if threat2 and threat2 != second_h:
+        second_c = threat2
+    else:
+        cands_c = sorted(
+            [(b, et_vals.get(b, 9.99)) for b in available if b != threat1 and b != 1],
+            key=lambda x: x[1],
+        )
+        second_c = cands_c[0][0] if cands_c else None
+
+    if second_c is None:
+        return shinhonmei, None
+    third_c = _best_third({threat1, second_c})
+    if third_c is None:
+        return shinhonmei, None
+    shinchoana = f"{threat1}-{second_c}-{third_c}"
+
+    if shinchoana == shinhonmei:
+        shinchoana = None
+
+    return shinhonmei, shinchoana
+
+
 def _calc_arare_score(race_row: pd.Series, weather: dict = None) -> tuple[int, list[str]]:
     """
     荒れ条件スコアを計算する。
@@ -594,6 +700,31 @@ def get_recommendations(
             all_recommendations.append(_make_row(rec, cho_ana_star, None))
         for _, rec in lucky_recs.iterrows():
             all_recommendations.append(_make_row(rec, lucky_star, None))
+
+        # 新本命穴・新超穴: 展示タイム・ST・グレードから脅威艇を直接特定（PT4以上）
+        if arare_score >= 4:
+            shin_h_combo, shin_c_combo = _pick_condition_based_ana(
+                race_row, arare_reasons, absent_boats)
+            cond_used = set()
+            for combo, tier_name in [(shin_h_combo, "新本命穴"), (shin_c_combo, "新超穴")]:
+                if combo and combo not in cond_used:
+                    cond_used.add(combo)
+                    all_recommendations.append({
+                        "date":          race_row.get("date", ""),
+                        "venue_name":    race_row.get("venue_name", ""),
+                        "race_no":       race_row.get("race_no", ""),
+                        "combination":   combo,
+                        "prob":          "-",
+                        "odds":          "-",
+                        "expected_roi":  "-",
+                        "confidence":    "★★★★" if arare_ok else "★☆☆☆",
+                        "odds_source":   "-",
+                        "tier":          tier_name,
+                        "bet_label":     "神熱" if arare_ok else "見送り",
+                        "edge":          "-",
+                        "arare_score":   arare_score,
+                        "arare_reasons": " / ".join(arare_reasons),
+                    })
 
         # フォーメーション予想（PT 5以上・カスケード方式）
         if arare_score >= 5:
