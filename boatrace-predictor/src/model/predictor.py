@@ -896,21 +896,16 @@ def get_recommendations(
                 boat_win_probs[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
             ranked_all  = sorted(boat_win_probs, key=lambda b: boat_win_probs[b], reverse=True)
             if len(ranked_all) >= 2:
-                # 1着: スコア上位2艇（1号艇含む・完全確率順）
+                # 1着: 確率上位2艇（軸）
                 first_boats = ranked_all[:2]
-                # 2着: 1着候補2艇 ＋ スコア3位の艇（完全確率順）
-                nxt_second = next((b for b in ranked_all if b not in set(first_boats)), None)
-                second_boats = sorted(set(first_boats) | {nxt_second}) if nxt_second else sorted(first_boats)
-                # 3着: 2着候補3艇 ＋ 脅威艇1艇（確率順ではなく荒れ脅威スコア最大）
-                used = set(second_boats)
-                remaining = [b for b in ranked_all if b not in used]
-                if remaining:
-                    # 脅威スコアが最大の艇を3着枠に追加（確率4位より荒れの主役を優先）
-                    threat_boat = max(remaining, key=lambda b: _calc_threat_score(b, race_row))
-                    nxt = threat_boat
-                else:
-                    nxt = None
-                third_boats = sorted(used | {nxt}) if nxt else sorted(used)
+                # 2着: 1着候補2艇 ＋ 脅威スコア最大艇A（確率3位より荒れの2着を優先）
+                pool_2nd = [b for b in ranked_all if b not in set(first_boats)]
+                threat_a = max(pool_2nd, key=lambda b: _calc_threat_score(b, race_row)) if pool_2nd else None
+                second_boats = sorted(set(first_boats) | {threat_a}) if threat_a else sorted(first_boats)
+                # 3着: 2着候補3艇 ＋ 脅威スコア最大艇B（残り艇から別の脅威を追加）
+                pool_3rd = [b for b in ranked_all if b not in set(second_boats)]
+                threat_b = max(pool_3rd, key=lambda b: _calc_threat_score(b, race_row)) if pool_3rd else None
+                third_boats = sorted(set(second_boats) | {threat_b}) if threat_b else sorted(second_boats)
                 formation_str = (
                     f"{''.join(str(b) for b in sorted(first_boats))}-"
                     f"{''.join(str(b) for b in second_boats)}-"
