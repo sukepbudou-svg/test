@@ -387,10 +387,9 @@ def _apply_weather_adjustment(win_probs: np.ndarray, weather: dict) -> np.ndarra
     """
     天候・風速・風向・波高に基づいて艇別勝率を調整する。
 
-    風速5m以上: 1m刻みでスケール（5m=1単位, 6m=2単位, ..., 11m以上=7単位）
-    向かい風: 内コース有利（逃げやすい）、外コース不利（まくり届かない）
-    追い風: 外コース有利（まくり速度が増す）、内コース不利（逃げにくい）
-    風向不明: 内有利の保守的な値
+    向かい風の内艇優位は7mでピーク、8m以降は減衰し9m以上でゼロ。
+    代わりに8m以上では混戦フラット化補正を適用（強風時の不確実性増大）。
+    追い風・横風は線形スケール（上限7単位）。
     """
     wind     = float(weather.get("wind_speed", 0) or 0)
     wave     = float(weather.get("wave_height", 0) or 0)
@@ -400,28 +399,29 @@ def _apply_weather_adjustment(win_probs: np.ndarray, weather: dict) -> np.ndarra
     adj = np.zeros(6)
 
     if wind >= 5:
-        # 強度: 5m=1, 6m=2, ..., 11m以上=7（上限）
-        intensity = min(wind - 4, 7)
-
         if wind_dir == "head":
-            # 向かい風: 内艇が逃げやすく、外艇がまくれない
-            # 1号艇 >> 2号艇 > 3号艇 ≈ 4号艇 < 5号艇 << 6号艇
-            per_unit = np.array([+0.009, +0.006, +0.002, -0.001, -0.006, -0.010])
-        elif wind_dir == "tail":
-            # 追い風: 外艇まくり有利、内艇逃げにくい
-            # 1号艇 << 2号艇 < 3号艇 < 4・5号艇 > 6号艇
-            per_unit = np.array([-0.007, -0.004, +0.001, +0.005, +0.006, +0.004])
-        elif wind_dir == "side":
-            # 横風: 1マーク乱流、やや外有利・全体に混戦化
-            per_unit = np.array([-0.002, +0.001, +0.002, +0.003, +0.002, -0.001])
-        else:
-            # 不明: 内有利の保守的な値（旧来の挙動を踏襲しつつスケール）
-            per_unit = np.array([+0.004, +0.003, +0.001, 0.0, -0.003, -0.005])
+            # 向かい風: 内艇有利は7mでピーク（山型）、9m以上はゼロ
+            # intensity = max(0, min(wind-4, 10-wind))
+            #   5m→1, 6m→2, 7m→3(peak), 8m→2, 9m→1, 10m→0
+            inner_intensity = max(0.0, min(wind - 4, 10.0 - wind))
+            adj += inner_intensity * np.array([+0.009, +0.006, +0.002, -0.001, -0.006, -0.010])
 
-        adj += intensity * per_unit
+        elif wind_dir == "tail":
+            # 追い風: 外艇まくり有利・線形スケール
+            intensity = min(wind - 4, 7)
+            adj += intensity * np.array([-0.007, -0.004, +0.001, +0.005, +0.006, +0.004])
+
+        elif wind_dir == "side":
+            # 横風: 混戦化・外艇微有利
+            intensity = min(wind - 4, 7)
+            adj += intensity * np.array([-0.002, +0.001, +0.002, +0.003, +0.002, -0.001])
+
+        else:
+            # 不明: 保守的な内有利（弱め）
+            intensity = min(wind - 4, 7)
+            adj += intensity * np.array([+0.004, +0.003, +0.001, 0.0, -0.003, -0.005])
 
     elif wind >= 3:
-        # 3〜4m: 方向不問で微弱な内コース有利
         adj += np.array([+0.008, +0.005, +0.002, 0.0, -0.005, -0.010])
 
     # 波高補正（独立）
@@ -435,6 +435,16 @@ def _apply_weather_adjustment(win_probs: np.ndarray, weather: dict) -> np.ndarra
         adj += np.array([+0.005, +0.003, +0.001, 0.0, -0.003, -0.006])
 
     probs = np.clip(win_probs + adj, 0.001, None)
+    probs = probs / probs.sum()
+
+    # 強向かい風（8m以上）: 混戦フラット化補正
+    # 1マークの荒れで着順が読みにくくなる → 確率を均等分布に近づける
+    # 8m=7%, 9m=14%, 10m=21%（上限22%）
+    if wind >= 8 and wind_dir == "head":
+        chaos = min((wind - 7) * 0.07, 0.22)
+        uniform = np.ones(6) / 6.0
+        probs = (1.0 - chaos) * probs + chaos * uniform
+
     return probs / probs.sum()
 
 
