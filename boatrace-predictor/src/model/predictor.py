@@ -880,14 +880,19 @@ def get_recommendations(
             if len(ranked_all) >= 2:
                 # 1着: 確率上位2艇（軸）
                 first_boats = ranked_all[:2]
-                # 2着: 1着候補2艇 ＋ 脅威スコア最大艇A（確率3位より荒れの2着を優先）
+                # 2着: 1着候補2艇 ＋ 脅威スコア最大艇A
                 pool_2nd = [b for b in ranked_all if b not in set(first_boats)]
                 threat_a = max(pool_2nd, key=lambda b: _calc_threat_score(b, race_row)) if pool_2nd else None
                 second_boats = sorted(set(first_boats) | {threat_a}) if threat_a else sorted(first_boats)
-                # 3着: 2着候補3艇 ＋ 脅威スコア最大艇B（残り艇から別の脅威を追加）
-                pool_3rd = [b for b in ranked_all if b not in set(second_boats)]
-                threat_b = max(pool_3rd, key=lambda b: _calc_threat_score(b, race_row)) if pool_3rd else None
-                third_boats = sorted(set(second_boats) | {threat_b}) if threat_b else sorted(second_boats)
+
+                if arare_score >= 7:
+                    # PT7以上: 3着にさらに脅威艇Bを追加（8点・フル構成）
+                    pool_3rd = [b for b in ranked_all if b not in set(second_boats)]
+                    threat_b = max(pool_3rd, key=lambda b: _calc_threat_score(b, race_row)) if pool_3rd else None
+                    third_boats = sorted(set(second_boats) | {threat_b}) if threat_b else sorted(second_boats)
+                else:
+                    # PT5〜6: 3着は2着と同じ3艇（4点・コスト抑制）
+                    third_boats = second_boats
                 formation_str = (
                     f"{''.join(str(b) for b in sorted(first_boats))}-"
                     f"{''.join(str(b) for b in second_boats)}-"
