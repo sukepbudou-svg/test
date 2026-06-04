@@ -826,6 +826,34 @@ def update_summary_sheet(
 
     pt_buckets = _arare_pt_stats(records)
 
+    def _race_pt_avg_payout(records):
+        """PT帯ごとの全レース実際払戻平均（ティア不問・1レース1回カウント）"""
+        race_pays = {1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, "7以上": {}}
+        for rec in records:
+            combination = rec.get("予想買い目", "")
+            if combination in ("", "（予想なし）", "見送り", "-"):
+                continue
+            try:
+                pt = int(float(str(rec.get("荒れPT", "0") or "0")))
+            except (ValueError, TypeError):
+                continue
+            key = pt if pt <= 6 else "7以上"
+            if key not in race_pays:
+                continue
+            race_key = (str(rec.get("日付", "")), str(rec.get("競艇場", "")), str(rec.get("レース", "")))
+            if race_key in race_pays[key]:
+                continue  # 同レースの2行目以降はスキップ
+            pay_str = str(rec.get("実際の払戻", "") or "").replace(",", "").replace("¥", "").strip()
+            try:
+                pay = int(pay_str) if pay_str else 0
+            except (ValueError, TypeError):
+                pay = 0
+            if pay > 0:
+                race_pays[key][race_key] = pay
+        return {k: int(sum(v.values()) / len(v)) if v else None for k, v in race_pays.items()}
+
+    pt_avg_pay = _race_pt_avg_payout(records)
+
     # 会場別集計
     def _venue_stats(filter_fn):
         venues = {}
@@ -973,7 +1001,8 @@ def update_summary_sheet(
             pft  = rtn - bts
             lbl  = f"{key}PT" if isinstance(key, int) else str(key)
             ivl  = f"{rc/hts:.1f}回に1回" if hts > 0 else "未的中"
-            avg_pay = f"¥{rtn//hts:,}" if hts > 0 else "-"
+            ap   = pt_avg_pay.get(key)
+            avg_pay = f"¥{ap:,}" if ap else "-"
             mc   = len(b.get("manshu_races", set()))
             mr   = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
             rows.append(_r(lbl, n, rc, hts, hitr, ivl, avg_pay, mc, mr, f"¥{rtn:,}", roi, pft))
@@ -995,7 +1024,8 @@ def update_summary_sheet(
         pft  = ret - bets
         label = f"{key}PT" if isinstance(key, int) else f"{key}（神熱）"
         interval = f"{race_count/hits:.1f}回に1回" if hits > 0 else "未的中"
-        avg_pay = f"¥{ret//hits:,}" if hits > 0 else "-"
+        ap = pt_avg_pay.get(key)
+        avg_pay = f"¥{ap:,}" if ap else "-"
         manshu_count = len(b.get("manshu_races", set()))
         manshu_rate = f"{manshu_count/race_count*100:.1f}%" if race_count > 0 else "0.0%"
         ordered   = b.get("ordered_races", [])
@@ -1091,7 +1121,8 @@ def update_summary_sheet(
         rc   = len(b.get("race_keys", set()))
         hitr = f"{hits/rc*100:.1f}%" if rc > 0 else "0.0%"
         ivl  = f"{rc/hits:.1f}回に1回" if hits > 0 else "未的中"
-        avg_pay = f"¥{ret//hits:,}" if hits > 0 else "-"
+        ap   = pt_avg_pay.get(key)
+        avg_pay = f"¥{ap:,}" if ap else "-"
         mc   = len(b.get("manshu_races", set()))
         mr   = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
         roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
