@@ -220,6 +220,52 @@ def _calc_nigerate(race_row: pd.Series) -> str:
     return f"逃げ推定{int(round(nigerate * 100))}%"
 
 
+def _calc_threat_score(bn: int, race_row: pd.Series) -> float:
+    """
+    荒れ時の脅威艇スコアを計算する。
+    展示ST速度・グレード・アウトコース積極性を合算して返す。
+    フォーメーション3着枠の「確率外脅威艇」選出に使用。
+    """
+    score = 0.0
+
+    # 展示ST（低い＝速い → 脅威度高）: 0.10→+0.50, 0.15→0, 0.20→-0.50
+    exh_st = race_row.get(f"boat{bn}_exhibition_st")
+    if exh_st is not None:
+        try:
+            st_val = float(exh_st)
+            if st_val > 0:
+                score += (0.150 - st_val) * 10.0
+        except (TypeError, ValueError):
+            pass
+
+    # 今節ST実績（展示STを補強）
+    meet_avg_st = race_row.get(f"boat{bn}_meet_avg_st")
+    if meet_avg_st is not None:
+        try:
+            score += (0.150 - float(meet_avg_st)) * 5.0
+        except (TypeError, ValueError):
+            pass
+
+    # グレード（A1=4→+0.6, A2=3→+0.3, B1/B2=0）
+    gn_raw = race_row.get(f"boat{bn}_grade_num", 2)
+    try:
+        gn = int(float(gn_raw)) if gn_raw is not None else 2
+        if gn >= 3:
+            score += (gn - 2) * 0.3
+    except (TypeError, ValueError):
+        pass
+
+    # アウトコース積極性（3〜6号艇のみ: 積極的な選手ほど荒れの主役になりやすい）
+    if bn >= 3:
+        racer_no = int(race_row.get(f"boat{bn}_racer_no", 0) or 0)
+        if racer_no in _RACER_STYLE:
+            style = _RACER_STYLE[racer_no]
+            aggression = style.get("aggression_score", 1.0) if isinstance(style, dict) else float(style)
+            score += max(0.0, (aggression - 1.0) * 0.5)
+
+    return score
+
+
 def _calc_arare_score(race_row: pd.Series, weather: dict = None) -> tuple[int, list[str]]:
     """
     荒れ条件スコアを計算する。
@@ -855,9 +901,15 @@ def get_recommendations(
                 # 2着: 1着候補2艇 ＋ スコア3位の艇（完全確率順）
                 nxt_second = next((b for b in ranked_all if b not in set(first_boats)), None)
                 second_boats = sorted(set(first_boats) | {nxt_second}) if nxt_second else sorted(first_boats)
-                # 3着: 2着候補3艇 ＋ 次点1艇（合計4艇）
+                # 3着: 2着候補3艇 ＋ 脅威艇1艇（確率順ではなく荒れ脅威スコア最大）
                 used = set(second_boats)
-                nxt  = next((b for b in ranked_all if b not in used), None)
+                remaining = [b for b in ranked_all if b not in used]
+                if remaining:
+                    # 脅威スコアが最大の艇を3着枠に追加（確率4位より荒れの主役を優先）
+                    threat_boat = max(remaining, key=lambda b: _calc_threat_score(b, race_row))
+                    nxt = threat_boat
+                else:
+                    nxt = None
                 third_boats = sorted(used | {nxt}) if nxt else sorted(used)
                 formation_str = (
                     f"{''.join(str(b) for b in sorted(first_boats))}-"
