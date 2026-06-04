@@ -799,26 +799,12 @@ def get_recommendations(
             second_b2 = int(filtered.iloc[n]["boat2"]) if len(filtered) > n else None
             return topN.reset_index(drop=True), star_level, is_confident, second_b2
 
-        # 本命穴: 100〜199倍 から確率順上位1点
-        honmei_ana_recs, honmei_ana_star, _, _ = pick_by_edge(
-            by_prob, "本命穴", n=1, min_odds=100, max_odds=199,
-            hot_threshold=99, fire_threshold=4.0, sort_by="prob")
-
-        # 超穴: 200〜350倍・1号艇除外のprob最高1点
-        cho_ana_recs, cho_ana_star, _, _ = pick_by_edge(
-            by_prob, "超穴", n=1, min_odds=200, max_odds=350,
-            hot_threshold=99, fire_threshold=4.0, exclude_boats=[1], sort_by="prob")
-
-        # 地熊目: 倍率制限なし・全120通りからprob上位2点（他ティアと重複除外）
-        used_combos = set()
-        for _, r in honmei_ana_recs.iterrows():
-            used_combos.add(r["combination"])
-        for _, r in cho_ana_recs.iterrows():
-            used_combos.add(r["combination"])
+        # 地熊目: 倍率制限なし・全120通りからprob上位2点
         lucky_pool, lucky_star, _, _ = pick_by_edge(
             by_prob, "地熊目", n=20, min_odds=0,
             hot_threshold=99, fire_threshold=4.0, sort_by="prob")
         lucky_rows = []
+        used_combos: set = set()
         for _, row in lucky_pool.iterrows():
             if row["combination"] not in used_combos:
                 used_combos.add(row["combination"])
@@ -827,7 +813,7 @@ def get_recommendations(
                 break
         lucky_recs = pd.DataFrame(lucky_rows).reset_index(drop=True) if lucky_rows else pd.DataFrame()
 
-        if honmei_ana_recs.empty and cho_ana_recs.empty and lucky_recs.empty:
+        if lucky_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
 
         def _make_row(rec, star_lv, second):
@@ -854,10 +840,6 @@ def get_recommendations(
                 "arare_reasons": " / ".join(arare_reasons),
             }
 
-        for _, rec in honmei_ana_recs.iterrows():
-            all_recommendations.append(_make_row(rec, honmei_ana_star, None))
-        for _, rec in cho_ana_recs.iterrows():
-            all_recommendations.append(_make_row(rec, cho_ana_star, None))
         for _, rec in lucky_recs.iterrows():
             all_recommendations.append(_make_row(rec, lucky_star, None))
 
