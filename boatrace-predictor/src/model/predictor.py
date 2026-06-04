@@ -651,21 +651,17 @@ def get_recommendations(
             used_combos.add(r["combination"])
         for _, r in cho_ana_recs.iterrows():
             used_combos.add(r["combination"])
-        lucky_recs = pd.DataFrame()
-        if arare_score >= 4:
-            lucky_pool, lucky_star, _, _ = pick_by_edge(
-                by_prob, "ラッキー", n=20, min_odds=0,
-                hot_threshold=99, fire_threshold=4.0, sort_by="prob")
-            lucky_rows = []
-            for _, row in lucky_pool.iterrows():
-                if row["combination"] not in used_combos:
-                    used_combos.add(row["combination"])
-                    lucky_rows.append(row)
-                if len(lucky_rows) >= 2:
-                    break
-            lucky_recs = pd.DataFrame(lucky_rows).reset_index(drop=True) if lucky_rows else pd.DataFrame()
-        else:
-            lucky_star = 0
+        lucky_pool, lucky_star, _, _ = pick_by_edge(
+            by_prob, "ラッキー", n=20, min_odds=0,
+            hot_threshold=99, fire_threshold=4.0, sort_by="prob")
+        lucky_rows = []
+        for _, row in lucky_pool.iterrows():
+            if row["combination"] not in used_combos:
+                used_combos.add(row["combination"])
+                lucky_rows.append(row)
+            if len(lucky_rows) >= 2:
+                break
+        lucky_recs = pd.DataFrame(lucky_rows).reset_index(drop=True) if lucky_rows else pd.DataFrame()
 
         if honmei_ana_recs.empty and cho_ana_recs.empty and lucky_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
