@@ -605,11 +605,9 @@ def get_recommendations(
             if len(ranked_no1) >= 2:
                 # 1着: 1号艇除外のスコア上位2艇
                 first_boats = ranked_no1[:2]
-                # 2着: 1着候補2艇 ＋ 1号艇（合計3艇）
-                if 1 in boat_win_probs:
-                    second_boats = sorted(set(first_boats) | {1})
-                else:
-                    second_boats = sorted(set(first_boats) | {ranked_no1[2]}) if len(ranked_no1) > 2 else sorted(first_boats)
+                # 2着: 1着候補2艇 ＋ スコア3位の艇（1号艇固定なし・完全確率順）
+                nxt_second = next((b for b in ranked_all if b not in set(first_boats)), None)
+                second_boats = sorted(set(first_boats) | {nxt_second}) if nxt_second else sorted(first_boats)
                 # 3着: 2着候補3艇 ＋ 次点1艇（合計4艇）
                 used = set(second_boats)
                 nxt  = next((b for b in ranked_all if b not in used), None)
