@@ -152,7 +152,12 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
     probs = np.zeros(6)
 
     for boat in range(1, 7):
-        course = boat  # デフォルト: 艇番=コース番号
+        # 進入コース: actual_courseがあればそれを使用（前付け対応）
+        actual_course = race_row.get(f"boat{boat}_actual_course")
+        try:
+            course = int(actual_course) if actual_course is not None and int(actual_course) in range(1, 7) else boat
+        except (TypeError, ValueError):
+            course = boat
 
         # 会場別プロファイルからコース勝率を取得
         base_rate = venue_profile.get(course, COURSE_WIN_RATES.get(course, 0.05))

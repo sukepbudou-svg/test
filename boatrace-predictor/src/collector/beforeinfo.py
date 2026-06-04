@@ -111,8 +111,8 @@ def _parse_beforeinfo(soup: BeautifulSoup, venue_code: str, race_no: int) -> dic
             if not cells:
                 continue
 
-            # 艇番（1〜6）を含む行を検索
-            boat_no = _extract_boat_no(cells)
+            # 艇番（1〜6）と進入コースを含む行を検索
+            boat_no, actual_course = _extract_boat_and_course(cells)
             if boat_no is None:
                 continue
 
@@ -124,11 +124,14 @@ def _parse_beforeinfo(soup: BeautifulSoup, venue_code: str, race_no: int) -> dic
 
             exh_time = _extract_exhibition_time(cells)
             exh_st = _extract_exhibition_st(cells)
+            meet_ranks = _extract_meet_ranks(cells)
 
             if exh_time is not None:
                 result[boat_no] = {
                     "exhibition_time": exh_time,
                     "exhibition_st": exh_st,
+                    "actual_course": actual_course,
+                    "meet_ranks": meet_ranks,
                 }
 
     if not result:
@@ -147,7 +150,16 @@ def _parse_beforeinfo(soup: BeautifulSoup, venue_code: str, race_no: int) -> dic
         weather_str = (f" 天候:{w['weather']} 風速:{w['wind_speed']}m{dir_label} 波高:{w['wave_height']}cm"
                        if w.get("wind_speed") else "")
         absent_str = f" 欠場:{absent_boats}" if absent_boats else ""
-        print(f"  [OK] 直前情報 場{venue_code} R{race_no}: {boat_count}艇分{weather_str}{absent_str}")
+        # 前付け検出ログ
+        maetsuke_boats = [
+            f"{bn}号艇(→{result[bn]['actual_course']}コース)"
+            for bn in result
+            if isinstance(bn, int) and isinstance(result[bn], dict)
+            and result[bn].get("actual_course") is not None
+            and result[bn]["actual_course"] != bn
+        ]
+        maetsuke_str = f" 前付あり:{','.join(maetsuke_boats)}" if maetsuke_boats else ""
+        print(f"  [OK] 直前情報 場{venue_code} R{race_no}: {boat_count}艇分{weather_str}{absent_str}{maetsuke_str}")
     else:
         print(f"  [--] 直前情報 場{venue_code} R{race_no}: 取得できず（レース前または構造変更）")
 
@@ -161,6 +173,39 @@ def _extract_boat_no(cells: list) -> int | None:
         if text in ("1", "2", "3", "4", "5", "6"):
             return int(text)
     return None
+
+
+def _extract_boat_and_course(cells: list) -> tuple[int | None, int | None]:
+    """艇番と進入コースを抽出する。Returns (boat_no, actual_course)"""
+    digit_vals = []
+    for cell in cells[:4]:
+        text = cell.get_text(strip=True)
+        if text in ("1","2","3","4","5","6"):
+            digit_vals.append(int(text))
+        if len(digit_vals) == 2:
+            break
+    if len(digit_vals) >= 2:
+        # 先頭セルがコース、次が艇番（boatrace.jpの標準テーブル構造）
+        return digit_vals[1], digit_vals[0]  # (boat_no, actual_course)
+    elif len(digit_vals) == 1:
+        return digit_vals[0], digit_vals[0]  # コース=艇番
+    return None, None
+
+
+def _extract_meet_ranks(cells: list) -> list[int]:
+    """今節成績（着順リスト）をセルリストから抽出する"""
+    for cell in cells[2:]:   # 艇番・コース等をスキップ
+        text = cell.get_text(strip=True)
+        if re.match(r'^[67]\.\d{2}$', text):   # 展示タイム除外
+            continue
+        if re.match(r'^-?0\.\d{2}$', text):    # ST除外
+            continue
+        if re.match(r'^\d{1,3}$', text) and int(text) > 6:  # 体重等除外
+            continue
+        digits = [int(c) for c in re.findall(r'[1-6]', text)]
+        if 1 <= len(digits) <= 6:
+            return digits
+    return []
 
 
 def _extract_exhibition_time(cells: list) -> float | None:

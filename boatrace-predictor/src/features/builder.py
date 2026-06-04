@@ -368,6 +368,18 @@ def _pivot_exhibition(exh_df: pd.DataFrame) -> pd.DataFrame:
             bn = int(r["boat_no"])
             row[f"boat{bn}_exhibition_time"] = r.get("exhibition_time")
             row[f"boat{bn}_exhibition_st"] = r.get("exhibition_st")
+            # 追加: 進入コース
+            row[f"boat{bn}_actual_course"] = r.get("actual_course", bn)
+            # 追加: 今節成績
+            ranks = r.get("meet_ranks", [])
+            if isinstance(ranks, list) and ranks:
+                row[f"boat{bn}_meet_avg_rank"] = sum(ranks) / len(ranks)
+                row[f"boat{bn}_meet_wins"]     = ranks.count(1)
+                row[f"boat{bn}_meet_races"]    = len(ranks)
+            else:
+                row[f"boat{bn}_meet_avg_rank"] = None
+                row[f"boat{bn}_meet_wins"]     = 0
+                row[f"boat{bn}_meet_races"]    = 0
         rows.append(row)
     return pd.DataFrame(rows)
 

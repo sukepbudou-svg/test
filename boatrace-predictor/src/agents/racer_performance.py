@@ -119,6 +119,22 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
         motivation = float(race_row.get(f"boat{boat}_motivation_factor", 1.0) or 1.0)
         score *= motivation
 
+        # 今節成績補正（同一開催内の直近着順）
+        meet_avg = race_row.get(f"boat{boat}_meet_avg_rank")
+        meet_races = int(race_row.get(f"boat{boat}_meet_races", 0) or 0)
+        if meet_avg is not None and meet_races >= 1:
+            try:
+                meet_avg_f = float(meet_avg)
+                # 平均着順3.5=ニュートラル。1位→meet_score=1.0、6位→0.167
+                meet_score = (7.0 - meet_avg_f) / 6.0
+                meet_factor = 0.75 + 0.50 * meet_score   # 0.75〜1.25
+                # サンプル数が少ない時は効果を弱める（1走=33%, 2走=67%, 3走+=100%）
+                weight = min(meet_races / 3.0, 1.0)
+                meet_factor = 1.0 + (meet_factor - 1.0) * weight
+                score *= meet_factor
+            except (TypeError, ValueError):
+                pass
+
         # 展示ST補正（枠番別基準値と比較）
         exh_st = race_row.get(f"boat{boat}_exhibition_st")
         if exh_st is not None and not (isinstance(exh_st, float) and np.isnan(exh_st)):
