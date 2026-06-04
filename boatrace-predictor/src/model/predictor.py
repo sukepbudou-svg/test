@@ -539,25 +539,29 @@ def get_recommendations(
             by_prob, "超穴", n=1, min_odds=200, max_odds=350,
             hot_threshold=99, fire_threshold=4.0, exclude_boats=[1], sort_by="prob")
 
-        # 確率穴: 倍率制限なし・全120通りからprob上位2点（他ティアと重複する組み合わせは除外）
+        # ラッキー: 倍率制限なし・全120通りからprob上位2点（PT4以上・他ティアと重複除外）
         used_combos = set()
         for _, r in honmei_ana_recs.iterrows():
             used_combos.add(r["combination"])
         for _, r in cho_ana_recs.iterrows():
             used_combos.add(r["combination"])
-        kakuritu_pool, kakuritu_star, _, _ = pick_by_edge(
-            by_prob, "確率穴", n=20, min_odds=0,
-            hot_threshold=99, fire_threshold=4.0, sort_by="prob")
-        kakuritu_rows = []
-        for _, row in kakuritu_pool.iterrows():
-            if row["combination"] not in used_combos:
-                used_combos.add(row["combination"])
-                kakuritu_rows.append(row)
-            if len(kakuritu_rows) >= 2:
-                break
-        kakuritu_recs = pd.DataFrame(kakuritu_rows).reset_index(drop=True) if kakuritu_rows else pd.DataFrame()
+        lucky_recs = pd.DataFrame()
+        if arare_score >= 4:
+            lucky_pool, lucky_star, _, _ = pick_by_edge(
+                by_prob, "ラッキー", n=20, min_odds=0,
+                hot_threshold=99, fire_threshold=4.0, sort_by="prob")
+            lucky_rows = []
+            for _, row in lucky_pool.iterrows():
+                if row["combination"] not in used_combos:
+                    used_combos.add(row["combination"])
+                    lucky_rows.append(row)
+                if len(lucky_rows) >= 2:
+                    break
+            lucky_recs = pd.DataFrame(lucky_rows).reset_index(drop=True) if lucky_rows else pd.DataFrame()
+        else:
+            lucky_star = 0
 
-        if honmei_ana_recs.empty and cho_ana_recs.empty and kakuritu_recs.empty:
+        if honmei_ana_recs.empty and cho_ana_recs.empty and lucky_recs.empty:
             continue  # 欠場艇が多い等でプールにデータなし
 
         def _make_row(rec, star_lv, second):
@@ -588,8 +592,8 @@ def get_recommendations(
             all_recommendations.append(_make_row(rec, honmei_ana_star, None))
         for _, rec in cho_ana_recs.iterrows():
             all_recommendations.append(_make_row(rec, cho_ana_star, None))
-        for _, rec in kakuritu_recs.iterrows():
-            all_recommendations.append(_make_row(rec, kakuritu_star, None))
+        for _, rec in lucky_recs.iterrows():
+            all_recommendations.append(_make_row(rec, lucky_star, None))
 
         # フォーメーション予想（PT 5以上・カスケード方式）
         if arare_score >= 5:
