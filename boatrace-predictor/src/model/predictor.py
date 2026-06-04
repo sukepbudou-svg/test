@@ -300,7 +300,7 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None) -> tuple[int, l
         score += 1
         reasons.append("一般戦")
 
-    # 前付け（高番号艇がインコース進入）検出
+    # 前付け（高番号艇がインコース進入）検出 ─ 複数艇が同時に前付けする場合も全艇カウント
     for bn in [4, 5, 6]:
         ac_raw = race_row.get(f"boat{bn}_actual_course")
         try:
@@ -310,11 +310,9 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None) -> tuple[int, l
         if ac <= 2 and ac != bn:   # 4-6号艇が1-2コースに前付け
             score += 2
             reasons.append(f"{bn}号艇前付け(→{ac}コース)")
-            break
         elif ac <= 3 and ac != bn: # 4-6号艇が3コースに進入
             score += 1
             reasons.append(f"{bn}号艇進入変更(→{ac}コース)")
-            break
 
     return score, reasons
 

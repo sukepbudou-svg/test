@@ -187,8 +187,8 @@ def _extract_boat_and_course(cells: list) -> tuple[int | None, int | None]:
         if len(digit_vals) == 2:
             break
     if len(digit_vals) >= 2:
-        # 先頭セルがコース、次が艇番（boatrace.jpの標準テーブル構造）
-        return digit_vals[1], digit_vals[0]  # (boat_no, actual_course)
+        # 先頭セルが艇番、次がコース（boatrace.jpの標準テーブル構造: 艇番|コース|選手…）
+        return digit_vals[0], digit_vals[1]  # (boat_no, actual_course)
     elif len(digit_vals) == 1:
         return digit_vals[0], digit_vals[0]  # コース=艇番
     return None, None

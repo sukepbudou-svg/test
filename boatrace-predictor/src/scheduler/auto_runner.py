@@ -50,6 +50,9 @@ def _run_all_at_once(df_program, model, payout_lookup, today, spreadsheet_id, cr
                 "race_no": rn, "boat_no": bn,
                 "exhibition_time": info.get("exhibition_time"),
                 "exhibition_st": info.get("exhibition_st"),
+                "actual_course": info.get("actual_course", bn),
+                "meet_ranks": info.get("meet_ranks", []),
+                "meet_sts": info.get("meet_sts", []),
             })
     df_beforeinfo = pd.DataFrame(records) if records else pd.DataFrame()
 
@@ -324,7 +327,10 @@ def _predict_one_race(
         {"date": today.strftime("%Y-%m-%d"), "venue_code": venue_code,
          "race_no": race_no, "boat_no": bn,
          "exhibition_time": info.get("exhibition_time"),
-         "exhibition_st": info.get("exhibition_st")}
+         "exhibition_st": info.get("exhibition_st"),
+         "actual_course": info.get("actual_course", bn),
+         "meet_ranks": info.get("meet_ranks", []),
+         "meet_sts": info.get("meet_sts", [])}
         for bn, info in beforeinfo_raw.items()
         if isinstance(bn, int)
     ]) if beforeinfo_raw else pd.DataFrame()
