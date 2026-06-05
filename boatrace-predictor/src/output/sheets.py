@@ -4,6 +4,7 @@ Google スプレッドシート出力モジュール
 """
 
 import os
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -332,6 +333,19 @@ def append_prediction_row(
                 }})
             except (ValueError, TypeError):
                 pass
+
+        # イン逃げ率（J列=index9）: 65%以上で薄赤
+        nigerate_src = row.get("odds_source", "")
+        m_nig = re.search(r'(\d+)%', str(nigerate_src))
+        if m_nig and int(m_nig.group(1)) >= 65:
+            reqs.append({"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
+                          "startColumnIndex": 9, "endColumnIndex": 10},
+                "cell": {"userEnteredFormat": {
+                    "backgroundColor": {"red": 1.0, "green": 0.80, "blue": 0.80},
+                }},
+                "fields": "userEnteredFormat.backgroundColor",
+            }})
 
         spreadsheet.batch_update({"requests": reqs})
     except Exception:
