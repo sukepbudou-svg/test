@@ -1086,7 +1086,7 @@ def update_summary_sheet(
 
     # フォーメーション PT別集計セクション
     def _formation_pt_stats(recs):
-        fb = {5: {}, 6: {}, "7以上": {}}
+        fb = {1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, "7以上": {}}
         for rec in recs:
             if str(rec.get("狙い", "")) != "フォーメーション":
                 continue
@@ -1098,7 +1098,9 @@ def update_summary_sheet(
             if key not in fb:
                 continue
             b = fb[key]
-            b["bets"] = b.get("bets", 0) + 600
+            # PT7以上=8点×100円=800円、PT6以下=4点×100円=400円
+            bet_amount = 800 if key == "7以上" else 400
+            b["bets"] = b.get("bets", 0) + bet_amount
             b["ret"]  = b.get("ret", 0)
             b["hits"] = b.get("hits", 0)
             d  = str(rec.get("日付", ""))
@@ -1125,9 +1127,9 @@ def update_summary_sheet(
         return fb
 
     form_buckets = _formation_pt_stats(records)
-    rows.append(_r("■ フォーメーション PT別集計（5PT以上・カスケード・中穴狙い）"))
+    rows.append(_r("■ フォーメーション PT別集計（全PT・カスケード・中穴狙い）"))
     rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "払戻平均", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
-    for key in [5, 6, "7以上"]:
+    for key in [1, 2, 3, 4, 5, 6, "7以上"]:
         b = form_buckets.get(key, {})
         bets = b.get("bets", 0)
         hits = b.get("hits", 0)
