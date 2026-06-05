@@ -132,25 +132,27 @@ def _pick_condition_based_ana(
         return None, None
     shinhonmei = f"{threat1}-{second_h}-{third_h}"
 
-    # ── 新超穴: 脅威艇1着 × 1号艇除外の2番目候補2着 × 残り3着 ──
+    # ── 新超穴: 脅威艇1着 × 1号艇除外の候補2着 × 残り3着 ──
+    # threat1・1号艇を除いた全候補を展示タイム順に列挙し、新本命穴と被らない組み合わせを探す
+    cands_c = sorted(
+        [(b, et_vals.get(b, 9.99)) for b in available if b != threat1 and b != 1],
+        key=lambda x: x[1],
+    )
+    # threat2を優先（second_hと異なる場合は先頭へ）
     if threat2 and threat2 != second_h:
-        second_c = threat2
-    else:
-        cands_c = sorted(
-            [(b, et_vals.get(b, 9.99)) for b in available if b != threat1 and b != 1],
-            key=lambda x: x[1],
-        )
-        second_c = cands_c[0][0] if cands_c else None
+        cands_c = [(threat2, et_vals.get(threat2, 9.99))] + [
+            (b, e) for b, e in cands_c if b != threat2
+        ]
 
-    if second_c is None:
-        return shinhonmei, None
-    third_c = _best_third({threat1, second_c})
-    if third_c is None:
-        return shinhonmei, None
-    shinchoana = f"{threat1}-{second_c}-{third_c}"
-
-    if shinchoana == shinhonmei:
-        shinchoana = None
+    shinchoana = None
+    for second_c, _ in cands_c:
+        third_c = _best_third({threat1, second_c})
+        if third_c is None:
+            continue
+        candidate = f"{threat1}-{second_c}-{third_c}"
+        if candidate != shinhonmei:
+            shinchoana = candidate
+            break
 
     return shinhonmei, shinchoana
 
