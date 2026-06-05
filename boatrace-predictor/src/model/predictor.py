@@ -850,14 +850,23 @@ def get_recommendations(
         for combo, tier_name in [(shin_h_combo, "新本命穴"), (shin_c_combo, "新超穴")]:
             if combo and combo not in cond_used:
                 cond_used.add(combo)
+                cr = by_prob[by_prob["combination"] == combo]
+                if not cr.empty:
+                    c = cr.iloc[0]
+                    osrc = c.get("odds_source", "history")
+                    prob_disp = f"{c['prob']*100:.2f}%"
+                    odds_disp = f"{c['odds_value']}倍" if osrc == "live" else f"{c['odds_value']}倍(履歴)"
+                    roi_disp  = f"{c['expected_roi']*100:.0f}%"
+                else:
+                    prob_disp = odds_disp = roi_disp = "-"
                 all_recommendations.append({
                     "date":          race_row.get("date", ""),
                     "venue_name":    race_row.get("venue_name", ""),
                     "race_no":       race_row.get("race_no", ""),
                     "combination":   combo,
-                    "prob":          "-",
-                    "odds":          "-",
-                    "expected_roi":  "-",
+                    "prob":          prob_disp,
+                    "odds":          odds_disp,
+                    "expected_roi":  roi_disp,
                     "confidence":    "★★★★" if arare_ok else "★☆☆☆",
                     "odds_source":   nigerate_str,
                     "tier":          tier_name,
