@@ -843,78 +843,76 @@ def get_recommendations(
         for _, rec in lucky_recs.iterrows():
             all_recommendations.append(_make_row(rec, lucky_star, None))
 
-        # 新本命穴・新超穴: 展示タイム・ST・グレードから脅威艇を直接特定（PT4以上）
-        if arare_score >= 4:
-            shin_h_combo, shin_c_combo = _pick_condition_based_ana(
-                race_row, arare_reasons, absent_boats)
-            cond_used = set()
-            for combo, tier_name in [(shin_h_combo, "新本命穴"), (shin_c_combo, "新超穴")]:
-                if combo and combo not in cond_used:
-                    cond_used.add(combo)
-                    all_recommendations.append({
-                        "date":          race_row.get("date", ""),
-                        "venue_name":    race_row.get("venue_name", ""),
-                        "race_no":       race_row.get("race_no", ""),
-                        "combination":   combo,
-                        "prob":          "-",
-                        "odds":          "-",
-                        "expected_roi":  "-",
-                        "confidence":    "★★★★" if arare_ok else "★☆☆☆",
-                        "odds_source":   nigerate_str,
-                        "tier":          tier_name,
-                        "bet_label":     "神熱" if arare_ok else "見送り",
-                        "edge":          "-",
-                        "arare_score":   arare_score,
-                        "arare_reasons": " / ".join(arare_reasons),
-                    })
-
-        # フォーメーション予想（PT 5以上・カスケード方式）
-        if arare_score >= 5:
-            boat_win_probs = {}
-            for bn in range(1, 7):
-                if absent_boats and bn in absent_boats:
-                    continue
-                mask = by_prob["boat1"] == bn
-                boat_win_probs[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
-            ranked_all  = sorted(boat_win_probs, key=lambda b: boat_win_probs[b], reverse=True)
-            if len(ranked_all) >= 2:
-                # 1着: 確率上位2艇（軸）
-                first_boats = ranked_all[:2]
-                # 2着: 1着候補2艇 ＋ 脅威スコア最大艇A
-                pool_2nd = [b for b in ranked_all if b not in set(first_boats)]
-                threat_a = max(pool_2nd, key=lambda b: _calc_threat_score(b, race_row)) if pool_2nd else None
-                second_boats = sorted(set(first_boats) | {threat_a}) if threat_a else sorted(first_boats)
-
-                if arare_score >= 7:
-                    # PT7以上: 3着にさらに脅威艇Bを追加（8点・フル構成）
-                    pool_3rd = [b for b in ranked_all if b not in set(second_boats)]
-                    threat_b = max(pool_3rd, key=lambda b: _calc_threat_score(b, race_row)) if pool_3rd else None
-                    third_boats = sorted(set(second_boats) | {threat_b}) if threat_b else sorted(second_boats)
-                else:
-                    # PT5〜6: 3着は2着と同じ3艇（4点・コスト抑制）
-                    third_boats = second_boats
-                formation_str = (
-                    f"{''.join(str(b) for b in sorted(first_boats))}-"
-                    f"{''.join(str(b) for b in second_boats)}-"
-                    f"{''.join(str(b) for b in third_boats)}"
-                )
-                bet_label = "神熱" if arare_ok else "見送り"
+        # 新本命穴・新超穴: 展示タイム・ST・グレードから脅威艇を直接特定（全PT対象）
+        shin_h_combo, shin_c_combo = _pick_condition_based_ana(
+            race_row, arare_reasons, absent_boats)
+        cond_used = set()
+        for combo, tier_name in [(shin_h_combo, "新本命穴"), (shin_c_combo, "新超穴")]:
+            if combo and combo not in cond_used:
+                cond_used.add(combo)
                 all_recommendations.append({
                     "date":          race_row.get("date", ""),
                     "venue_name":    race_row.get("venue_name", ""),
                     "race_no":       race_row.get("race_no", ""),
-                    "combination":   formation_str,
+                    "combination":   combo,
                     "prob":          "-",
                     "odds":          "-",
                     "expected_roi":  "-",
-                    "confidence":    "フォーメーション",
+                    "confidence":    "★★★★" if arare_ok else "★☆☆☆",
                     "odds_source":   nigerate_str,
-                    "tier":          "フォーメーション",
-                    "bet_label":     bet_label,
+                    "tier":          tier_name,
+                    "bet_label":     "神熱" if arare_ok else "見送り",
                     "edge":          "-",
                     "arare_score":   arare_score,
                     "arare_reasons": " / ".join(arare_reasons),
                 })
+
+        # フォーメーション予想（全PT対象・カスケード方式）
+        boat_win_probs = {}
+        for bn in range(1, 7):
+            if absent_boats and bn in absent_boats:
+                continue
+            mask = by_prob["boat1"] == bn
+            boat_win_probs[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
+        ranked_all = sorted(boat_win_probs, key=lambda b: boat_win_probs[b], reverse=True)
+        if len(ranked_all) >= 2:
+            # 1着: 確率上位2艇（軸）
+            first_boats = ranked_all[:2]
+            # 2着: 1着候補2艇 ＋ 脅威スコア最大艇A
+            pool_2nd = [b for b in ranked_all if b not in set(first_boats)]
+            threat_a = max(pool_2nd, key=lambda b: _calc_threat_score(b, race_row)) if pool_2nd else None
+            second_boats = sorted(set(first_boats) | {threat_a}) if threat_a else sorted(first_boats)
+
+            if arare_score >= 7:
+                # PT7以上: 3着にさらに脅威艇Bを追加（8点・フル構成）
+                pool_3rd = [b for b in ranked_all if b not in set(second_boats)]
+                threat_b = max(pool_3rd, key=lambda b: _calc_threat_score(b, race_row)) if pool_3rd else None
+                third_boats = sorted(set(second_boats) | {threat_b}) if threat_b else sorted(second_boats)
+            else:
+                # PT6以下: 3着は2着と同じ3艇（4点・コスト抑制）
+                third_boats = second_boats
+            formation_str = (
+                f"{''.join(str(b) for b in sorted(first_boats))}-"
+                f"{''.join(str(b) for b in second_boats)}-"
+                f"{''.join(str(b) for b in third_boats)}"
+            )
+            bet_label = "神熱" if arare_ok else "見送り"
+            all_recommendations.append({
+                "date":          race_row.get("date", ""),
+                "venue_name":    race_row.get("venue_name", ""),
+                "race_no":       race_row.get("race_no", ""),
+                "combination":   formation_str,
+                "prob":          "-",
+                "odds":          "-",
+                "expected_roi":  "-",
+                "confidence":    "フォーメーション",
+                "odds_source":   nigerate_str,
+                "tier":          "フォーメーション",
+                "bet_label":     bet_label,
+                "edge":          "-",
+                "arare_score":   arare_score,
+                "arare_reasons": " / ".join(arare_reasons),
+            })
 
     return pd.DataFrame(all_recommendations)
 
