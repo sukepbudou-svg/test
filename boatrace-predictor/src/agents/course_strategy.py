@@ -199,6 +199,18 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
             except (ValueError, TypeError):
                 pass
 
+        # ── 今節ST実績補正（展示STの信頼性を補強）──
+        meet_avg_st = race_row.get(f"boat{boat}_meet_avg_st")
+        meet_st_count = int(race_row.get(f"boat{boat}_meet_st_count", 0) or 0)
+        if meet_avg_st is not None and meet_st_count >= 1:
+            try:
+                meet_st_val = float(meet_avg_st)
+                diff = race_avg_st - meet_st_val
+                weight = min(meet_st_count / 3.0, 1.0)
+                base_rate *= (1.0 + diff * EXHST_WEIGHT * 0.5 * weight)
+            except (ValueError, TypeError):
+                pass
+
         probs[boat - 1] = max(base_rate, 0.001)
 
     # 合計を1.0に正規化
