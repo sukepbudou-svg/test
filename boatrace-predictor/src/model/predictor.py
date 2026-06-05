@@ -53,9 +53,10 @@ def _pick_condition_based_ana(
     race_row: pd.Series,
     arare_reasons: list[str],
     absent_boats: list | None,
+    by_prob: "pd.DataFrame | None" = None,
 ) -> tuple[str | None, str | None]:
     """
-    展示タイム・ST・グレード・モーターから脅威アウト艇を特定し、
+    展示タイム・ST・今節成績・前付け・グレード・積極性から脅威アウト艇を特定し、
     新本命穴・新超穴の組み合わせを返す
 
     Returns:
@@ -66,37 +67,52 @@ def _pick_condition_based_ana(
     if len(outer_boats) < 1:
         return None, None
 
+    # MLモデル確率フィルタ: 外枠艇のうちML1着確率が上位2艇のみを候補とする
+    if by_prob is not None and not by_prob.empty:
+        outer_win_probs = {}
+        for bn in outer_boats:
+            mask = by_prob["boat1"] == bn
+            outer_win_probs[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
+        outer_boats = sorted(outer_boats, key=lambda b: outer_win_probs.get(b, 0), reverse=True)[:2]
+        if not outer_boats:
+            return None, None
+
     # 展示タイム・STを収集
     et_vals: dict[int, float] = {}
-    st_vals: dict[int, float] = {}
     for bn in available:
         et = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
         if et and et > 0:
             et_vals[bn] = et
-        st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-        if st is not None and st > 0:
-            st_vals[bn] = st
 
-    # 展示タイムを速い順にランク付け（全艇）
+    # 展示タイムを速い順にランク付け（全艇中の順位）
     et_sorted = sorted(et_vals.values())
 
-    # アウト艇をスコアリング
+    # 統合脅威スコアリング（外枠絞込み済み艇のみ）
+    # _calc_threat_score: 展示ST・今節ST・グレード・racer積極性 を合算
     outer_scores: dict[int, float] = {}
     for bn in outer_boats:
-        s = 0.0
+        s = _calc_threat_score(bn, race_row)
+
+        # 展示タイムランク加点（全艇中: 1位+3, 2位+2, 3位+1）
         if bn in et_vals:
             rank = et_sorted.index(et_vals[bn])
-            s += max(0, 3 - rank)          # 1位+3、2位+2、3位+1
-        if st_vals.get(bn, 9.9) <= 0.12:
-            s += 1.5                        # 積極的スタート
-        grade = _safe_float(race_row.get(f"boat{bn}_grade_num")) or 0
-        if grade >= 4:
-            s += 1.0                        # A1
-        elif grade >= 3:
-            s += 0.5                        # A2
-        motor = _safe_float(race_row.get(f"boat{bn}_motor_2rate")) or 0
-        if motor >= 0.40:
-            s += 0.5
+            s += max(0.0, 3.0 - rank)
+
+        # 前付け加点（実際のコースが艇番より内側 = 積極的侵入）
+        ac_raw = race_row.get(f"boat{bn}_actual_course")
+        try:
+            ac = int(ac_raw) if ac_raw is not None else bn
+        except (TypeError, ValueError):
+            ac = bn
+        if ac < bn:
+            s += 2.0
+
+        # 今節成績加点（平均着順: 1着平均=+1.5, 3着平均=0, 6着平均=-1.5）
+        meet_avg_rank = _safe_float(race_row.get(f"boat{bn}_meet_avg_rank"))
+        meet_races = int(race_row.get(f"boat{bn}_meet_races", 0) or 0)
+        if meet_avg_rank is not None and meet_races >= 1:
+            s += (3.0 - meet_avg_rank) * 0.5
+
         outer_scores[bn] = s
 
     if not outer_scores:
@@ -845,9 +861,9 @@ def get_recommendations(
         for _, rec in lucky_recs.iterrows():
             all_recommendations.append(_make_row(rec, lucky_star, None))
 
-        # 新本命穴・新超穴: 展示タイム・ST・グレードから脅威艇を直接特定（全PT対象）
+        # 新本命穴・新超穴: 全情報から脅威艇を特定（ML確率フィルタ付き・全PT対象）
         shin_h_combo, shin_c_combo = _pick_condition_based_ana(
-            race_row, arare_reasons, absent_boats)
+            race_row, arare_reasons, absent_boats, by_prob=by_prob)
         cond_used = set()
         for combo, tier_name in [(shin_h_combo, "新本命穴"), (shin_c_combo, "新超穴")]:
             if combo and combo not in cond_used:
