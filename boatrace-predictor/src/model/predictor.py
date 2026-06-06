@@ -4,6 +4,7 @@
 """
 
 import json
+import math
 from itertools import permutations
 from pathlib import Path
 
@@ -171,6 +172,70 @@ def _pick_condition_based_ana(
             break
 
     return shinhonmei, shinchoana
+
+
+def _pick_ana_combos(
+    by_prob: "pd.DataFrame",
+    race_row: "pd.Series",
+    absent_boats: "list | None",
+) -> "tuple[str | None, str | None]":
+    """
+    爆穴・鬼穴: 1号艇を上位から排除した高オッズ穴組み合わせを選出
+
+    爆穴: 1着から1号艇を排除（80倍以上狙い）
+    鬼穴: 1着・2着から1号艇を完全排除（200倍以上狙い）
+
+    スコア = ML確率 × (1 + 1着艇の脅威スコア) × log(オッズ)
+
+    Returns: (爆穴コンボ, 鬼穴コンボ)
+    """
+    if by_prob is None or by_prob.empty:
+        return None, None
+
+    pool = by_prob.copy()
+    if absent_boats:
+        ab = set(absent_boats)
+        pool = pool[
+            ~pool["boat1"].isin(ab) &
+            ~pool["boat2"].isin(ab) &
+            ~pool["boat3"].isin(ab)
+        ]
+    if pool.empty:
+        return None, None
+
+    def _score(row, target_odds: float) -> float:
+        prob = float(row["prob"])
+        odds = float(row["odds_value"])
+        if prob < 0.0005 or odds < 10:
+            return -1.0
+        threat = _calc_threat_score(int(row["boat1"]), race_row)
+        odds_factor = math.log(max(odds, 1)) * (1.3 if odds >= target_odds else 1.0)
+        return prob * (1.0 + threat * 0.5) * odds_factor
+
+    # ── 爆穴: 1着から1号艇を排除（80倍以上狙い）──
+    pool_a = pool[(pool["boat1"] != 1) & (pool["prob"] >= 0.002)].copy()
+    ana_a = None
+    if not pool_a.empty:
+        pool_a["_s"] = pool_a.apply(lambda r: _score(r, 80), axis=1)
+        pool_a = pool_a[pool_a["_s"] > 0].sort_values("_s", ascending=False)
+        if not pool_a.empty:
+            ana_a = str(pool_a.iloc[0]["combination"])
+
+    # ── 鬼穴: 1着・2着から1号艇を完全排除（200倍以上狙い）──
+    pool_b = pool[
+        (pool["boat1"] != 1) & (pool["boat2"] != 1) & (pool["prob"] >= 0.001)
+    ].copy()
+    ana_b = None
+    if not pool_b.empty:
+        pool_b["_s"] = pool_b.apply(lambda r: _score(r, 200), axis=1)
+        pool_b = pool_b[pool_b["_s"] > 0]
+        if ana_a:
+            pool_b = pool_b[pool_b["combination"] != ana_a]
+        pool_b = pool_b.sort_values("_s", ascending=False)
+        if not pool_b.empty:
+            ana_b = str(pool_b.iloc[0]["combination"])
+
+    return ana_a, ana_b
 
 
 # 各会場のイン逃げ率（全国統計ベース）
@@ -863,13 +928,12 @@ def get_recommendations(
         for _, rec in lucky_recs.iterrows():
             all_recommendations.append(_make_row(rec, lucky_star, None))
 
-        # 新本命穴・新超穴: 全情報から脅威艇を特定（ML確率フィルタ付き・全PT対象）
-        shin_h_combo, shin_c_combo = _pick_condition_based_ana(
-            race_row, arare_reasons, absent_boats, by_prob=by_prob)
-        cond_used = set()
-        for combo, tier_name in [(shin_h_combo, "新本命穴"), (shin_c_combo, "新超穴")]:
-            if combo and combo not in cond_used:
-                cond_used.add(combo)
+        # 爆穴・鬼穴: 1号艇を上位から排除した高オッズ穴（全PT対象）
+        ana_a_combo, ana_b_combo = _pick_ana_combos(by_prob, race_row, absent_boats)
+        ana_used = set()
+        for combo, tier_name in [(ana_a_combo, "爆穴"), (ana_b_combo, "鬼穴")]:
+            if combo and combo not in ana_used:
+                ana_used.add(combo)
                 cr = by_prob[by_prob["combination"] == combo]
                 if not cr.empty:
                     c = cr.iloc[0]
