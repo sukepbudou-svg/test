@@ -938,26 +938,24 @@ def update_summary_sheet(
         ret  = stats["total_return"]
         pr   = stats["pred_races"]
         hr   = stats["hit_races"]
-        pp   = bets // 100
         hitr = f"{hr/pr*100:.1f}%" if pr > 0 else "0.0%"
         roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
         pft  = ret - bets
 
         sec.append(_r(f"■ {title}  全期間合計"))
-        sec.append(_r("予想点数", "予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
-        sec.append(_r(pp, pr, hr, hitr, f"¥{ret:,}", roi, pft))
+        sec.append(_r("予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
+        sec.append(_r(pr, hr, hitr, f"¥{ret:,}", roi, pft))
         sec.append(_r())
         sec.append(_r(f"■ {title}  日付別内訳"))
-        sec.append(_r("日付", "予想点数", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
+        sec.append(_r("日付", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
         for d in sorted(stats["daily"].keys()):
             dd  = stats["daily"][d]
-            n   = dd["bets"] // 100
             dpr = len(dd["race_keys"])
             h   = len(dd["hit_race_keys"])
             r   = dd["ret"]
             dr  = f"{h/dpr*100:.1f}%" if dpr > 0 else "0.0%"
             dp  = r - dd["bets"]
-            sec.append(_r(d, n, dpr, h, dr, f"¥{r:,}", dp))
+            sec.append(_r(d, dpr, h, dr, f"¥{r:,}", dp))
         sec.append(_r())
         sec.append(_r())
         return sec
@@ -983,17 +981,16 @@ def update_summary_sheet(
 
     # ─── ティア別グループ比較（勝負先検討用）───
     rows.append(_r("■ ティア別グループ比較（神熱＋見送り全件）"))
-    rows.append(_r("グループ", "予想点数", "予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
+    rows.append(_r("グループ", "予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
     for name, tiers, tgs in tier_group_stats:
         bets = tgs["total_bets"]
         ret  = tgs["total_return"]
         pr   = tgs["pred_races"]
         hr   = tgs["hit_races"]
-        pp   = bets // 100
         hitr = f"{hr/pr*100:.1f}%" if pr > 0 else "0.0%"
         roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
         pft  = ret - bets
-        rows.append(_r(name, pp, pr, hr, hitr, f"¥{ret:,}", roi, pft))
+        rows.append(_r(name, pr, hr, hitr, f"¥{ret:,}", roi, pft))
     rows.append(_r())
 
     for name, tiers, tgs in tier_group_stats:
@@ -1001,35 +998,32 @@ def update_summary_sheet(
         ret  = tgs["total_return"]
         pr   = tgs["pred_races"]
         hr   = tgs["hit_races"]
-        pp   = bets // 100
         hitr = f"{hr/pr*100:.1f}%" if pr > 0 else "0.0%"
         roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
         pft  = ret - bets
         rows.append(_r(f"▶ {name}  全期間合計"))
-        rows.append(_r("予想点数", "予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
-        rows.append(_r(pp, pr, hr, hitr, f"¥{ret:,}", roi, pft))
+        rows.append(_r("予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
+        rows.append(_r(pr, hr, hitr, f"¥{ret:,}", roi, pft))
         rows.append(_r())
         rows.append(_r(f"▶ {name}  日付別内訳"))
-        rows.append(_r("日付", "予想点数", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
+        rows.append(_r("日付", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
         for d in sorted(tgs["daily"].keys()):
             dd  = tgs["daily"][d]
-            n   = dd["bets"] // 100
             dpr = len(dd["race_keys"])
             h   = len(dd["hit_race_keys"])
             r   = dd["ret"]
             dr  = f"{h/dpr*100:.1f}%" if dpr > 0 else "0.0%"
             dp  = r - dd["bets"]
-            rows.append(_r(d, n, dpr, h, dr, f"¥{r:,}", dp))
+            rows.append(_r(d, dpr, h, dr, f"¥{r:,}", dp))
         rows.append(_r())
         rows.append(_r(f"▶ {name}  荒れPT別集計"))
-        rows.append(_r("荒れPT", "予想点数", "予想R数", "的中数", "的中率", "間隔", "払戻平均", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
+        rows.append(_r("荒れPT", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支", "払戻平均"))
         pt_b = _arare_pt_stats(records, tiers)
         for key in [1, 2, 3, 4, 5, 6, "7以上"]:
             b    = pt_b.get(key, {})
             bts  = b.get("bets", 0)
             hts  = b.get("hits", 0)
             rtn  = b.get("ret", 0)
-            n    = bts // 100
             rc   = len(b.get("race_keys", set()))
             hitr = f"{hts/rc*100:.1f}%" if rc > 0 else "0.0%"
             roi  = f"{rtn/bts*100:.1f}%" if bts > 0 else "0.0%"
@@ -1040,19 +1034,18 @@ def update_summary_sheet(
             avg_pay = f"¥{ap:,}" if ap else "-"
             mc   = len(b.get("manshu_races", set()))
             mr   = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
-            rows.append(_r(lbl, n, rc, hts, hitr, ivl, avg_pay, mc, mr, f"¥{rtn:,}", roi, pft))
+            rows.append(_r(lbl, rc, hts, hitr, ivl, mc, mr, f"¥{rtn:,}", roi, pft, avg_pay))
         rows.append(_r())
         rows.append(_r())
 
     # 荒れPT別集計セクション
     rows.append(_r("■ 荒れPT別 的中集計"))
-    rows.append(_r("荒れPT", "予想点数", "予想R数", "的中数", "的中率", "間隔", "払戻平均", "万舟数", "万舟率", "連続外れ", "払戻合計", "回収率", "収支"))
+    rows.append(_r("荒れPT", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "連続外れ", "払戻合計", "回収率", "収支", "払戻平均"))
     for key in [1, 2, 3, 4, 5, 6, "7以上"]:
         b = pt_buckets.get(key, {})
         bets = b.get("bets", 0)
         hits = b.get("hits", 0)
         ret  = b.get("ret", 0)
-        pp   = bets // 100
         race_count = len(b.get("race_keys", set()))
         hitr = f"{hits/race_count*100:.1f}%" if race_count > 0 else "0.0%"
         roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
@@ -1071,7 +1064,7 @@ def update_summary_sheet(
                 break
             streak += 1
         streak_str = f"{streak}連続外れ" if streak > 0 else "直近的中"
-        rows.append(_r(label, pp, race_count, hits, hitr, interval, avg_pay, manshu_count, manshu_rate, streak_str, f"¥{ret:,}", roi, pft))
+        rows.append(_r(label, race_count, hits, hitr, interval, manshu_count, manshu_rate, streak_str, f"¥{ret:,}", roi, pft, avg_pay))
     rows.append(_r())
 
     # 会場別集計セクション（神熱）
@@ -1150,7 +1143,7 @@ def update_summary_sheet(
 
     def _print_form_pt_section(title, buckets):
         rows.append(_r(f"■ {title} PT別集計"))
-        rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "払戻平均", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
+        rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支", "払戻平均"))
         for key in [1, 2, 3, 4, 5, 6, "7以上"]:
             b = buckets.get(key, {})
             bets = b.get("bets", 0)
@@ -1166,7 +1159,7 @@ def update_summary_sheet(
             roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
             pft  = ret - bets
             label = f"{key}PT" if isinstance(key, int) else f"{key}（神熱）"
-            rows.append(_r(label, rc, hits, hitr, ivl, avg_pay, mc, mr, f"¥{ret:,}", roi, pft))
+            rows.append(_r(label, rc, hits, hitr, ivl, mc, mr, f"¥{ret:,}", roi, pft, avg_pay))
         rows.append(_r())
         rows.append(_r())
 
