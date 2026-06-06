@@ -190,13 +190,13 @@ def write_predictions(
         sheet = spreadsheet.add_worksheet(title=sheet_name, rows=200, cols=10)
 
     # ヘッダー行
-    headers = ["日付", "競艇場", "レース", "狙い", "買い目（3連単）", "的中確率", "オッズ", "期待回収率", "信頼度", "1号逃げ率", "勝負推奨"]
+    headers = ["日付", "競艇場", "レース", "狙い", "買い目（3連単）", "的中確率", "オッズ", "信頼度", "1号逃げ率", "勝負推奨", "1号艇状態"]
     sheet.update("A1", [headers])
     _format_header(spreadsheet, sheet, num_cols=11)
 
     # データ行
     if not recommendations.empty:
-        cols = ["date", "venue_name", "race_no", "tier", "combination", "prob", "odds", "expected_roi", "confidence", "odds_source", "bet_label"]
+        cols = ["date", "venue_name", "race_no", "tier", "combination", "prob", "odds", "confidence", "odds_source", "bet_label", "boat1_risk"]
         # 列がない場合（見送り行など）は"-"で埋める
         for col in cols:
             if col not in recommendations.columns:
@@ -232,19 +232,20 @@ def append_prediction_row(
     try:
         sheet = spreadsheet.worksheet(sheet_name)
     except gspread.WorksheetNotFound:
-        sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=13)
+        sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=14)
         headers = ["日付", "競艇場", "レース", "狙い", "買い目（3連単）", "的中確率",
-                   "オッズ", "期待回収率", "信頼度", "イン逃げ率", "本日レース数", "勝負推奨", "荒れPT", "荒れ条件"]
+                   "オッズ", "信頼度", "イン逃げ率", "本日レース数", "勝負推奨", "荒れPT", "荒れ条件", "1号艇状態"]
         sheet.update("A1", [headers])
         _format_header(spreadsheet, sheet, num_cols=14)
 
     cols = ["date", "venue_name", "race_no", "tier", "combination", "prob",
-            "odds", "expected_roi", "confidence", "odds_source"]
+            "odds", "confidence", "odds_source"]
     values = [row.get(c, "-") for c in cols]
     values.append(race_count if race_count is not None else "-")
     values.append(row.get("bet_label", ""))
     values.append(row.get("arare_score", ""))
     values.append(row.get("arare_reasons", ""))
+    values.append(row.get("boat1_risk", "-"))
     for attempt in range(4):
         try:
             sheet.append_row(values, value_input_option="RAW")
@@ -292,12 +293,12 @@ def append_prediction_row(
         }}]
 
         if not is_skip:
-            # 勝負推奨（L列=index11）: 神熱=金、熊熱=薄赤、激熱=オレンジ
+            # 勝負推奨（K列=index10）: 神熱=金、熊熱=薄赤、激熱=オレンジ
             bet_label = row.get("bet_label", "")
             if bet_label == "神熱":
                 reqs.append({"repeatCell": {
                     "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                              "startColumnIndex": 11, "endColumnIndex": 12},
+                              "startColumnIndex": 10, "endColumnIndex": 11},
                     "cell": {"userEnteredFormat": {
                         "backgroundColor": {"red": 1.0, "green": 0.84, "blue": 0.0},
                         "textFormat": {"bold": True,
@@ -308,7 +309,7 @@ def append_prediction_row(
             elif bet_label == "熊熱":
                 reqs.append({"repeatCell": {
                     "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                              "startColumnIndex": 11, "endColumnIndex": 12},
+                              "startColumnIndex": 10, "endColumnIndex": 11},
                     "cell": {"userEnteredFormat": {
                         "backgroundColor": {"red": 1.0, "green": 0.78, "blue": 0.78},
                         "textFormat": {"bold": True},
@@ -318,7 +319,7 @@ def append_prediction_row(
             elif bet_label == "激熱":
                 reqs.append({"repeatCell": {
                     "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                              "startColumnIndex": 11, "endColumnIndex": 12},
+                              "startColumnIndex": 10, "endColumnIndex": 11},
                     "cell": {"userEnteredFormat": {
                         "backgroundColor": {"red": 1.0, "green": 0.75, "blue": 0.3},
                         "textFormat": {"bold": True},
@@ -326,7 +327,7 @@ def append_prediction_row(
                     "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
                 }})
 
-            # エッジ（M列=index12）: 強度で色分け
+            # エッジ（L列=index11）: 強度で色分け
             try:
                 edge_float = float(row.get("edge", "0"))
                 if edge_float >= 1.5:
@@ -335,7 +336,7 @@ def append_prediction_row(
                     edge_bg = {"red": 0.55, "green": 0.92, "blue": 0.55} # 緑
                 reqs.append({"repeatCell": {
                     "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                              "startColumnIndex": 12, "endColumnIndex": 13},
+                              "startColumnIndex": 11, "endColumnIndex": 12},
                     "cell": {"userEnteredFormat": {
                         "backgroundColor": edge_bg,
                         "textFormat": {"bold": True},
@@ -345,16 +346,29 @@ def append_prediction_row(
             except (ValueError, TypeError):
                 pass
 
-        # イン逃げ率（J列=index9）: 65%以上で薄赤
+        # イン逃げ率（I列=index8）: 65%以上で薄赤
         nigerate_src = row.get("odds_source", "")
         m_nig = re.search(r'(\d+)%', str(nigerate_src))
         if m_nig and int(m_nig.group(1)) >= 65:
             reqs.append({"repeatCell": {
                 "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                          "startColumnIndex": 9, "endColumnIndex": 10},
+                          "startColumnIndex": 8, "endColumnIndex": 9},
                 "cell": {"userEnteredFormat": {
                     "backgroundColor": {"red": 1.0, "green": 0.80, "blue": 0.80},
                 }},
+                "fields": "userEnteredFormat.backgroundColor",
+            }})
+
+        # 1号艇状態（N列=index13）: フラグ数で色分け
+        boat1_risk = row.get("boat1_risk", "-")
+        if boat1_risk and boat1_risk != "-":
+            flag_count = len(boat1_risk.split(" / "))
+            risk_bg = ({"red": 1.0, "green": 0.80, "blue": 0.80} if flag_count >= 2
+                       else {"red": 1.0, "green": 0.98, "blue": 0.80})
+            reqs.append({"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
+                          "startColumnIndex": 13, "endColumnIndex": 14},
+                "cell": {"userEnteredFormat": {"backgroundColor": risk_bg}},
                 "fields": "userEnteredFormat.backgroundColor",
             }})
 
@@ -417,17 +431,17 @@ def update_result_row(
     client = get_client(credentials_path)
     spreadsheet = client.open_by_key(spreadsheet_id)
 
-    RESULT_HEADERS = ["日付", "競艇場", "レース", "狙い", "予想買い目", "的中確率", "期待回収率",
+    RESULT_HEADERS = ["日付", "競艇場", "レース", "狙い", "予想買い目", "的中確率",
                       "実際の結果", "実際の払戻", "的中", "収支（円）", "本日レース数", "信頼度", "勝負推奨", "荒れPT"]
     try:
         r_sheet = spreadsheet.worksheet(RESULT_SHEET)
         if not r_sheet.get_all_values():
             r_sheet.update("A1", [RESULT_HEADERS])
-            _format_header(spreadsheet, r_sheet, num_cols=15)
+            _format_header(spreadsheet, r_sheet, num_cols=14)
     except gspread.WorksheetNotFound:
-        r_sheet = spreadsheet.add_worksheet(title=RESULT_SHEET, rows=2000, cols=15)
+        r_sheet = spreadsheet.add_worksheet(title=RESULT_SHEET, rows=2000, cols=14)
         r_sheet.update("A1", [RESULT_HEADERS])
-        _format_header(spreadsheet, r_sheet, num_cols=15)
+        _format_header(spreadsheet, r_sheet, num_cols=14)
 
     # メモリキャッシュ（auto_runner から渡された場合）を優先使用
     # → Google Sheets API 503 エラーを回避するため
@@ -489,12 +503,12 @@ def update_result_row(
 
     if not race_preds:
         r_sheet.append_row(
-            [date, venue_name, race_no, "-", "（予想なし）", "-", "-",
+            [date, venue_name, race_no, "-", "（予想なし）", "-",
              actual_combination, actual_payout, "-", 0, rc, "-", "", ""],
             value_input_option="RAW"
         )
         _color_result_row(spreadsheet, r_sheet, len(r_sheet.get_all_values()), venue_name, "-",
-                          num_cols=15)
+                          num_cols=14, hit_col_idx=8)
         return
 
     for pred in race_preds:
@@ -508,7 +522,7 @@ def update_result_row(
             form_combos = _expand_formation(combination)
             hit    = "○" if actual_combination in form_combos else "×"
             payout = actual_payout if hit == "○" else 0
-            profit = payout - 600   # 6枚×100円
+            profit = payout - 400   # 4点×100円
         else:
             hit    = "○" if combination == actual_combination else "×"
             payout = actual_payout if hit == "○" else 0
@@ -516,12 +530,12 @@ def update_result_row(
 
         r_sheet.append_row(
             [date, venue_name, race_no, tier, combination,
-             pred.get("的中確率", "-"), pred.get("期待回収率", "-"),
+             pred.get("的中確率", "-"),
              actual_combination, actual_payout, hit, profit, rc, confidence, bet_label, arare_pt],
             value_input_option="RAW"
         )
         _color_result_row(spreadsheet, r_sheet, len(r_sheet.get_all_values()), venue_name, hit,
-                          num_cols=15)
+                          num_cols=14, hit_col_idx=8)
 
     print(f"[OK] 成績記録: {venue_name} {race_no}R 結果={actual_combination} 払戻={actual_payout}円")
 
@@ -548,7 +562,7 @@ def apply_colors_to_results_sheet(
 
     for i, row in enumerate(all_rows[1:], start=2):
         venue_name = row[1] if len(row) > 1 else ""
-        hit = row[9] if len(row) > 9 else ""  # 狙い列追加で的中はindex9
+        hit = row[8] if len(row) > 8 else ""  # 期待回収率削除後は的中はindex8
 
         bg = _VENUE_BG_COLORS.get(venue_name, _DEFAULT_BG)
 
@@ -577,8 +591,8 @@ def apply_colors_to_results_sheet(
                         "sheetId": sheet_id,
                         "startRowIndex": i - 1,
                         "endRowIndex": i,
-                        "startColumnIndex": 9,
-                        "endColumnIndex": 10,
+                        "startColumnIndex": 8,
+                        "endColumnIndex": 9,
                     },
                     "cell": {"userEnteredFormat": {
                         "backgroundColor": hit_bg,
@@ -1109,9 +1123,7 @@ def update_summary_sheet(
             if key not in fb:
                 continue
             b = fb[key]
-            # PT7以上=8点×100円=800円、PT6以下=4点×100円=400円
-            bet_amount = 800 if key == "7以上" else 400
-            b["bets"] = b.get("bets", 0) + bet_amount
+            b["bets"] = b.get("bets", 0) + 400  # 4点×100円（常に）
             b["ret"]  = b.get("ret", 0)
             b["hits"] = b.get("hits", 0)
             d  = str(rec.get("日付", ""))
@@ -1138,7 +1150,7 @@ def update_summary_sheet(
         return fb
 
     form_buckets = _formation_pt_stats(records)
-    rows.append(_r("■ フォーメーション PT別集計（全PT・カスケード・中穴狙い）"))
+    rows.append(_r("■ フォーメーション PT別集計（PT4以上・4点・1号艇除外）"))
     rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "払戻平均", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
     for key in [1, 2, 3, 4, 5, 6, "7以上"]:
         b = form_buckets.get(key, {})
