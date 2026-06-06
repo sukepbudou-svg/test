@@ -273,6 +273,7 @@ def append_prediction_row(
     try:
         sid = sheet.id
         is_skip       = row.get("bet_label", "") == "見送り"
+        is_kumane     = row.get("bet_label", "") == "熊熱"
         is_formation  = row.get("tier", "") == "フォーメーション"
 
         # フォーメーション行: 薄い緑で区別
@@ -291,7 +292,7 @@ def append_prediction_row(
         }}]
 
         if not is_skip:
-            # 勝負推奨（L列=index11）: 神熱=赤、激熱=オレンジ
+            # 勝負推奨（L列=index11）: 神熱=金、熊熱=薄赤、激熱=オレンジ
             bet_label = row.get("bet_label", "")
             if bet_label == "神熱":
                 reqs.append({"repeatCell": {
@@ -303,6 +304,16 @@ def append_prediction_row(
                                        "foregroundColor": {"red": 0.2, "green": 0.1, "blue": 0.0}},
                     }},
                     "fields": "userEnteredFormat(backgroundColor,textFormat)",
+                }})
+            elif bet_label == "熊熱":
+                reqs.append({"repeatCell": {
+                    "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
+                              "startColumnIndex": 11, "endColumnIndex": 12},
+                    "cell": {"userEnteredFormat": {
+                        "backgroundColor": {"red": 1.0, "green": 0.78, "blue": 0.78},
+                        "textFormat": {"bold": True},
+                    }},
+                    "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
                 }})
             elif bet_label == "激熱":
                 reqs.append({"repeatCell": {
