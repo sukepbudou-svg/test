@@ -540,7 +540,7 @@ def update_result_row(
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
         # 熊フォメ・穴フォメ: 展開して照合（実際の点数×100円で収支計算）
-        if tier in ("熊フォメ", "穴フォメ"):
+        if tier in ("熊フォメ", "穴フォメ", "穴フォメ改"):
             form_combos = _expand_formation(combination)
             hit    = "○" if actual_combination in form_combos else "×"
             payout = actual_payout if hit == "○" else 0
@@ -1003,6 +1003,7 @@ def update_summary_sheet(
         ("地熊目",     {"地熊目"}),
         ("熊フォメ",   {"熊フォメ"}),
         ("穴フォメ",   {"穴フォメ"}),
+        ("穴フォメ改", {"穴フォメ改"}),
     ]
     tier_group_stats = [
         (name, tiers, _compute_tier_stats(records, lambda rec, t=tiers: str(rec.get("狙い", "")) in t))
@@ -1163,7 +1164,7 @@ def update_summary_sheet(
             b = fb[key]
             # 収支列から実際の点数を逆算（収支=払戻-賭け金）
             # ここでは固定値を使用: 熊フォメPT7+=8点、それ以外=4点
-            tickets = 8 if (tier_name in ("熊フォメ", "穴フォメ") and key == "7以上") else 4
+            tickets = 8 if (tier_name in ("熊フォメ", "穴フォメ", "穴フォメ改") and key == "7以上") else 4
             b["bets"] = b.get("bets", 0) + tickets * bet_per_ticket
             b["ret"]  = b.get("ret", 0)
             b["hits"] = b.get("hits", 0)
@@ -1234,6 +1235,7 @@ def update_summary_sheet(
 
     _print_form_pt_section("熊フォメ（全PT・全艇・1着2艇）", _formation_pt_stats(records, "熊フォメ"), is_honmei=True)
     _print_form_pt_section("穴フォメ（全PT・全艇・4/8点）", _formation_pt_stats(records, "穴フォメ"), is_honmei=False)
+    _print_form_pt_section("穴フォメ改（ML3位以下×展示+脅威スコア・4/8点）", _formation_pt_stats(records, "穴フォメ改"), is_honmei=False)
 
     # シートへ書き込み
     try:

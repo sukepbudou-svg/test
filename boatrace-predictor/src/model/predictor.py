@@ -1110,6 +1110,76 @@ def get_recommendations(
                     "boat1_risk":    _calc_boat1_risk(race_row),
                 })
 
+                # ── 穴フォメ改: ML3位以下から「展示タイム+脅威スコア÷ML確率」で穴艇選出 ──
+                # 1着: ML3位以下のうち穴スコア上位2艇（物理的に速いのにMLが低評価している艇）
+                # 2着: 1着2艇 + ML1位艇（本命が2着に流れるケースをカバー）
+                # 3着: 展示タイム上位3艇 / 神熱は4艇
+                et_vals_kai = {}
+                for bn2 in available_for_form:
+                    et2 = _safe_float(race_row.get(f"boat{bn2}_exhibition_time"))
+                    if et2 and et2 > 0:
+                        et_vals_kai[bn2] = et2
+                et_sorted_kai = sorted(et_vals_kai.values())
+
+                kai_scores: dict[int, float] = {}
+                for bn2 in available_for_form:
+                    try:
+                        ml_rank_idx = ranked_all.index(bn2)
+                    except ValueError:
+                        continue
+                    if ml_rank_idx < 2:  # ML1・2位（有力本命）は穴対象外
+                        continue
+                    ml_prob2 = form_win_probs.get(bn2, 0.0)
+                    et_bonus = 0.0
+                    if bn2 in et_vals_kai:
+                        et_rank = et_sorted_kai.index(et_vals_kai[bn2])
+                        et_bonus = max(0.0, 3.0 - et_rank)
+                    threat2 = _calc_threat_score(bn2, race_row)
+                    kai_scores[bn2] = (threat2 + et_bonus) / (ml_prob2 + 0.01)
+
+                if len(kai_scores) >= 2:
+                    kai_first_boats = sorted(kai_scores, key=lambda b: kai_scores[b], reverse=True)[:2]
+                elif len(kai_scores) == 1:
+                    extra = ranked_all[2] if len(ranked_all) > 2 else None
+                    kai_first_boats = list(kai_scores.keys()) + ([extra] if extra else [])
+                else:
+                    kai_first_boats = ranked_all[2:4]
+
+                if len(kai_first_boats) >= 2:
+                    kai_first_set = set(kai_first_boats[:2])
+                    kai_first = sorted(kai_first_set)
+                    kai_second_set = kai_first_set | {ranked_all[0]}
+                    kai_second = sorted(kai_second_set)
+                    et_ranked_kai = sorted(
+                        [(b, et_vals_kai.get(b, 9.99)) for b in available_for_form],
+                        key=lambda x: x[1]
+                    )
+                    kai_third_n = 4 if arare_score >= 7 else 3
+                    kai_third_set = {b for b, _ in et_ranked_kai[:kai_third_n]}
+                    kai_third = sorted(kai_third_set)
+                    kai_str = (
+                        f"{''.join(str(b) for b in kai_first)}-"
+                        f"{''.join(str(b) for b in kai_second)}-"
+                        f"{''.join(str(b) for b in kai_third)}"
+                    )
+                    all_recommendations.append({
+                        "date":          race_row.get("date", ""),
+                        "venue_name":    race_row.get("venue_name", ""),
+                        "race_no":       race_row.get("race_no", ""),
+                        "combination":   kai_str,
+                        "prob":          "-",
+                        "odds":          "-",
+                        "expected_roi":  "-",
+                        "confidence":    "穴フォメ改",
+                        "odds_source":   nigerate_str,
+                        "tier":          "穴フォメ改",
+                        "bet_label":     bet_label,
+                        "edge":          "-",
+                        "arare_score":   arare_score,
+                        "arare_reasons": " / ".join(arare_reasons),
+                        "boat1_risk":    _calc_boat1_risk(race_row),
+                    })
+
     return pd.DataFrame(all_recommendations)
 
 
