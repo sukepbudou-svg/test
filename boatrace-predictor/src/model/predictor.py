@@ -1029,66 +1029,62 @@ def get_recommendations(
                     "boat1_risk":    _calc_boat1_risk(race_row),
                 })
 
-        # 穴フォメ（全PT対象・4点・1号艇完全除外）
-        # 1着: 2〜6号艇中ML確率1位
-        # 2着: 内枠(2-3)ML確率高い方 + 外枠(4-6)脅威スコア高い方
-        # 3着: 2着2艇 + 残り(1号艇除外)のML確率最高1艇
+        # 穴フォメ（全PT対象・全艇対象・カスケード方式）
+        # 1着: ML1位 + ML3位（全艇・1号艇含む）
+        # 2着: 1着2艇 + ML5位（計3艇）
+        # 3着(通常): 2着3艇 → 4点
+        # 3着(神熱PT7以上): 2着3艇 + ML4位 → 8点
         if True:
-            available_for_form = [b for b in range(2, 7) if not (absent_boats and b in absent_boats)]
-            if len(available_for_form) >= 4:
+            available_for_form = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
+            if len(available_for_form) >= 3:
                 form_win_probs = {}
                 for bn in available_for_form:
                     mask = by_prob["boat1"] == bn
                     form_win_probs[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
-                ranked_no1 = sorted(form_win_probs, key=lambda b: form_win_probs[b], reverse=True)
-                form_first = ranked_no1[0]
+                ranked_all = sorted(form_win_probs, key=lambda b: form_win_probs[b], reverse=True)
 
-                # 2着: 内枠(2-3)ML確率1位 + 外枠(4-6)脅威スコア1位
-                inner_cands = [b for b in [2, 3] if b in available_for_form and b != form_first]
-                outer_cands = [b for b in [4, 5, 6] if b in available_for_form and b != form_first]
-                inner_2nd = max(inner_cands, key=lambda b: form_win_probs.get(b, 0)) if inner_cands else None
-                outer_2nd = max(outer_cands, key=lambda b: _calc_threat_score(b, race_row)) if outer_cands else None
-                second_set = {b for b in [inner_2nd, outer_2nd] if b is not None}
+                # 1着: ML1位 + ML3位
+                ml1 = ranked_all[0]
+                ml3 = ranked_all[2] if len(ranked_all) >= 3 else ranked_all[-1]
+                form_first_set = {ml1, ml3}
+                form_first = sorted(form_first_set)
 
-                # 2着が1艇しか取れない場合は残りからML上位で補充
-                for b in ranked_no1:
-                    if len(second_set) >= 2:
-                        break
-                    if b != form_first and b not in second_set:
-                        second_set.add(b)
+                # 2着: 1着2艇 + ML5位
+                ml5 = ranked_all[4] if len(ranked_all) >= 5 else None
+                form_second_set = form_first_set | ({ml5} if ml5 is not None else set())
+                form_second = sorted(form_second_set)
 
-                if len(second_set) >= 2:
-                    form_second = sorted(second_set)
-                    # 3着: 2着2艇 + 残り(1号艇除外)のML確率最高1艇
-                    remaining_3rd = [b for b in available_for_form
-                                     if b != form_first and b not in second_set]
-                    third_extra = (max(remaining_3rd, key=lambda b: form_win_probs.get(b, 0))
-                                   if remaining_3rd else None)
-                    form_third = sorted(second_set | ({third_extra} if third_extra else set()))
+                # 3着: 通常=2着3艇、神熱PT7以上=2着3艇+ML4位
+                ml4 = ranked_all[3] if len(ranked_all) >= 4 else None
+                if arare_score >= 7 and ml4 is not None:
+                    form_third_set = form_second_set | {ml4}
+                else:
+                    form_third_set = form_second_set
+                form_third = sorted(form_third_set)
 
-                    formation_str = (
-                        f"{form_first}-"
-                        f"{''.join(str(b) for b in form_second)}-"
-                        f"{''.join(str(b) for b in form_third)}"
-                    )
-                    bet_label = "神熱" if arare_ok else ("熊熱" if arare_score == 1 else "見送り")
-                    all_recommendations.append({
-                        "date":          race_row.get("date", ""),
-                        "venue_name":    race_row.get("venue_name", ""),
-                        "race_no":       race_row.get("race_no", ""),
-                        "combination":   formation_str,
-                        "prob":          "-",
-                        "odds":          "-",
-                        "expected_roi":  "-",
-                        "confidence":    "穴フォメ",
-                        "odds_source":   nigerate_str,
-                        "tier":          "穴フォメ",
-                        "bet_label":     bet_label,
-                        "edge":          "-",
-                        "arare_score":   arare_score,
-                        "arare_reasons": " / ".join(arare_reasons),
-                        "boat1_risk":    _calc_boat1_risk(race_row),
-                    })
+                formation_str = (
+                    f"{''.join(str(b) for b in form_first)}-"
+                    f"{''.join(str(b) for b in form_second)}-"
+                    f"{''.join(str(b) for b in form_third)}"
+                )
+                bet_label = "神熱" if arare_ok else ("熊熱" if arare_score == 1 else "見送り")
+                all_recommendations.append({
+                    "date":          race_row.get("date", ""),
+                    "venue_name":    race_row.get("venue_name", ""),
+                    "race_no":       race_row.get("race_no", ""),
+                    "combination":   formation_str,
+                    "prob":          "-",
+                    "odds":          "-",
+                    "expected_roi":  "-",
+                    "confidence":    "穴フォメ",
+                    "odds_source":   nigerate_str,
+                    "tier":          "穴フォメ",
+                    "bet_label":     bet_label,
+                    "edge":          "-",
+                    "arare_score":   arare_score,
+                    "arare_reasons": " / ".join(arare_reasons),
+                    "boat1_risk":    _calc_boat1_risk(race_row),
+                })
 
     return pd.DataFrame(all_recommendations)
 
