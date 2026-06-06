@@ -952,6 +952,50 @@ def get_recommendations(
         for _, rec in lucky_recs.iterrows():
             all_recommendations.append(_make_row(rec, lucky_star, None))
 
+        # 熊フォメ（全PT対象・全艇・1着2艇×2着3艇×3着3-4艇）
+        kuma_wp = {}
+        for bn in range(1, 7):
+            if absent_boats and bn in absent_boats:
+                continue
+            mask = by_prob["boat1"] == bn
+            kuma_wp[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
+        kuma_ranked = sorted(kuma_wp, key=lambda b: kuma_wp[b], reverse=True)
+        if len(kuma_ranked) >= 3:
+            kuma_first = kuma_ranked[:2]
+            kuma_pool2 = [b for b in kuma_ranked if b not in set(kuma_first)]
+            kuma_threat_a = (max(kuma_pool2, key=lambda b: _calc_threat_score(b, race_row))
+                             if kuma_pool2 else None)
+            kuma_second = sorted(set(kuma_first) | {kuma_threat_a}) if kuma_threat_a else sorted(kuma_first)
+            if arare_score >= 7:
+                kuma_pool3 = [b for b in kuma_ranked if b not in set(kuma_second)]
+                kuma_threat_b = (max(kuma_pool3, key=lambda b: _calc_threat_score(b, race_row))
+                                 if kuma_pool3 else None)
+                kuma_third = sorted(set(kuma_second) | {kuma_threat_b}) if kuma_threat_b else kuma_second
+            else:
+                kuma_third = kuma_second
+            kuma_str = (
+                f"{''.join(str(b) for b in sorted(kuma_first))}-"
+                f"{''.join(str(b) for b in kuma_second)}-"
+                f"{''.join(str(b) for b in kuma_third)}"
+            )
+            all_recommendations.append({
+                "date":          race_row.get("date", ""),
+                "venue_name":    race_row.get("venue_name", ""),
+                "race_no":       race_row.get("race_no", ""),
+                "combination":   kuma_str,
+                "prob":          "-",
+                "odds":          "-",
+                "expected_roi":  "-",
+                "confidence":    "熊フォメ",
+                "odds_source":   nigerate_str,
+                "tier":          "熊フォメ",
+                "bet_label":     "神熱" if arare_ok else ("熊熱" if arare_score == 1 else "見送り"),
+                "edge":          "-",
+                "arare_score":   arare_score,
+                "arare_reasons": " / ".join(arare_reasons),
+                "boat1_risk":    _calc_boat1_risk(race_row),
+            })
+
         # 爆穴・鬼穴: 1号艇を上位から排除した高オッズ穴（全PT対象）
         ana_a_combo, ana_b_combo = _pick_ana_combos(by_prob, race_row, absent_boats)
         ana_used = set()
@@ -985,11 +1029,11 @@ def get_recommendations(
                     "boat1_risk":    _calc_boat1_risk(race_row),
                 })
 
-        # フォーメーション予想（PT4以上・4点・1号艇完全除外）
+        # 穴フォメ（全PT対象・4点・1号艇完全除外）
         # 1着: 2〜6号艇中ML確率1位
         # 2着: 内枠(2-3)ML確率高い方 + 外枠(4-6)脅威スコア高い方
         # 3着: 2着2艇 + 残り(1号艇除外)のML確率最高1艇
-        if arare_score >= 2:
+        if True:
             available_for_form = [b for b in range(2, 7) if not (absent_boats and b in absent_boats)]
             if len(available_for_form) >= 4:
                 form_win_probs = {}
@@ -1036,9 +1080,9 @@ def get_recommendations(
                         "prob":          "-",
                         "odds":          "-",
                         "expected_roi":  "-",
-                        "confidence":    "フォーメーション",
+                        "confidence":    "穴フォメ",
                         "odds_source":   nigerate_str,
-                        "tier":          "フォーメーション",
+                        "tier":          "穴フォメ",
                         "bet_label":     bet_label,
                         "edge":          "-",
                         "arare_score":   arare_score,

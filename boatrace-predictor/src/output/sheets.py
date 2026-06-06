@@ -273,14 +273,10 @@ def append_prediction_row(
         return  # 色付けは諦めるがデータは書き込み済み
     try:
         sid = sheet.id
-        is_skip       = row.get("bet_label", "") == "見送り"
-        is_kumane     = row.get("bet_label", "") == "熊熱"
-        is_formation  = row.get("tier", "") == "フォーメーション"
+        is_skip   = row.get("bet_label", "") == "見送り"
+        is_kumane = row.get("bet_label", "") == "熊熱"
 
-        # フォーメーション行: 薄い緑で区別
-        if is_formation:
-            row_bg = {"red": 0.88, "green": 0.97, "blue": 0.84}
-        elif is_skip:
+        if is_skip:
             row_bg = {"red": 0.91, "green": 0.91, "blue": 0.91}
         else:
             row_bg = _VENUE_BG_COLORS.get(str(row.get("venue_name", "")), _DEFAULT_BG)
@@ -517,12 +513,13 @@ def update_result_row(
         confidence = pred.get("信頼度", "-")
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
-        # フォーメーション: 展開して照合
-        if tier == "フォーメーション":
+        # 熊フォメ・穴フォメ: 展開して照合（実際の点数×100円で収支計算）
+        if tier in ("熊フォメ", "穴フォメ"):
             form_combos = _expand_formation(combination)
             hit    = "○" if actual_combination in form_combos else "×"
             payout = actual_payout if hit == "○" else 0
-            profit = payout - 400   # 4点×100円
+            ticket_count = len(form_combos) if form_combos else 4
+            profit = payout - ticket_count * 100
         else:
             hit    = "○" if combination == actual_combination else "×"
             payout = actual_payout if hit == "○" else 0
@@ -969,9 +966,10 @@ def update_summary_sheet(
 
     # ─── ティア別グループ統計を事前計算 ───
     TIER_GROUPS = [
-        ("爆穴・鬼穴",       {"爆穴", "鬼穴"}),
-        ("地熊目",           {"地熊目"}),
-        ("フォーメーション", {"フォーメーション"}),
+        ("爆穴・鬼穴", {"爆穴", "鬼穴"}),
+        ("地熊目",     {"地熊目"}),
+        ("熊フォメ",   {"熊フォメ"}),
+        ("穴フォメ",   {"穴フォメ"}),
     ]
     tier_group_stats = [
         (name, tiers, _compute_tier_stats(records, lambda rec, t=tiers: str(rec.get("狙い", "")) in t))
@@ -1110,10 +1108,10 @@ def update_summary_sheet(
     rows.append(_r())
 
     # フォーメーション PT別集計セクション
-    def _formation_pt_stats(recs):
+    def _formation_pt_stats(recs, tier_name, bet_per_ticket=100):
         fb = {1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, "7以上": {}}
         for rec in recs:
-            if str(rec.get("狙い", "")) != "フォーメーション":
+            if str(rec.get("狙い", "")) != tier_name:
                 continue
             try:
                 pt = int(float(str(rec.get("荒れPT", "0") or "0")))
@@ -1123,7 +1121,10 @@ def update_summary_sheet(
             if key not in fb:
                 continue
             b = fb[key]
-            b["bets"] = b.get("bets", 0) + 400  # 4点×100円（常に）
+            # 収支列から実際の点数を逆算（収支=払戻-賭け金）
+            # ここでは固定値を使用: 熊フォメPT7+=8点、それ以外=4点
+            tickets = 8 if (tier_name == "熊フォメ" and key == "7以上") else 4
+            b["bets"] = b.get("bets", 0) + tickets * bet_per_ticket
             b["ret"]  = b.get("ret", 0)
             b["hits"] = b.get("hits", 0)
             d  = str(rec.get("日付", ""))
@@ -1149,27 +1150,30 @@ def update_summary_sheet(
                     pass
         return fb
 
-    form_buckets = _formation_pt_stats(records)
-    rows.append(_r("■ フォーメーション PT別集計（PT2以上・4点・1号艇除外）"))
-    rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "払戻平均", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
-    for key in [1, 2, 3, 4, 5, 6, "7以上"]:
-        b = form_buckets.get(key, {})
-        bets = b.get("bets", 0)
-        hits = b.get("hits", 0)
-        ret  = b.get("ret", 0)
-        rc   = len(b.get("race_keys", set()))
-        hitr = f"{hits/rc*100:.1f}%" if rc > 0 else "0.0%"
-        ivl  = f"{rc/hits:.1f}回に1回" if hits > 0 else "未的中"
-        ap   = pt_avg_pay.get(key)
-        avg_pay = f"¥{ap:,}" if ap else "-"
-        mc   = len(b.get("manshu_races", set()))
-        mr   = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
-        roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
-        pft  = ret - bets
-        label = f"{key}PT" if isinstance(key, int) else f"{key}（神熱）"
-        rows.append(_r(label, rc, hits, hitr, ivl, avg_pay, mc, mr, f"¥{ret:,}", roi, pft))
-    rows.append(_r())
-    rows.append(_r())
+    def _print_form_pt_section(title, buckets):
+        rows.append(_r(f"■ {title} PT別集計"))
+        rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "払戻平均", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
+        for key in [1, 2, 3, 4, 5, 6, "7以上"]:
+            b = buckets.get(key, {})
+            bets = b.get("bets", 0)
+            hits = b.get("hits", 0)
+            ret  = b.get("ret", 0)
+            rc   = len(b.get("race_keys", set()))
+            hitr = f"{hits/rc*100:.1f}%" if rc > 0 else "0.0%"
+            ivl  = f"{rc/hits:.1f}回に1回" if hits > 0 else "未的中"
+            ap   = pt_avg_pay.get(key)
+            avg_pay = f"¥{ap:,}" if ap else "-"
+            mc   = len(b.get("manshu_races", set()))
+            mr   = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
+            roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
+            pft  = ret - bets
+            label = f"{key}PT" if isinstance(key, int) else f"{key}（神熱）"
+            rows.append(_r(label, rc, hits, hitr, ivl, avg_pay, mc, mr, f"¥{ret:,}", roi, pft))
+        rows.append(_r())
+        rows.append(_r())
+
+    _print_form_pt_section("熊フォメ（全PT・全艇・1着2艇）", _formation_pt_stats(records, "熊フォメ"))
+    _print_form_pt_section("穴フォメ（全PT・1号艇除外・4点）", _formation_pt_stats(records, "穴フォメ"))
 
     # シートへ書き込み
     try:
