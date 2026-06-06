@@ -846,10 +846,20 @@ def update_summary_sheet(
                     b["manshu_races"].add(race_key)
             except (ValueError, TypeError):
                 pass
+            # 1号艇1着追跡
+            actual = str(rec.get("実際の結果", ""))
+            if actual.startswith("1-"):
+                if "boat1_win_keys" not in b:
+                    b["boat1_win_keys"] = set()
+                b["boat1_win_keys"].add(race_key)
             if rec.get("的中", "") == "○":
                 b["hits"] += 1
                 try:
-                    b["ret"] += int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+                    pay = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+                    b["ret"] += pay
+                    if "hit_payouts" not in b:
+                        b["hit_payouts"] = []
+                    b["hit_payouts"].append(pay)
                 except (ValueError, TypeError):
                     pass
                 # 的中レース記録（連続外れ計算用）
@@ -993,7 +1003,9 @@ def update_summary_sheet(
         rows.append(_r(name, pr, hr, hitr, f"¥{ret:,}", roi, pft))
     rows.append(_r())
 
+    HONMEI_TIERS = {"地熊目", "熊フォメ"}
     for name, tiers, tgs in tier_group_stats:
+        is_honmei = bool(tiers & HONMEI_TIERS)
         bets = tgs["total_bets"]
         ret  = tgs["total_return"]
         pr   = tgs["pred_races"]
@@ -1017,7 +1029,10 @@ def update_summary_sheet(
             rows.append(_r(d, dpr, h, dr, f"¥{r:,}", dp))
         rows.append(_r())
         rows.append(_r(f"▶ {name}  荒れPT別集計"))
-        rows.append(_r("荒れPT", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支", "払戻平均"))
+        if is_honmei:
+            rows.append(_r("荒れPT", "予想R数", "的中数", "的中率", "間隔", "1号艇1着率", "払戻合計", "回収率", "収支", "払戻平均", "的中時平均配当"))
+        else:
+            rows.append(_r("荒れPT", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支", "払戻平均"))
         pt_b = _arare_pt_stats(records, tiers)
         for key in [1, 2, 3, 4, 5, 6, "7以上"]:
             b    = pt_b.get(key, {})
@@ -1032,9 +1047,16 @@ def update_summary_sheet(
             ivl  = f"{rc/hts:.1f}回に1回" if hts > 0 else "未的中"
             ap   = pt_avg_pay.get(key)
             avg_pay = f"¥{ap:,}" if ap else "-"
-            mc   = len(b.get("manshu_races", set()))
-            mr   = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
-            rows.append(_r(lbl, rc, hts, hitr, ivl, mc, mr, f"¥{rtn:,}", roi, pft, avg_pay))
+            if is_honmei:
+                b1w = len(b.get("boat1_win_keys", set()))
+                b1r = f"{b1w/rc*100:.1f}%" if rc > 0 else "0.0%"
+                hp  = b.get("hit_payouts", [])
+                hit_avg = f"¥{int(sum(hp)/len(hp)):,}" if hp else "-"
+                rows.append(_r(lbl, rc, hts, hitr, ivl, b1r, f"¥{rtn:,}", roi, pft, avg_pay, hit_avg))
+            else:
+                mc  = len(b.get("manshu_races", set()))
+                mr  = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
+                rows.append(_r(lbl, rc, hts, hitr, ivl, mc, mr, f"¥{rtn:,}", roi, pft, avg_pay))
         rows.append(_r())
         rows.append(_r())
 
@@ -1133,17 +1155,30 @@ def update_summary_sheet(
                     b["manshu_races"].add(race_key)
             except (ValueError, TypeError):
                 pass
+            # 1号艇1着追跡
+            actual = str(rec.get("実際の結果", ""))
+            if actual.startswith("1-"):
+                if "boat1_win_keys" not in b:
+                    b["boat1_win_keys"] = set()
+                b["boat1_win_keys"].add(race_key)
             if rec.get("的中", "") == "○":
                 b["hits"] += 1
                 try:
-                    b["ret"] += int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+                    pay = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+                    b["ret"] += pay
+                    if "hit_payouts" not in b:
+                        b["hit_payouts"] = []
+                    b["hit_payouts"].append(pay)
                 except (ValueError, TypeError):
                     pass
         return fb
 
-    def _print_form_pt_section(title, buckets):
+    def _print_form_pt_section(title, buckets, is_honmei=False):
         rows.append(_r(f"■ {title} PT別集計"))
-        rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支", "払戻平均"))
+        if is_honmei:
+            rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "1号艇1着率", "払戻合計", "回収率", "収支", "払戻平均", "的中時平均配当"))
+        else:
+            rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支", "払戻平均"))
         for key in [1, 2, 3, 4, 5, 6, "7以上"]:
             b = buckets.get(key, {})
             bets = b.get("bets", 0)
@@ -1154,17 +1189,24 @@ def update_summary_sheet(
             ivl  = f"{rc/hits:.1f}回に1回" if hits > 0 else "未的中"
             ap   = pt_avg_pay.get(key)
             avg_pay = f"¥{ap:,}" if ap else "-"
-            mc   = len(b.get("manshu_races", set()))
-            mr   = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
             roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
             pft  = ret - bets
             label = f"{key}PT" if isinstance(key, int) else f"{key}（神熱）"
-            rows.append(_r(label, rc, hits, hitr, ivl, mc, mr, f"¥{ret:,}", roi, pft, avg_pay))
+            if is_honmei:
+                b1w = len(b.get("boat1_win_keys", set()))
+                b1r = f"{b1w/rc*100:.1f}%" if rc > 0 else "0.0%"
+                hp  = b.get("hit_payouts", [])
+                hit_avg = f"¥{int(sum(hp)/len(hp)):,}" if hp else "-"
+                rows.append(_r(label, rc, hits, hitr, ivl, b1r, f"¥{ret:,}", roi, pft, avg_pay, hit_avg))
+            else:
+                mc  = len(b.get("manshu_races", set()))
+                mr  = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
+                rows.append(_r(label, rc, hits, hitr, ivl, mc, mr, f"¥{ret:,}", roi, pft, avg_pay))
         rows.append(_r())
         rows.append(_r())
 
-    _print_form_pt_section("熊フォメ（全PT・全艇・1着2艇）", _formation_pt_stats(records, "熊フォメ"))
-    _print_form_pt_section("穴フォメ（全PT・全艇・4/8点）", _formation_pt_stats(records, "穴フォメ"))
+    _print_form_pt_section("熊フォメ（全PT・全艇・1着2艇）", _formation_pt_stats(records, "熊フォメ"), is_honmei=True)
+    _print_form_pt_section("穴フォメ（全PT・全艇・4/8点）", _formation_pt_stats(records, "穴フォメ"), is_honmei=False)
 
     # シートへ書き込み
     try:
