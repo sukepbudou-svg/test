@@ -21,6 +21,9 @@ SCOPES = [
 RESULT_SHEET = "成績13"
 SUMMARY_SHEET = "サマリー13"
 
+_WIND_NOTE_LINE1 = "【風向き判断】向かい風3〜7m → 地熊目・熊フォメ 積極的に勝負"
+_WIND_NOTE_LINE2 = "追い風5m以上 → 穴フォメ・穴系に切り替え or 見送り"
+
 
 def _expand_formation(formation_str: str) -> set:
     """
@@ -87,6 +90,29 @@ _VENUE_BG_COLORS = {
     "大村":   {"red": 1.00, "green": 0.76, "blue": 0.68},
 }
 _DEFAULT_BG = {"red": 0.95, "green": 0.95, "blue": 0.95}  # 不明場所はグレー
+
+
+def _write_wind_notes(spreadsheet, sheet) -> None:
+    """日付別シートのM1・M2に風向き判断メモを固定書き込みする"""
+    try:
+        sheet.update("M1:M2", [[_WIND_NOTE_LINE1], [_WIND_NOTE_LINE2]],
+                     value_input_option="RAW")
+        sid = sheet.id
+        note_bg = {"red": 0.85, "green": 0.93, "blue": 1.0}
+        spreadsheet.batch_update({"requests": [
+            {"repeatCell": {
+                "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 2,
+                          "startColumnIndex": 12, "endColumnIndex": 13},
+                "cell": {"userEnteredFormat": {
+                    "backgroundColor": note_bg,
+                    "textFormat": {"bold": True, "fontSize": 10},
+                    "wrapStrategy": "WRAP",
+                }},
+                "fields": "userEnteredFormat(backgroundColor,textFormat,wrapStrategy)",
+            }},
+        ]})
+    except Exception:
+        pass
 
 
 def _format_header(spreadsheet, sheet, num_cols: int = 9) -> None:
@@ -232,11 +258,12 @@ def append_prediction_row(
     try:
         sheet = spreadsheet.worksheet(sheet_name)
     except gspread.WorksheetNotFound:
-        sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=12)
+        sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=13)
         headers = ["日付", "競艇場", "レース", "狙い", "買い目（3連単）",
                    "オッズ", "イン逃げ率", "本日レース数", "勝負推奨", "荒れPT", "荒れ条件", "1号艇状態"]
         sheet.update("A1", [headers])
         _format_header(spreadsheet, sheet, num_cols=12)
+        _write_wind_notes(spreadsheet, sheet)
 
     cols = ["date", "venue_name", "race_no", "tier", "combination",
             "odds", "odds_source"]
