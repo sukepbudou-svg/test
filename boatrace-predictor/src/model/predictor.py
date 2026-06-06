@@ -989,7 +989,7 @@ def get_recommendations(
         # 1着: 2〜6号艇中ML確率1位
         # 2着: 内枠(2-3)ML確率高い方 + 外枠(4-6)脅威スコア高い方
         # 3着: 2着2艇 + 残り(1号艇除外)のML確率最高1艇
-        if arare_score >= 4:
+        if arare_score >= 2:
             available_for_form = [b for b in range(2, 7) if not (absent_boats and b in absent_boats)]
             if len(available_for_form) >= 4:
                 form_win_probs = {}

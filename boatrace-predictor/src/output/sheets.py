@@ -1150,7 +1150,7 @@ def update_summary_sheet(
         return fb
 
     form_buckets = _formation_pt_stats(records)
-    rows.append(_r("■ フォーメーション PT別集計（PT4以上・4点・1号艇除外）"))
+    rows.append(_r("■ フォーメーション PT別集計（PT2以上・4点・1号艇除外）"))
     rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "払戻平均", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
     for key in [1, 2, 3, 4, 5, 6, "7以上"]:
         b = form_buckets.get(key, {})
