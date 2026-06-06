@@ -375,8 +375,9 @@ def _calc_boat1_risk(race_row: pd.Series) -> str:
 def _calc_arare_score(race_row: pd.Series, weather: dict = None) -> tuple[int, list[str]]:
     """
     荒れ条件スコアを計算する。
-    2点条件: 1号艇の展示ST遅い / モーター不良 / B級 / 外艇展示タイム上位
-    1点条件: 1号艇の全国2連率低い / 外艇A1選手 / 外艇ST速い / 風速強 / 波高 / 荒れ会場 / 一般戦
+    2点条件: 1号艇の展示ST遅い / モーター不良 / B級 / 外艇展示タイム上位 / 前付け
+    1点条件: 1号艇の全国2連率低い / 今節不調 / 展示最遅 / 外艇A1選手 / 外艇ST速い(複数可) /
+             風速強 / 追い風 / 波高 / 荒れ会場 / 一般戦
     Returns: (score, [条件説明リスト])
     """
     score = 0
@@ -411,11 +412,25 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None) -> tuple[int, l
             score += 2
             reasons.append(f"{fastest_boat}号艇展示最速({et_vals[fastest_boat]:.2f}s)")
 
+        # 1号艇の展示タイムが全艇中最遅（外艇最速とは独立したシグナル）
+        if 1 in et_vals:
+            slowest_boat = max(et_vals, key=lambda b: et_vals[b])
+            if slowest_boat == 1:
+                score += 1
+                reasons.append(f"1号展示最遅({et_vals[1]:.2f}s)")
+
     # ── 補助条件（各1点） ──
     n2_1 = _safe_float(race_row.get("boat1_national_2rate"))
     if n2_1 is not None and n2_1 < 0.40:
         score += 1
         reasons.append(f"1号2率{n2_1:.0%}")
+
+    # 1号艇の今節成績が不振（2R以上出走かつ平均着順4.0以上）
+    meet_avg_rank1 = _safe_float(race_row.get("boat1_meet_avg_rank"))
+    meet_races1 = int(race_row.get("boat1_meet_races", 0) or 0)
+    if meet_avg_rank1 is not None and meet_races1 >= 2 and meet_avg_rank1 >= 4.0:
+        score += 1
+        reasons.append(f"1号今節{meet_avg_rank1:.1f}着平均")
 
     for bn in [4, 5, 6]:
         g = _safe_float(race_row.get(f"boat{bn}_grade_num"))
@@ -424,17 +439,26 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None) -> tuple[int, l
             reasons.append(f"{bn}号A1")
             break
 
+    # 外艇ST速い（複数艇カウント・上限2点）
+    fast_st_count = 0
     for bn in [4, 5, 6]:
         st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
         if st is not None and st <= 0.12:
             score += 1
             reasons.append(f"{bn}号ST速({st:.2f})")
-            break
+            fast_st_count += 1
+            if fast_st_count >= 2:
+                break
 
     wind = _safe_float((weather or {}).get("wind_speed"))
+    wind_dir = (weather or {}).get("wind_direction", "")
     if wind and wind >= 5:
         score += 1
         reasons.append(f"風速{int(wind)}m")
+        # 追い風は外艇のまくりが決まりやすく荒れが増大する
+        if wind_dir == "tail":
+            score += 1
+            reasons.append("追い風")
 
     wave = _safe_float((weather or {}).get("wave_height"))
     if wave and wave >= 15:
