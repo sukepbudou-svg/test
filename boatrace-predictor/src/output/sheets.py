@@ -350,24 +350,6 @@ def append_prediction_row(
                     "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
                 }})
 
-            # エッジ（J列=index9）: 強度で色分け
-            try:
-                edge_float = float(row.get("edge", "0"))
-                if edge_float >= 1.5:
-                    edge_bg = {"red": 1.0, "green": 0.85, "blue": 0.2}   # 金色
-                else:
-                    edge_bg = {"red": 0.55, "green": 0.92, "blue": 0.55} # 緑
-                reqs.append({"repeatCell": {
-                    "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                              "startColumnIndex": 9, "endColumnIndex": 10},
-                    "cell": {"userEnteredFormat": {
-                        "backgroundColor": edge_bg,
-                        "textFormat": {"bold": True},
-                    }},
-                    "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
-                }})
-            except (ValueError, TypeError):
-                pass
 
         # イン逃げ率（G列=index6）: 65%以上で薄赤
         nigerate_src = row.get("odds_source", "")
