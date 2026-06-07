@@ -1056,8 +1056,7 @@ def get_recommendations(
         # 穴フォメ（全PT対象・全艇対象・カスケード方式）
         # 1着: ML1位 + ML3位（全艇・1号艇含む）
         # 2着: 1着2艇 + ML5位（計3艇）
-        # 3着(通常): 2着3艇 → 4点
-        # 3着(神熱PT7以上): 2着3艇 + ML6位 → 8点
+        # 3着: 常に2着3艇+ML6位（PT問わず追加）
         if True:
             available_for_form = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             if len(available_for_form) >= 3:
@@ -1078,9 +1077,9 @@ def get_recommendations(
                 form_second_set = form_first_set | ({ml5} if ml5 is not None else set())
                 form_second = sorted(form_second_set)
 
-                # 3着: 通常=2着3艇、神熱PT7以上=2着3艇+ML6位
+                # 3着: 2着3艇+ML6位（PT問わず常に追加）
                 ml6 = ranked_all[5] if len(ranked_all) >= 6 else None
-                if arare_score >= 7 and ml6 is not None:
+                if ml6 is not None:
                     form_third_set = form_second_set | {ml6}
                 else:
                     form_third_set = form_second_set
