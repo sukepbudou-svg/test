@@ -390,11 +390,11 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None) -> tuple[int, l
     wind_dir = (weather or {}).get("wind_direction", "")
     if wind and wind >= 5:
         score += 1
-        reasons.append(f"風速{int(wind)}m")
+        dir_suffix = {"tail": "追", "head": "向", "side": "横"}.get(wind_dir, "")
+        reasons.append(f"風速{int(wind)}m{dir_suffix}")
         # 追い風は外艇のまくりが決まりやすく荒れが増大する
         if wind_dir == "tail":
             score += 1
-            reasons.append("追い風")
 
     wave = _safe_float((weather or {}).get("wave_height"))
     if wave and wave >= 15:
