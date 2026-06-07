@@ -1055,8 +1055,7 @@ def get_recommendations(
 
         # 穴フォメ（全PT対象・全艇対象・カスケード方式）
         # 1着: ML1位 + ML3位（全艇・1号艇含む）
-        # 2着: 1着2艇 + ML5位（計3艇）
-        # 3着: 常に2着3艇+ML6位（PT問わず追加）
+        # 穴フォメ: 1着=ML3+4位、2着=ML3+4+1位、3着=ML3+4+1+5位（34-134-1345形）
         if True:
             available_for_form = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             if len(available_for_form) >= 3:
@@ -1066,21 +1065,21 @@ def get_recommendations(
                     form_win_probs[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
                 ranked_all = sorted(form_win_probs, key=lambda b: form_win_probs[b], reverse=True)
 
-                # 1着: ML1位 + ML3位
-                ml1 = ranked_all[0]
+                # 1着: ML3位 + ML4位
                 ml3 = ranked_all[2] if len(ranked_all) >= 3 else ranked_all[-1]
-                form_first_set = {ml1, ml3}
+                ml4 = ranked_all[3] if len(ranked_all) >= 4 else ranked_all[-1]
+                form_first_set = {ml3, ml4}
                 form_first = sorted(form_first_set)
 
-                # 2着: 1着2艇 + ML5位
-                ml5 = ranked_all[4] if len(ranked_all) >= 5 else None
-                form_second_set = form_first_set | ({ml5} if ml5 is not None else set())
+                # 2着: ML3位 + ML4位 + ML1位
+                ml1 = ranked_all[0]
+                form_second_set = form_first_set | {ml1}
                 form_second = sorted(form_second_set)
 
-                # 3着: 2着3艇+ML6位（PT問わず常に追加）
-                ml6 = ranked_all[5] if len(ranked_all) >= 6 else None
-                if ml6 is not None:
-                    form_third_set = form_second_set | {ml6}
+                # 3着: ML3位 + ML4位 + ML1位 + ML5位
+                ml5 = ranked_all[4] if len(ranked_all) >= 5 else None
+                if ml5 is not None:
+                    form_third_set = form_second_set | {ml5}
                 else:
                     form_third_set = form_second_set
                 form_third = sorted(form_third_set)
