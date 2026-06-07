@@ -803,7 +803,11 @@ def get_recommendations(
 
         # 荒れ条件チェック: スコア不足でも予想は生成するが見送りになる
         arare_score, arare_reasons = _calc_arare_score(race_row, weather)
-        arare_ok = arare_score >= ARARE_MIN_SCORE
+        # 神熱条件: 荒れPT7以上 かつ 追い風5m以上
+        _wind_spd = _safe_float((weather or {}).get("wind_speed"))
+        _wind_dir = (weather or {}).get("wind_direction", "")
+        _tail_ok  = (_wind_spd is not None and _wind_spd >= 5 and _wind_dir == "tail")
+        arare_ok  = arare_score >= ARARE_MIN_SCORE and _tail_ok
         venue_name_log = race_row.get("venue_name", "")
         if arare_ok:
             print(f"  [荒れ対象] {venue_name_log} {race_no}R スコア{arare_score} 条件:[{', '.join(arare_reasons)}]")
