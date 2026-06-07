@@ -18,8 +18,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-RESULT_SHEET = "成績13"
-SUMMARY_SHEET = "サマリー13"
+RESULT_SHEET = "成績14"
+SUMMARY_SHEET = "サマリー14"
 
 _WIND_NOTE_LINE1 = "【風向き判断】向かい風3〜7m → 地熊目・熊フォメ 積極的に勝負"
 _WIND_NOTE_LINE2 = "追い風5m以上 → 穴フォメ・穴系に切り替え or 見送り"
@@ -634,8 +634,15 @@ def _compute_tier_stats(records: list, tier_check) -> dict:
 
         if d not in daily:
             daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
-        total_bets += 100
-        daily[d]["bets"] += 100
+        # フォーメーションは実際のcombo数×100円、それ以外は1票=100円
+        tier_name = str(rec.get("狙い", ""))
+        if tier_name in ("熊フォメ", "穴フォメ", "穴フォメ改"):
+            _fc = _expand_formation(str(combination))
+            bet_amount = len(_fc) * 100 if _fc else 400
+        else:
+            bet_amount = 100
+        total_bets += bet_amount
+        daily[d]["bets"] += bet_amount
         daily[d]["race_keys"].add(race_key)
 
         if rec.get("的中", "") == "○":
@@ -675,7 +682,12 @@ def _compute_venue_tier_stats(records: list, tier_check) -> dict:
         if vn not in venue:
             venue[vn] = {"race_keys": set(), "hit_race_keys": set(), "bets": 0, "ret": 0}
         venue[vn]["race_keys"].add(race_key)
-        venue[vn]["bets"] += 100
+        _vt = str(rec.get("狙い", ""))
+        if _vt in ("熊フォメ", "穴フォメ", "穴フォメ改"):
+            _vc = _expand_formation(str(rec.get("予想買い目", "")))
+            venue[vn]["bets"] += len(_vc) * 100 if _vc else 400
+        else:
+            venue[vn]["bets"] += 100
 
         if rec.get("的中", "") == "○":
             venue[vn]["hit_race_keys"].add(race_key)
@@ -828,7 +840,14 @@ def update_summary_sheet(
             if key not in buckets:
                 continue
             b = buckets[key]
-            b["bets"] = b.get("bets", 0) + 100
+            # フォーメーションは実際のcombo数×100円、それ以外は1票=100円
+            _tier = str(rec.get("狙い", ""))
+            if _tier in ("熊フォメ", "穴フォメ", "穴フォメ改"):
+                _fc = _expand_formation(str(combination))
+                _bet = len(_fc) * 100 if _fc else 400
+            else:
+                _bet = 100
+            b["bets"] = b.get("bets", 0) + _bet
             b["ret"]  = b.get("ret", 0)
             b["hits"] = b.get("hits", 0)
             d  = str(rec.get("日付", ""))
