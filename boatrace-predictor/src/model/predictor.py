@@ -889,6 +889,8 @@ def get_recommendations(
         def _make_row(rec, star_lv, second):
             if arare_ok:
                 confidence, bet_label = "★★★★", "神熱"
+            elif arare_score >= ARARE_MIN_SCORE:
+                confidence, bet_label = "★★★☆", "灼熱"
             elif arare_score == 1:
                 confidence, bet_label = "★☆☆☆", "熊熱"
             else:
@@ -953,7 +955,7 @@ def get_recommendations(
                 "confidence":    "熊フォメ",
                 "odds_source":   nigerate_str,
                 "tier":          "熊フォメ",
-                "bet_label":     "神熱" if arare_ok else ("熊熱" if arare_score == 1 else "見送り"),
+                "bet_label":     "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り"),
                 "edge":          "-",
                 "arare_score":   arare_score,
                 "arare_reasons": " / ".join(arare_reasons),
@@ -997,7 +999,7 @@ def get_recommendations(
                     f"{''.join(str(b) for b in form_second)}-"
                     f"{''.join(str(b) for b in form_third)}"
                 )
-                bet_label = "神熱" if arare_ok else ("熊熱" if arare_score == 1 else "見送り")
+                bet_label = "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り")
                 all_recommendations.append({
                     "date":          race_row.get("date", ""),
                     "venue_name":    race_row.get("venue_name", ""),
@@ -1042,7 +1044,7 @@ def get_recommendations(
                     threat2 = _calc_threat_score(bn2, race_row)
                     kai_scores[bn2] = (threat2 + et_bonus) / (ml_prob2 + 0.01)
 
-                kai_bet_label = "神熱" if arare_score >= ARARE_MIN_SCORE else "見送り"
+                kai_bet_label = "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "見送り")
 
                 if _tail_ok:
                     # 追い風あり: 穴スコア上位2艇を1着

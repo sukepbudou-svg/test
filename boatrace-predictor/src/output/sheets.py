@@ -316,7 +316,7 @@ def append_prediction_row(
         }}]
 
         if not is_skip:
-            # 勝負推奨（I列=index8）: 神熱=金、熊熱=薄赤、激熱=オレンジ
+            # 勝負推奨（I列=index8）: 神熱=金、灼熱=オレンジ、熊熱=薄赤、激熱=深オレンジ
             bet_label = row.get("bet_label", "")
             if bet_label == "神熱":
                 reqs.append({"repeatCell": {
@@ -326,6 +326,17 @@ def append_prediction_row(
                         "backgroundColor": {"red": 1.0, "green": 0.84, "blue": 0.0},
                         "textFormat": {"bold": True,
                                        "foregroundColor": {"red": 0.2, "green": 0.1, "blue": 0.0}},
+                    }},
+                    "fields": "userEnteredFormat(backgroundColor,textFormat)",
+                }})
+            elif bet_label == "灼熱":
+                reqs.append({"repeatCell": {
+                    "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
+                              "startColumnIndex": 8, "endColumnIndex": 9},
+                    "cell": {"userEnteredFormat": {
+                        "backgroundColor": {"red": 1.0, "green": 0.55, "blue": 0.0},
+                        "textFormat": {"bold": True,
+                                       "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
                     }},
                     "fields": "userEnteredFormat(backgroundColor,textFormat)",
                 }})
@@ -817,11 +828,13 @@ def update_summary_sheet(
     if not records:
         return
 
-    is_hot  = lambda rec: str(rec.get("勝負推奨", "")) == "神熱"
-    is_pass = lambda rec: str(rec.get("勝負推奨", "")) == "見送り"
+    is_hot   = lambda rec: str(rec.get("勝負推奨", "")) == "神熱"
+    is_shaku = lambda rec: str(rec.get("勝負推奨", "")) == "灼熱"
+    is_pass  = lambda rec: str(rec.get("勝負推奨", "")) == "見送り"
 
-    hot_stats  = _compute_tier_stats(records, is_hot)
-    pass_stats = _compute_tier_stats(records, is_pass)
+    hot_stats   = _compute_tier_stats(records, is_hot)
+    shaku_stats = _compute_tier_stats(records, is_shaku)
+    pass_stats  = _compute_tier_stats(records, is_pass)
 
     # 荒れPT別集計（1〜6、7以上）
     def _arare_pt_stats(records, tiers=None):
@@ -960,8 +973,9 @@ def update_summary_sheet(
                 v["hit_races"].add(race_key)
         return venues
 
-    hot_venue  = _venue_stats(is_hot)
-    pass_venue = _venue_stats(is_pass)
+    hot_venue   = _venue_stats(is_hot)
+    shaku_venue = _venue_stats(is_shaku)
+    pass_venue  = _venue_stats(is_pass)
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     NUM_COLS = 12
@@ -1011,8 +1025,9 @@ def update_summary_sheet(
     rows.append(_r("【予想成績サマリー】"))
     rows.append(_r("集計日時", now))
     rows.append(_r())
-    rows.extend(_section(hot_stats,  "神熱"))
-    rows.extend(_section(pass_stats, "見送り"))
+    rows.extend(_section(hot_stats,   "神熱"))
+    rows.extend(_section(shaku_stats, "灼熱"))
+    rows.extend(_section(pass_stats,  "見送り"))
 
     # ─── ティア別グループ比較（勝負先検討用）───
     rows.append(_r("■ ティア別グループ比較（神熱＋見送り全件）"))
@@ -1119,6 +1134,25 @@ def update_summary_sheet(
     rows.append(_r("会場", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
     for venue in sorted(hot_venue.keys()):
         v = hot_venue[venue]
+        bets = v["bets"]
+        hits = v["hits"]
+        ret  = v["ret"]
+        rc   = len(v["race_keys"])
+        hitr = f"{hits/rc*100:.1f}%" if rc > 0 else "0.0%"
+        ivl  = f"{rc/hits:.1f}回に1回" if hits > 0 else "未的中"
+        mc   = len(v["manshu_races"])
+        mr   = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
+        roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
+        pft  = ret - bets
+        rows.append(_r(venue, rc, hits, hitr, ivl, mc, mr, f"¥{ret:,}", roi, pft))
+    rows.append(_r())
+    rows.append(_r())
+
+    # 会場別集計セクション（灼熱）
+    rows.append(_r("■ 会場別 集計（灼熱）"))
+    rows.append(_r("会場", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
+    for venue in sorted(shaku_venue.keys()):
+        v = shaku_venue[venue]
         bets = v["bets"]
         hits = v["hits"]
         ret  = v["ret"]
@@ -1317,6 +1351,7 @@ def update_summary_sheet(
     print(
         f"[OK] {SUMMARY_SHEET}更新: "
         f"神熱 {hot_stats['pred_races']}R ROI={_roi_str(hot_stats)} / "
+        f"灼熱 {shaku_stats['pred_races']}R ROI={_roi_str(shaku_stats)} / "
         f"見送り {pass_stats['pred_races']}R ROI={_roi_str(pass_stats)}"
     )
 
