@@ -1016,10 +1016,9 @@ def get_recommendations(
                     "boat1_risk":    _calc_boat1_risk(race_row),
                 })
 
-                # ── 穴フォメ改: ML3位以下から「展示タイム+脅威スコア÷ML確率」で穴艇選出 ──
-                # 1着: ML3位以下のうち穴スコア上位2艇（物理的に速いのにMLが低評価している艇）
-                # 2着: 1着2艇 + ML1位艇（本命が2着に流れるケースをカバー）
-                # 3着: 展示タイム上位3艇 / 神熱は4艇
+                # ── 穴フォメ改 ──
+                # 追い風あり: 穴スコア上位2艇を1着（穴艇軸）
+                # 追い風なし + 荒れPT7以上: 1号艇 + 脅威スコア最高艇を1着（1号艇軸）
                 et_vals_kai = {}
                 for bn2 in available_for_form:
                     et2 = _safe_float(race_row.get(f"boat{bn2}_exhibition_time"))
@@ -1033,7 +1032,7 @@ def get_recommendations(
                         ml_rank_idx = ranked_all.index(bn2)
                     except ValueError:
                         continue
-                    if ml_rank_idx < 2:  # ML1・2位（有力本命）は穴対象外
+                    if ml_rank_idx < 2:
                         continue
                     ml_prob2 = form_win_probs.get(bn2, 0.0)
                     et_bonus = 0.0
@@ -1043,26 +1042,70 @@ def get_recommendations(
                     threat2 = _calc_threat_score(bn2, race_row)
                     kai_scores[bn2] = (threat2 + et_bonus) / (ml_prob2 + 0.01)
 
-                if len(kai_scores) >= 2:
-                    kai_first_boats = sorted(kai_scores, key=lambda b: kai_scores[b], reverse=True)[:2]
-                elif len(kai_scores) == 1:
-                    extra = ranked_all[2] if len(ranked_all) > 2 else None
-                    kai_first_boats = list(kai_scores.keys()) + ([extra] if extra else [])
-                else:
-                    kai_first_boats = ranked_all[2:4]
+                kai_bet_label = "神熱" if arare_score >= ARARE_MIN_SCORE else "見送り"
 
-                if len(kai_first_boats) >= 2:
-                    kai_first_set = set(kai_first_boats[:2])
-                    kai_first = sorted(kai_first_set)
-                    kai_second_set = kai_first_set | {ranked_all[0]}
-                    kai_second = sorted(kai_second_set)
-                    et_ranked_kai = sorted(
-                        [(b, et_vals_kai.get(b, 9.99)) for b in available_for_form],
-                        key=lambda x: x[1]
+                if _tail_ok:
+                    # 追い風あり: 穴スコア上位2艇を1着
+                    if len(kai_scores) >= 2:
+                        kai_first_boats = sorted(kai_scores, key=lambda b: kai_scores[b], reverse=True)[:2]
+                    elif len(kai_scores) == 1:
+                        extra = ranked_all[2] if len(ranked_all) > 2 else None
+                        kai_first_boats = list(kai_scores.keys()) + ([extra] if extra else [])
+                    else:
+                        kai_first_boats = ranked_all[2:4]
+
+                    if len(kai_first_boats) >= 2:
+                        kai_first_set = set(kai_first_boats[:2])
+                        kai_first = sorted(kai_first_set)
+                        kai_second_set = kai_first_set | {ranked_all[0]}
+                        kai_second = sorted(kai_second_set)
+                        et_ranked_kai = sorted(
+                            [(b, et_vals_kai.get(b, 9.99)) for b in available_for_form],
+                            key=lambda x: x[1]
+                        )
+                        kai_third_set = {b for b, _ in et_ranked_kai[:4]}
+                        kai_third = sorted(kai_third_set)
+                        kai_str = (
+                            f"{''.join(str(b) for b in kai_first)}-"
+                            f"{''.join(str(b) for b in kai_second)}-"
+                            f"{''.join(str(b) for b in kai_third)}"
+                        )
+                        all_recommendations.append({
+                            "date":          race_row.get("date", ""),
+                            "venue_name":    race_row.get("venue_name", ""),
+                            "race_no":       race_row.get("race_no", ""),
+                            "combination":   kai_str,
+                            "prob":          "-",
+                            "odds":          "-",
+                            "expected_roi":  "-",
+                            "confidence":    "穴フォメ改",
+                            "odds_source":   nigerate_str,
+                            "tier":          "穴フォメ改",
+                            "bet_label":     kai_bet_label,
+                            "edge":          "-",
+                            "arare_score":   arare_score,
+                            "arare_reasons": " / ".join(arare_reasons),
+                            "boat1_risk":    _calc_boat1_risk(race_row),
+                        })
+                else:
+                    # 追い風なし: 1号艇 + 脅威スコア最高艇を1着
+                    boat1_kai = 1 if not (absent_boats and 1 in absent_boats) else ranked_all[0]
+                    threat_top = (
+                        max(kai_scores, key=lambda b: kai_scores[b])
+                        if kai_scores
+                        else (ranked_all[2] if len(ranked_all) >= 3 else ranked_all[-1])
                     )
-                    kai_third_n = 4 if arare_score >= 7 else 3
-                    kai_third_set = {b for b, _ in et_ranked_kai[:kai_third_n]}
+                    kai_first_set = {boat1_kai, threat_top}
+                    kai_first = sorted(kai_first_set)
+
+                    ml2_kai = ranked_all[1] if len(ranked_all) >= 2 else ranked_all[-1]
+                    kai_second_set = kai_first_set | {ml2_kai}
+                    kai_second = sorted(kai_second_set)
+
+                    ml4_kai = ranked_all[3] if len(ranked_all) >= 4 else None
+                    kai_third_set = kai_second_set | ({ml4_kai} if ml4_kai is not None else set())
                     kai_third = sorted(kai_third_set)
+
                     kai_str = (
                         f"{''.join(str(b) for b in kai_first)}-"
                         f"{''.join(str(b) for b in kai_second)}-"
@@ -1079,7 +1122,7 @@ def get_recommendations(
                         "confidence":    "穴フォメ改",
                         "odds_source":   nigerate_str,
                         "tier":          "穴フォメ改",
-                        "bet_label":     bet_label,
+                        "bet_label":     kai_bet_label,
                         "edge":          "-",
                         "arare_score":   arare_score,
                         "arare_reasons": " / ".join(arare_reasons),
