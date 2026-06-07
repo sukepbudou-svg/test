@@ -1001,9 +1001,6 @@ def update_summary_sheet(
     TIER_GROUPS = [
         ("爆穴・鬼穴", {"爆穴", "鬼穴"}),
         ("地熊目",     {"地熊目"}),
-        ("熊フォメ",   {"熊フォメ"}),
-        ("穴フォメ",   {"穴フォメ"}),
-        ("穴フォメ改", {"穴フォメ改"}),
     ]
     tier_group_stats = [
         (name, tiers, _compute_tier_stats(records, lambda rec, t=tiers: str(rec.get("狙い", "")) in t))
@@ -1151,6 +1148,7 @@ def update_summary_sheet(
     # フォーメーション PT別集計セクション
     def _formation_pt_stats(recs, tier_name, bet_per_ticket=100):
         fb = {1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, "7以上": {}}
+        daily: dict = {}
         for rec in recs:
             if str(rec.get("狙い", "")) != tier_name:
                 continue
@@ -1162,10 +1160,12 @@ def update_summary_sheet(
             if key not in fb:
                 continue
             b = fb[key]
-            # 収支列から実際の点数を逆算（収支=払戻-賭け金）
-            # ここでは固定値を使用: 熊フォメPT7+=8点、それ以外=4点
-            tickets = 8 if (tier_name in ("熊フォメ", "穴フォメ", "穴フォメ改") and key == "7以上") else 4
-            b["bets"] = b.get("bets", 0) + tickets * bet_per_ticket
+            # フォーメーション文字列から実際の点数を動的計算
+            combo_str = str(rec.get("予想買い目", ""))
+            actual_combos = _expand_formation(combo_str)
+            tickets = len(actual_combos) if actual_combos else 4
+            cost = tickets * bet_per_ticket
+            b["bets"] = b.get("bets", 0) + cost
             b["ret"]  = b.get("ret", 0)
             b["hits"] = b.get("hits", 0)
             d  = str(rec.get("日付", ""))
@@ -1189,6 +1189,12 @@ def update_summary_sheet(
                 if "boat1_win_keys" not in b:
                     b["boat1_win_keys"] = set()
                 b["boat1_win_keys"].add(race_key)
+            # 日付別追跡
+            if d not in daily:
+                daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
+            dd = daily[d]
+            dd["bets"] += cost
+            dd["race_keys"].add(race_key)
             if rec.get("的中", "") == "○":
                 b["hits"] += 1
                 try:
@@ -1197,12 +1203,42 @@ def update_summary_sheet(
                     if "hit_payouts" not in b:
                         b["hit_payouts"] = []
                     b["hit_payouts"].append(pay)
+                    dd["ret"] += pay
+                    dd["hit_race_keys"].add(race_key)
                 except (ValueError, TypeError):
                     pass
-        return fb
+        return fb, daily
 
-    def _print_form_pt_section(title, buckets, is_honmei=False):
-        rows.append(_r(f"■ {title} PT別集計"))
+    def _print_form_pt_section(title, stats, is_honmei=False):
+        buckets, daily = stats
+        # 全期間合計を集計
+        all_race_keys: set = set()
+        for b in buckets.values():
+            all_race_keys |= b.get("race_keys", set())
+        total_bets = sum(b.get("bets", 0) for b in buckets.values())
+        total_ret  = sum(b.get("ret", 0) for b in buckets.values())
+        total_hits = sum(b.get("hits", 0) for b in buckets.values())
+        total_rc   = len(all_race_keys)
+        total_hitr = f"{total_hits/total_rc*100:.1f}%" if total_rc > 0 else "0.0%"
+        total_roi  = f"{total_ret/total_bets*100:.1f}%" if total_bets > 0 else "0.0%"
+        total_pft  = total_ret - total_bets
+
+        rows.append(_r(f"▶ {title}  全期間合計"))
+        rows.append(_r("予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
+        rows.append(_r(total_rc, total_hits, total_hitr, f"¥{total_ret:,}", total_roi, total_pft))
+        rows.append(_r())
+        rows.append(_r(f"▶ {title}  日付別内訳"))
+        rows.append(_r("日付", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
+        for d in sorted(daily.keys()):
+            dd  = daily[d]
+            dpr = len(dd["race_keys"])
+            h   = len(dd["hit_race_keys"])
+            r   = dd["ret"]
+            dr  = f"{h/dpr*100:.1f}%" if dpr > 0 else "0.0%"
+            dp  = r - dd["bets"]
+            rows.append(_r(d, dpr, h, dr, f"¥{r:,}", dp))
+        rows.append(_r())
+        rows.append(_r(f"▶ {title}  荒れPT別集計"))
         if is_honmei:
             rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "1号艇1着率", "払戻合計", "回収率", "収支", "払戻平均", "的中時平均配当"))
         else:
@@ -1234,8 +1270,8 @@ def update_summary_sheet(
         rows.append(_r())
 
     _print_form_pt_section("熊フォメ（全PT・全艇・1着2艇）", _formation_pt_stats(records, "熊フォメ"), is_honmei=True)
-    _print_form_pt_section("穴フォメ（全PT・全艇・4/8点）", _formation_pt_stats(records, "穴フォメ"), is_honmei=False)
-    _print_form_pt_section("穴フォメ改（ML3位以下×展示+脅威スコア・4/8点）", _formation_pt_stats(records, "穴フォメ改"), is_honmei=False)
+    _print_form_pt_section("穴フォメ（ML1/3/5番手・実点数計算）", _formation_pt_stats(records, "穴フォメ"), is_honmei=False)
+    _print_form_pt_section("穴フォメ改（ML3位以下×展示+脅威スコア・実点数計算）", _formation_pt_stats(records, "穴フォメ改"), is_honmei=False)
 
     # シートへ書き込み
     try:
