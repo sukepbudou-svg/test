@@ -981,8 +981,7 @@ def update_summary_sheet(
 
     # ─── ティア別グループ統計を事前計算 ───
     TIER_GROUPS = [
-        ("爆穴・鬼穴", {"爆穴", "鬼穴"}),
-        ("地熊目",     {"地熊目"}),
+        ("地熊目", {"地熊目"}),
     ]
     tier_group_stats = [
         (name, tiers, _compute_tier_stats(records, lambda rec, t=tiers: str(rec.get("狙い", "")) in t))

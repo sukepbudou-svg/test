@@ -4,7 +4,6 @@
 """
 
 import json
-import math
 from itertools import permutations
 from pathlib import Path
 
@@ -173,69 +172,6 @@ def _pick_condition_based_ana(
 
     return shinhonmei, shinchoana
 
-
-def _pick_ana_combos(
-    by_prob: "pd.DataFrame",
-    race_row: "pd.Series",
-    absent_boats: "list | None",
-) -> "tuple[str | None, str | None]":
-    """
-    爆穴・鬼穴: 1号艇を上位から排除した高オッズ穴組み合わせを選出
-
-    爆穴: 1着から1号艇を排除（80倍以上狙い）
-    鬼穴: 1着・2着から1号艇を完全排除（200倍以上狙い）
-
-    スコア = ML確率 × (1 + 1着艇の脅威スコア) × log(オッズ)
-
-    Returns: (爆穴コンボ, 鬼穴コンボ)
-    """
-    if by_prob is None or by_prob.empty:
-        return None, None
-
-    pool = by_prob.copy()
-    if absent_boats:
-        ab = set(absent_boats)
-        pool = pool[
-            ~pool["boat1"].isin(ab) &
-            ~pool["boat2"].isin(ab) &
-            ~pool["boat3"].isin(ab)
-        ]
-    if pool.empty:
-        return None, None
-
-    def _score(row, target_odds: float) -> float:
-        prob = float(row["prob"])
-        odds = float(row["odds_value"])
-        if prob < 0.0005 or odds < 10:
-            return -1.0
-        threat = _calc_threat_score(int(row["boat1"]), race_row)
-        odds_factor = math.log(max(odds, 1)) * (1.3 if odds >= target_odds else 1.0)
-        return prob * (1.0 + threat * 0.5) * odds_factor
-
-    # ── 爆穴: 1着から1号艇を排除（80倍以上狙い）──
-    pool_a = pool[(pool["boat1"] != 1) & (pool["prob"] >= 0.002)].copy()
-    ana_a = None
-    if not pool_a.empty:
-        pool_a["_s"] = pool_a.apply(lambda r: _score(r, 80), axis=1)
-        pool_a = pool_a[pool_a["_s"] > 0].sort_values("_s", ascending=False)
-        if not pool_a.empty:
-            ana_a = str(pool_a.iloc[0]["combination"])
-
-    # ── 鬼穴: 1着・2着から1号艇を完全排除（200倍以上狙い）──
-    pool_b = pool[
-        (pool["boat1"] != 1) & (pool["boat2"] != 1) & (pool["prob"] >= 0.001)
-    ].copy()
-    ana_b = None
-    if not pool_b.empty:
-        pool_b["_s"] = pool_b.apply(lambda r: _score(r, 200), axis=1)
-        pool_b = pool_b[pool_b["_s"] > 0]
-        if ana_a:
-            pool_b = pool_b[pool_b["combination"] != ana_a]
-        pool_b = pool_b.sort_values("_s", ascending=False)
-        if not pool_b.empty:
-            ana_b = str(pool_b.iloc[0]["combination"])
-
-    return ana_a, ana_b
 
 
 # 各会場のイン逃げ率（全国統計ベース）
@@ -1020,38 +956,6 @@ def get_recommendations(
                 "boat1_risk":    _calc_boat1_risk(race_row),
             })
 
-        # 爆穴・鬼穴: 1号艇を上位から排除した高オッズ穴（全PT対象）
-        ana_a_combo, ana_b_combo = _pick_ana_combos(by_prob, race_row, absent_boats)
-        ana_used = set()
-        for combo, tier_name in [(ana_a_combo, "爆穴"), (ana_b_combo, "鬼穴")]:
-            if combo and combo not in ana_used:
-                ana_used.add(combo)
-                cr = by_prob[by_prob["combination"] == combo]
-                if not cr.empty:
-                    c = cr.iloc[0]
-                    osrc = c.get("odds_source", "history")
-                    prob_disp = f"{c['prob']*100:.2f}%"
-                    odds_disp = f"{c['odds_value']}倍" if osrc == "live" else f"{c['odds_value']}倍(履歴)"
-                    roi_disp  = f"{c['expected_roi']*100:.0f}%"
-                else:
-                    prob_disp = odds_disp = roi_disp = "-"
-                all_recommendations.append({
-                    "date":          race_row.get("date", ""),
-                    "venue_name":    race_row.get("venue_name", ""),
-                    "race_no":       race_row.get("race_no", ""),
-                    "combination":   combo,
-                    "prob":          prob_disp,
-                    "odds":          odds_disp,
-                    "expected_roi":  roi_disp,
-                    "confidence":    "★★★★" if arare_ok else "★☆☆☆",
-                    "odds_source":   nigerate_str,
-                    "tier":          tier_name,
-                    "bet_label":     "神熱" if arare_ok else ("熊熱" if arare_score == 1 else "見送り"),
-                    "edge":          "-",
-                    "arare_score":   arare_score,
-                    "arare_reasons": " / ".join(arare_reasons),
-                    "boat1_risk":    _calc_boat1_risk(race_row),
-                })
 
         # 穴フォメ（全PT対象・全艇対象・カスケード方式）
         # 1着: ML1位 + ML3位（全艇・1号艇含む）
