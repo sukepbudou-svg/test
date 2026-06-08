@@ -986,9 +986,9 @@ def get_recommendations(
                 form_second_set = form_first_set | {ml4}
                 form_second = sorted(form_second_set)
 
-                # 3着: ML3位 + ML5位 + ML4位 + ML1位
-                ml1 = ranked_all[0]
-                form_third_set = form_second_set | {ml1}
+                # 3着: ML3位 + ML5位 + ML4位 + ML2位
+                ml2 = ranked_all[1] if len(ranked_all) >= 2 else ranked_all[-1]
+                form_third_set = form_second_set | {ml2}
                 form_third = sorted(form_third_set)
 
                 formation_str = (
