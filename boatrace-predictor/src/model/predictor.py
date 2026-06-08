@@ -975,23 +975,20 @@ def get_recommendations(
                     form_win_probs[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
                 ranked_all = sorted(form_win_probs, key=lambda b: form_win_probs[b], reverse=True)
 
-                # 1着: ML3位 + ML4位
+                # 1着: ML3位 + ML5位
                 ml3 = ranked_all[2] if len(ranked_all) >= 3 else ranked_all[-1]
-                ml4 = ranked_all[3] if len(ranked_all) >= 4 else ranked_all[-1]
-                form_first_set = {ml3, ml4}
+                ml5 = ranked_all[4] if len(ranked_all) >= 5 else ranked_all[-1]
+                form_first_set = {ml3, ml5}
                 form_first = sorted(form_first_set)
 
-                # 2着: ML3位 + ML4位 + ML1位
-                ml1 = ranked_all[0]
-                form_second_set = form_first_set | {ml1}
+                # 2着: ML3位 + ML5位 + ML4位
+                ml4 = ranked_all[3] if len(ranked_all) >= 4 else ranked_all[-1]
+                form_second_set = form_first_set | {ml4}
                 form_second = sorted(form_second_set)
 
-                # 3着: ML3位 + ML4位 + ML1位 + ML5位
-                ml5 = ranked_all[4] if len(ranked_all) >= 5 else None
-                if ml5 is not None:
-                    form_third_set = form_second_set | {ml5}
-                else:
-                    form_third_set = form_second_set
+                # 3着: ML3位 + ML5位 + ML4位 + ML1位
+                ml1 = ranked_all[0]
+                form_third_set = form_second_set | {ml1}
                 form_third = sorted(form_third_set)
 
                 formation_str = (
