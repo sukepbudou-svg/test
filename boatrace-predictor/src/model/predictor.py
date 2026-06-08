@@ -1104,8 +1104,8 @@ def get_recommendations(
                     kai_second_set = kai_first_set | {ml2_kai}
                     kai_second = sorted(kai_second_set)
 
-                    ml4_kai = ranked_all[3] if len(ranked_all) >= 4 else None
-                    kai_third_set = kai_second_set | ({ml4_kai} if ml4_kai is not None else set())
+                    ml3_kai = ranked_all[2] if len(ranked_all) >= 3 else None
+                    kai_third_set = kai_second_set | ({ml3_kai} if ml3_kai is not None else set())
                     kai_third = sorted(kai_third_set)
 
                     kai_str = (
