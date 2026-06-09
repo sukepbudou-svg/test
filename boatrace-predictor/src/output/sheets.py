@@ -362,18 +362,24 @@ def append_prediction_row(
                 }})
 
 
-        # イン逃げ率（G列=index6）: 65%以上で薄赤
+        # イン逃げ率（G列=index6）: 65%以上で薄赤、50%未満で薄青
         nigerate_src = row.get("odds_source", "")
         m_nig = re.search(r'(\d+)%', str(nigerate_src))
-        if m_nig and int(m_nig.group(1)) >= 65:
-            reqs.append({"repeatCell": {
-                "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                          "startColumnIndex": 6, "endColumnIndex": 7},
-                "cell": {"userEnteredFormat": {
-                    "backgroundColor": {"red": 1.0, "green": 0.80, "blue": 0.80},
-                }},
-                "fields": "userEnteredFormat.backgroundColor",
-            }})
+        if m_nig:
+            nig_val = int(m_nig.group(1))
+            if nig_val >= 65:
+                nig_bg = {"red": 1.0, "green": 0.80, "blue": 0.80}
+            elif nig_val < 50:
+                nig_bg = {"red": 0.80, "green": 0.90, "blue": 1.0}
+            else:
+                nig_bg = None
+            if nig_bg:
+                reqs.append({"repeatCell": {
+                    "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
+                              "startColumnIndex": 6, "endColumnIndex": 7},
+                    "cell": {"userEnteredFormat": {"backgroundColor": nig_bg}},
+                    "fields": "userEnteredFormat.backgroundColor",
+                }})
 
         # 1号艇状態（L列=index11）: フラグ数で色分け
         boat1_risk = row.get("boat1_risk", "-")
