@@ -950,10 +950,15 @@ def update_summary_sheet(
                 continue
             venue = str(rec.get("競艇場", "不明"))
             if venue not in venues:
-                venues[venue] = {"bets": 0, "ret": 0, "hits": 0,
+                venues[venue] = {"bets": 0, "ret": 0,
                                  "race_keys": set(), "manshu_races": set(), "hit_races": set()}
             v = venues[venue]
-            v["bets"] += 100
+            _vt = str(rec.get("狙い", ""))
+            if _vt in ("熊フォメ", "穴フォメ", "穴フォメ改"):
+                _vc = _expand_formation(str(combination))
+                v["bets"] += len(_vc) * 100 if _vc else 400
+            else:
+                v["bets"] += 100
             d  = str(rec.get("日付", ""))
             rn = str(rec.get("レース", ""))
             race_key = (d, venue, rn)
@@ -965,12 +970,11 @@ def update_summary_sheet(
             except (ValueError, TypeError):
                 pass
             if rec.get("的中", "") == "○":
-                v["hits"] += 1
+                v["hit_races"].add(race_key)
                 try:
                     v["ret"] += int(str(rec.get("実際の払戻", 0)).replace(",", ""))
                 except (ValueError, TypeError):
                     pass
-                v["hit_races"].add(race_key)
         return venues
 
     hot_venue   = _venue_stats(is_hot)
@@ -1077,7 +1081,7 @@ def update_summary_sheet(
         for key in [1, 2, 3, 4, 5, 6, "7以上"]:
             b    = pt_b.get(key, {})
             bts  = b.get("bets", 0)
-            hts  = b.get("hits", 0)
+            hts  = len(b.get("hit_races", set()))
             rtn  = b.get("ret", 0)
             rc   = len(b.get("race_keys", set()))
             hitr = f"{hts/rc*100:.1f}%" if rc > 0 else "0.0%"
@@ -1106,7 +1110,7 @@ def update_summary_sheet(
     for key in [1, 2, 3, 4, 5, 6, "7以上"]:
         b = pt_buckets.get(key, {})
         bets = b.get("bets", 0)
-        hits = b.get("hits", 0)
+        hits = len(b.get("hit_races", set()))
         ret  = b.get("ret", 0)
         race_count = len(b.get("race_keys", set()))
         hitr = f"{hits/race_count*100:.1f}%" if race_count > 0 else "0.0%"
@@ -1135,7 +1139,7 @@ def update_summary_sheet(
     for venue in sorted(hot_venue.keys()):
         v = hot_venue[venue]
         bets = v["bets"]
-        hits = v["hits"]
+        hits = len(v["hit_races"])
         ret  = v["ret"]
         rc   = len(v["race_keys"])
         hitr = f"{hits/rc*100:.1f}%" if rc > 0 else "0.0%"
@@ -1154,7 +1158,7 @@ def update_summary_sheet(
     for venue in sorted(shaku_venue.keys()):
         v = shaku_venue[venue]
         bets = v["bets"]
-        hits = v["hits"]
+        hits = len(v["hit_races"])
         ret  = v["ret"]
         rc   = len(v["race_keys"])
         hitr = f"{hits/rc*100:.1f}%" if rc > 0 else "0.0%"
@@ -1230,7 +1234,9 @@ def update_summary_sheet(
             dd["bets"] += cost
             dd["race_keys"].add(race_key)
             if rec.get("的中", "") == "○":
-                b["hits"] += 1
+                if "hit_race_keys" not in b:
+                    b["hit_race_keys"] = set()
+                b["hit_race_keys"].add(race_key)
                 try:
                     pay = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
                     b["ret"] += pay
@@ -1251,7 +1257,10 @@ def update_summary_sheet(
             all_race_keys |= b.get("race_keys", set())
         total_bets = sum(b.get("bets", 0) for b in buckets.values())
         total_ret  = sum(b.get("ret", 0) for b in buckets.values())
-        total_hits = sum(b.get("hits", 0) for b in buckets.values())
+        all_hit_race_keys: set = set()
+        for b in buckets.values():
+            all_hit_race_keys |= b.get("hit_race_keys", set())
+        total_hits = len(all_hit_race_keys)
         total_rc   = len(all_race_keys)
         total_hitr = f"{total_hits/total_rc*100:.1f}%" if total_rc > 0 else "0.0%"
         total_roi  = f"{total_ret/total_bets*100:.1f}%" if total_bets > 0 else "0.0%"
@@ -1280,7 +1289,7 @@ def update_summary_sheet(
         for key in [1, 2, 3, 4, 5, 6, "7以上"]:
             b = buckets.get(key, {})
             bets = b.get("bets", 0)
-            hits = b.get("hits", 0)
+            hits = len(b.get("hit_race_keys", set()))
             ret  = b.get("ret", 0)
             rc   = len(b.get("race_keys", set()))
             hitr = f"{hits/rc*100:.1f}%" if rc > 0 else "0.0%"
