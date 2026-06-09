@@ -897,11 +897,12 @@ def get_recommendations(
                 confidence, bet_label = "★☆☆☆", "見送り"
             src = rec.get("odds_source", "history")
             edge_val = round(float(rec["prob"]) * float(rec["odds_value"]), 2)
+            combo = "見送り" if arare_score >= 4 else rec["combination"]
             return {
                 "date": race_row.get("date", ""),
                 "venue_name": race_row.get("venue_name", ""),
                 "race_no": race_row.get("race_no", ""),
-                "combination": rec["combination"],
+                "combination": combo,
                 "prob": f"{rec['prob']*100:.2f}%",
                 "odds": f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)",
                 "expected_roi": f"{rec['expected_roi']*100:.0f}%",
@@ -948,7 +949,7 @@ def get_recommendations(
                 "date":          race_row.get("date", ""),
                 "venue_name":    race_row.get("venue_name", ""),
                 "race_no":       race_row.get("race_no", ""),
-                "combination":   kuma_str,
+                "combination":   "見送り" if arare_score >= 4 else kuma_str,
                 "prob":          "-",
                 "odds":          "-",
                 "expected_roi":  "-",

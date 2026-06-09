@@ -18,8 +18,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-RESULT_SHEET = "成績14"
-SUMMARY_SHEET = "サマリー14"
+RESULT_SHEET = "成績15"
+SUMMARY_SHEET = "サマリー15"
 
 _WIND_NOTE_LINE1 = "【風向き判断】向かい風3〜7m → 地熊目・熊フォメ 積極的に勝負"
 _WIND_NOTE_LINE2 = "追い風5m以上 → 穴フォメ・穴系に切り替え or 見送り"
@@ -828,159 +828,6 @@ def update_summary_sheet(
     if not records:
         return
 
-    is_hot   = lambda rec: str(rec.get("勝負推奨", "")) == "神熱"
-    is_shaku = lambda rec: str(rec.get("勝負推奨", "")) == "灼熱"
-    is_pass  = lambda rec: str(rec.get("勝負推奨", "")) == "見送り"
-
-    hot_stats   = _compute_tier_stats(records, is_hot)
-    shaku_stats = _compute_tier_stats(records, is_shaku)
-    pass_stats  = _compute_tier_stats(records, is_pass)
-
-    # 荒れPT別集計（1〜6、7以上）
-    def _arare_pt_stats(records, tiers=None):
-        buckets = {1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, "7以上": {}}
-        for rec in records:
-            if tiers is not None and str(rec.get("狙い", "")) not in tiers:
-                continue
-            combination = rec.get("予想買い目", "")
-            if combination in ("", "（予想なし）", "見送り", "-"):
-                continue
-            try:
-                pt = int(float(str(rec.get("荒れPT", "0") or "0")))
-            except (ValueError, TypeError):
-                continue
-            key = pt if pt <= 6 else "7以上"
-            if key not in buckets:
-                continue
-            b = buckets[key]
-            # フォーメーションは実際のcombo数×100円、それ以外は1票=100円
-            _tier = str(rec.get("狙い", ""))
-            if _tier in ("熊フォメ", "穴フォメ", "穴フォメ改"):
-                _fc = _expand_formation(str(combination))
-                _bet = len(_fc) * 100 if _fc else 400
-            else:
-                _bet = 100
-            b["bets"] = b.get("bets", 0) + _bet
-            b["ret"]  = b.get("ret", 0)
-            b["hits"] = b.get("hits", 0)
-            d  = str(rec.get("日付", ""))
-            v  = str(rec.get("競艇場", ""))
-            rn = str(rec.get("レース", ""))
-            race_key = (d, v, rn)
-            # 予想R数（ユニークレース数）を追跡
-            if "race_keys" not in b:
-                b["race_keys"] = set()
-            b["race_keys"].add(race_key)
-            # 順序付きレースリスト（連続外れ計算用）
-            if "ordered_races" not in b:
-                b["ordered_races"] = []
-                b["ordered_race_set"] = set()
-            if race_key not in b["ordered_race_set"]:
-                b["ordered_race_set"].add(race_key)
-                b["ordered_races"].append(race_key)
-            # 万舟追跡（実際の払戻 >= 10000円）
-            if "manshu_races" not in b:
-                b["manshu_races"] = set()
-            try:
-                pay_str = str(rec.get("実際の払戻", "0") or "0").replace(",", "").replace("¥", "").strip()
-                if pay_str and int(pay_str) >= 10000:
-                    b["manshu_races"].add(race_key)
-            except (ValueError, TypeError):
-                pass
-            # 1号艇1着追跡
-            actual = str(rec.get("実際の結果", ""))
-            if actual.startswith("1-"):
-                if "boat1_win_keys" not in b:
-                    b["boat1_win_keys"] = set()
-                b["boat1_win_keys"].add(race_key)
-            if rec.get("的中", "") == "○":
-                b["hits"] += 1
-                try:
-                    pay = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
-                    b["ret"] += pay
-                    if "hit_payouts" not in b:
-                        b["hit_payouts"] = []
-                    b["hit_payouts"].append(pay)
-                except (ValueError, TypeError):
-                    pass
-                # 的中レース記録（連続外れ計算用）
-                if "hit_races" not in b:
-                    b["hit_races"] = set()
-                b["hit_races"].add(race_key)
-        return buckets
-
-    pt_buckets = _arare_pt_stats(records)
-
-    def _race_pt_avg_payout(records):
-        """PT帯ごとの全レース実際払戻平均（ティア不問・1レース1回カウント）"""
-        race_pays = {1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, "7以上": {}}
-        for rec in records:
-            combination = rec.get("予想買い目", "")
-            if combination in ("", "（予想なし）", "見送り", "-"):
-                continue
-            try:
-                pt = int(float(str(rec.get("荒れPT", "0") or "0")))
-            except (ValueError, TypeError):
-                continue
-            key = pt if pt <= 6 else "7以上"
-            if key not in race_pays:
-                continue
-            race_key = (str(rec.get("日付", "")), str(rec.get("競艇場", "")), str(rec.get("レース", "")))
-            if race_key in race_pays[key]:
-                continue  # 同レースの2行目以降はスキップ
-            pay_str = str(rec.get("実際の払戻", "") or "").replace(",", "").replace("¥", "").strip()
-            try:
-                pay = int(pay_str) if pay_str else 0
-            except (ValueError, TypeError):
-                pay = 0
-            if pay > 0:
-                race_pays[key][race_key] = pay
-        return {k: int(sum(v.values()) / len(v)) if v else None for k, v in race_pays.items()}
-
-    pt_avg_pay = _race_pt_avg_payout(records)
-
-    # 会場別集計
-    def _venue_stats(filter_fn):
-        venues = {}
-        for rec in records:
-            if not filter_fn(rec):
-                continue
-            combination = rec.get("予想買い目", "")
-            if combination in ("", "（予想なし）", "見送り", "-"):
-                continue
-            venue = str(rec.get("競艇場", "不明"))
-            if venue not in venues:
-                venues[venue] = {"bets": 0, "ret": 0,
-                                 "race_keys": set(), "manshu_races": set(), "hit_races": set()}
-            v = venues[venue]
-            _vt = str(rec.get("狙い", ""))
-            if _vt in ("熊フォメ", "穴フォメ", "穴フォメ改"):
-                _vc = _expand_formation(str(combination))
-                v["bets"] += len(_vc) * 100 if _vc else 400
-            else:
-                v["bets"] += 100
-            d  = str(rec.get("日付", ""))
-            rn = str(rec.get("レース", ""))
-            race_key = (d, venue, rn)
-            v["race_keys"].add(race_key)
-            try:
-                pay_str = str(rec.get("実際の払戻", "0") or "0").replace(",", "").replace("¥", "").strip()
-                if pay_str and int(pay_str) >= 10000:
-                    v["manshu_races"].add(race_key)
-            except (ValueError, TypeError):
-                pass
-            if rec.get("的中", "") == "○":
-                v["hit_races"].add(race_key)
-                try:
-                    v["ret"] += int(str(rec.get("実際の払戻", 0)).replace(",", ""))
-                except (ValueError, TypeError):
-                    pass
-        return venues
-
-    hot_venue   = _venue_stats(is_hot)
-    shaku_venue = _venue_stats(is_shaku)
-    pass_venue  = _venue_stats(is_pass)
-
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     NUM_COLS = 12
 
@@ -988,346 +835,195 @@ def update_summary_sheet(
         lst = list(args)
         return lst + [""] * (NUM_COLS - len(lst))
 
-    def _section(stats, title):
-        sec = []
-        bets = stats["total_bets"]
-        ret  = stats["total_return"]
-        pr   = stats["pred_races"]
-        hr   = stats["hit_races"]
-        hitr = f"{hr/pr*100:.1f}%" if pr > 0 else "0.0%"
+    def _pt_tier_stats(tier_name, pt_filter=None):
+        """tier_name: 狙い列. pt_filter: None=全PT, int=指定PT, "7以上"=7以上, list=複数PT"""
+        race_keys: set = set()
+        hit_race_keys: set = set()
+        total_bets = 0
+        total_ret = 0
+        daily: dict = {}
+        for rec in records:
+            if str(rec.get("狙い", "")) != tier_name:
+                continue
+            combo = str(rec.get("予想買い目", ""))
+            if combo in ("", "（予想なし）", "見送り", "-"):
+                continue
+            try:
+                pt_val = int(float(str(rec.get("荒れPT", "0") or "0")))
+            except (ValueError, TypeError):
+                continue
+            if pt_filter is not None:
+                if isinstance(pt_filter, list):
+                    if pt_val not in pt_filter:
+                        continue
+                elif pt_filter == "7以上":
+                    if pt_val < 7:
+                        continue
+                else:
+                    if pt_val != pt_filter:
+                        continue
+            d  = str(rec.get("日付", ""))
+            v  = str(rec.get("競艇場", ""))
+            rn = str(rec.get("レース", ""))
+            race_key = (d, v, rn)
+            race_keys.add(race_key)
+            if tier_name in ("熊フォメ", "穴フォメ", "穴フォメ改"):
+                fc = _expand_formation(combo)
+                bet = len(fc) * 100 if fc else 400
+            else:
+                bet = 100
+            total_bets += bet
+            if d not in daily:
+                daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
+            daily[d]["bets"] += bet
+            daily[d]["race_keys"].add(race_key)
+            if rec.get("的中", "") == "○":
+                hit_race_keys.add(race_key)
+                daily[d]["hit_race_keys"].add(race_key)
+                try:
+                    pay = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+                    total_ret += pay
+                    daily[d]["ret"] += pay
+                except (ValueError, TypeError):
+                    pass
+        return {"race_keys": race_keys, "hit_race_keys": hit_race_keys,
+                "bets": total_bets, "ret": total_ret, "daily": daily}
+
+    def _fmt(s):
+        rc   = len(s["race_keys"])
+        hc   = len(s["hit_race_keys"])
+        bets = s["bets"]
+        ret  = s["ret"]
+        hitr = f"{hc/rc*100:.1f}%" if rc > 0 else "0.0%"
         roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
         pft  = ret - bets
+        ivl  = f"{rc/hc:.1f}回に1回" if hc > 0 else "未的中"
+        return rc, hc, hitr, ivl, ret, roi, pft
 
-        sec.append(_r(f"■ {title}  全期間合計"))
-        sec.append(_r("予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
-        sec.append(_r(pr, hr, hitr, f"¥{ret:,}", roi, pft))
-        sec.append(_r())
-        sec.append(_r(f"■ {title}  日付別内訳"))
-        sec.append(_r("日付", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
-        for d in sorted(stats["daily"].keys()):
-            dd  = stats["daily"][d]
-            dpr = len(dd["race_keys"])
-            h   = len(dd["hit_race_keys"])
-            r   = dd["ret"]
-            dr  = f"{h/dpr*100:.1f}%" if dpr > 0 else "0.0%"
-            dp  = r - dd["bets"]
-            sec.append(_r(d, dpr, h, dr, f"¥{r:,}", dp))
-        sec.append(_r())
-        sec.append(_r())
-        return sec
+    def _write_pt_section(title, s):
+        rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
+        rows.append(_r(f"▶ {title}  全期間合計"))
+        rows.append(_r("予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
+        rows.append(_r(rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
+        rows.append(_r())
+        rows.append(_r(f"▶ {title}  日付別内訳"))
+        rows.append(_r("日付", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
+        for d in sorted(s["daily"].keys()):
+            dd  = s["daily"][d]
+            drc = len(dd["race_keys"])
+            dhc = len(dd["hit_race_keys"])
+            dr  = dd["ret"]
+            dh  = f"{dhc/drc*100:.1f}%" if drc > 0 else "0.0%"
+            dp  = dr - dd["bets"]
+            rows.append(_r(d, drc, dhc, dh, f"¥{dr:,}", dp))
+        rows.append(_r())
 
-    # ─── ティア別グループ統計を事前計算 ───
-    TIER_GROUPS = [
-        ("地熊目", {"地熊目"}),
-    ]
-    tier_group_stats = [
-        (name, tiers, _compute_tier_stats(records, lambda rec, t=tiers: str(rec.get("狙い", "")) in t))
-        for name, tiers in TIER_GROUPS
-    ]
+    def _venue_stats_tiers(tier_names):
+        venues: dict = {}
+        for rec in records:
+            tn = str(rec.get("狙い", ""))
+            if tn not in tier_names:
+                continue
+            combo = str(rec.get("予想買い目", ""))
+            if combo in ("", "（予想なし）", "見送り", "-"):
+                continue
+            venue = str(rec.get("競艇場", "不明"))
+            if venue not in venues:
+                venues[venue] = {"bets": 0, "ret": 0,
+                                 "race_keys": set(), "hit_race_keys": set()}
+            v = venues[venue]
+            if tn in ("熊フォメ", "穴フォメ", "穴フォメ改"):
+                fc = _expand_formation(combo)
+                v["bets"] += len(fc) * 100 if fc else 400
+            else:
+                v["bets"] += 100
+            d  = str(rec.get("日付", ""))
+            rn = str(rec.get("レース", ""))
+            race_key = (d, venue, rn)
+            v["race_keys"].add(race_key)
+            if rec.get("的中", "") == "○":
+                v["hit_race_keys"].add(race_key)
+                try:
+                    v["ret"] += int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+                except (ValueError, TypeError):
+                    pass
+        return venues
+
+    def _write_venue_section(title, vd):
+        rows.append(_r(f"■ 会場別 集計（{title}）"))
+        rows.append(_r("会場", "予想R数", "的中数", "的中率", "間隔", "払戻合計", "回収率", "収支"))
+        for venue in sorted(vd.keys()):
+            v    = vd[venue]
+            bets = v["bets"]
+            hits = len(v["hit_race_keys"])
+            ret  = v["ret"]
+            rc   = len(v["race_keys"])
+            hitr = f"{hits/rc*100:.1f}%" if rc > 0 else "0.0%"
+            ivl  = f"{rc/hits:.1f}回に1回" if hits > 0 else "未的中"
+            roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
+            pft  = ret - bets
+            rows.append(_r(venue, rc, hits, hitr, ivl, f"¥{ret:,}", roi, pft))
+        rows.append(_r())
+        rows.append(_r())
 
     rows: list = []
     rows.append(_r("【予想成績サマリー】"))
     rows.append(_r("集計日時", now))
     rows.append(_r())
-    rows.extend(_section(hot_stats,   "神熱"))
-    rows.extend(_section(shaku_stats, "灼熱"))
-    rows.extend(_section(pass_stats,  "見送り"))
 
-    # ─── ティア別グループ比較（勝負先検討用）───
-    rows.append(_r("■ ティア別グループ比較（神熱＋見送り全件）"))
-    rows.append(_r("グループ", "予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
-    for name, tiers, tgs in tier_group_stats:
-        bets = tgs["total_bets"]
-        ret  = tgs["total_return"]
-        pr   = tgs["pred_races"]
-        hr   = tgs["hit_races"]
-        hitr = f"{hr/pr*100:.1f}%" if pr > 0 else "0.0%"
-        roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
-        pft  = ret - bets
-        rows.append(_r(name, pr, hr, hitr, f"¥{ret:,}", roi, pft))
-    rows.append(_r())
-
-    HONMEI_TIERS = {"地熊目", "熊フォメ"}
-    for name, tiers, tgs in tier_group_stats:
-        is_honmei = bool(tiers & HONMEI_TIERS)
-        bets = tgs["total_bets"]
-        ret  = tgs["total_return"]
-        pr   = tgs["pred_races"]
-        hr   = tgs["hit_races"]
-        hitr = f"{hr/pr*100:.1f}%" if pr > 0 else "0.0%"
-        roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
-        pft  = ret - bets
-        rows.append(_r(f"▶ {name}  全期間合計"))
-        rows.append(_r("予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
-        rows.append(_r(pr, hr, hitr, f"¥{ret:,}", roi, pft))
-        rows.append(_r())
-        rows.append(_r(f"▶ {name}  日付別内訳"))
-        rows.append(_r("日付", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
-        for d in sorted(tgs["daily"].keys()):
-            dd  = tgs["daily"][d]
-            dpr = len(dd["race_keys"])
-            h   = len(dd["hit_race_keys"])
-            r   = dd["ret"]
-            dr  = f"{h/dpr*100:.1f}%" if dpr > 0 else "0.0%"
-            dp  = r - dd["bets"]
-            rows.append(_r(d, dpr, h, dr, f"¥{r:,}", dp))
-        rows.append(_r())
-        rows.append(_r(f"▶ {name}  荒れPT別集計"))
-        if is_honmei:
-            rows.append(_r("荒れPT", "予想R数", "的中数", "的中率", "間隔", "1号艇1着率", "払戻合計", "回収率", "収支", "払戻平均", "的中時平均配当"))
-        else:
-            rows.append(_r("荒れPT", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支", "払戻平均"))
-        pt_b = _arare_pt_stats(records, tiers)
-        for key in [1, 2, 3, 4, 5, 6, "7以上"]:
-            b    = pt_b.get(key, {})
-            bts  = b.get("bets", 0)
-            hts  = len(b.get("hit_races", set()))
-            rtn  = b.get("ret", 0)
-            rc   = len(b.get("race_keys", set()))
-            hitr = f"{hts/rc*100:.1f}%" if rc > 0 else "0.0%"
-            roi  = f"{rtn/bts*100:.1f}%" if bts > 0 else "0.0%"
-            pft  = rtn - bts
-            lbl  = f"{key}PT" if isinstance(key, int) else str(key)
-            ivl  = f"{rc/hts:.1f}回に1回" if hts > 0 else "未的中"
-            ap   = pt_avg_pay.get(key)
-            avg_pay = f"¥{ap:,}" if ap else "-"
-            if is_honmei:
-                b1w = len(b.get("boat1_win_keys", set()))
-                b1r = f"{b1w/rc*100:.1f}%" if rc > 0 else "0.0%"
-                hp  = b.get("hit_payouts", [])
-                hit_avg = f"¥{int(sum(hp)/len(hp)):,}" if hp else "-"
-                rows.append(_r(lbl, rc, hts, hitr, ivl, b1r, f"¥{rtn:,}", roi, pft, avg_pay, hit_avg))
-            else:
-                mc  = len(b.get("manshu_races", set()))
-                mr  = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
-                rows.append(_r(lbl, rc, hts, hitr, ivl, mc, mr, f"¥{rtn:,}", roi, pft, avg_pay))
-        rows.append(_r())
-        rows.append(_r())
-
-    # 荒れPT別集計セクション
-    rows.append(_r("■ 荒れPT別 的中集計"))
-    rows.append(_r("荒れPT", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "連続外れ", "払戻合計", "回収率", "収支", "払戻平均"))
-    for key in [1, 2, 3, 4, 5, 6, "7以上"]:
-        b = pt_buckets.get(key, {})
-        bets = b.get("bets", 0)
-        hits = len(b.get("hit_races", set()))
-        ret  = b.get("ret", 0)
-        race_count = len(b.get("race_keys", set()))
-        hitr = f"{hits/race_count*100:.1f}%" if race_count > 0 else "0.0%"
-        roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
-        pft  = ret - bets
-        label = f"{key}PT" if isinstance(key, int) else f"{key}（神熱）"
-        interval = f"{race_count/hits:.1f}回に1回" if hits > 0 else "未的中"
-        ap = pt_avg_pay.get(key)
-        avg_pay = f"¥{ap:,}" if ap else "-"
-        manshu_count = len(b.get("manshu_races", set()))
-        manshu_rate = f"{manshu_count/race_count*100:.1f}%" if race_count > 0 else "0.0%"
-        ordered   = b.get("ordered_races", [])
-        hit_races = b.get("hit_races", set())
-        streak = 0
-        for rk in reversed(ordered):
-            if rk in hit_races:
-                break
-            streak += 1
-        streak_str = f"{streak}連続外れ" if streak > 0 else "直近的中"
-        rows.append(_r(label, race_count, hits, hitr, interval, manshu_count, manshu_rate, streak_str, f"¥{ret:,}", roi, pft, avg_pay))
-    rows.append(_r())
-
-    # 会場別集計セクション（神熱）
-    rows.append(_r("■ 会場別 集計（神熱）"))
-    rows.append(_r("会場", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
-    for venue in sorted(hot_venue.keys()):
-        v = hot_venue[venue]
-        bets = v["bets"]
-        hits = len(v["hit_races"])
-        ret  = v["ret"]
-        rc   = len(v["race_keys"])
-        hitr = f"{hits/rc*100:.1f}%" if rc > 0 else "0.0%"
-        ivl  = f"{rc/hits:.1f}回に1回" if hits > 0 else "未的中"
-        mc   = len(v["manshu_races"])
-        mr   = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
-        roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
-        pft  = ret - bets
-        rows.append(_r(venue, rc, hits, hitr, ivl, mc, mr, f"¥{ret:,}", roi, pft))
+    # ① ティア別グループ比較
+    rows.append(_r("■ ティア別グループ比較"))
+    rows.append(_r("グループ", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
+    for grp, tn, pf in [("地熊目 PT1-3合計", "地熊目", [1, 2, 3]),
+                         ("熊フォメ PT1-3合計", "熊フォメ", [1, 2, 3])]:
+        s = _pt_tier_stats(tn, pf)
+        rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
+        rows.append(_r(grp, rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
     rows.append(_r())
     rows.append(_r())
 
-    # 会場別集計セクション（灼熱）
-    rows.append(_r("■ 会場別 集計（灼熱）"))
-    rows.append(_r("会場", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支"))
-    for venue in sorted(shaku_venue.keys()):
-        v = shaku_venue[venue]
-        bets = v["bets"]
-        hits = len(v["hit_races"])
-        ret  = v["ret"]
-        rc   = len(v["race_keys"])
-        hitr = f"{hits/rc*100:.1f}%" if rc > 0 else "0.0%"
-        ivl  = f"{rc/hits:.1f}回に1回" if hits > 0 else "未的中"
-        mc   = len(v["manshu_races"])
-        mr   = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
-        roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
-        pft  = ret - bets
-        rows.append(_r(venue, rc, hits, hitr, ivl, mc, mr, f"¥{ret:,}", roi, pft))
-    rows.append(_r())
+    # ② 地熊目セクション
+    rows.append(_r("■ 地熊目セクション（PT1〜3）"))
+    for pt in [1, 2, 3]:
+        _write_pt_section(f"地熊目 {pt}PT", _pt_tier_stats("地熊目", pt))
     rows.append(_r())
 
-    # 会場別集計セクション（見送り）
-    rows.append(_r("■ 会場別 集計（見送り）"))
-    rows.append(_r("会場", "予想R数", "万舟数", "万舟率"))
-    for venue in sorted(pass_venue.keys()):
-        v = pass_venue[venue]
-        rc = len(v["race_keys"])
-        mc = len(v["manshu_races"])
-        mr = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
-        rows.append(_r(venue, rc, mc, mr))
-    rows.append(_r())
+    # ③ 熊フォメセクション
+    rows.append(_r("■ 熊フォメセクション（PT1〜3）"))
+    for pt in [1, 2, 3]:
+        _write_pt_section(f"熊フォメ {pt}PT", _pt_tier_stats("熊フォメ", pt))
     rows.append(_r())
 
-    # フォーメーション PT別集計セクション
-    def _formation_pt_stats(recs, tier_name, bet_per_ticket=100):
-        fb = {1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, "7以上": {}}
-        daily: dict = {}
-        for rec in recs:
-            if str(rec.get("狙い", "")) != tier_name:
-                continue
-            try:
-                pt = int(float(str(rec.get("荒れPT", "0") or "0")))
-            except (ValueError, TypeError):
-                continue
-            key = pt if pt <= 6 else "7以上"
-            if key not in fb:
-                continue
-            b = fb[key]
-            # フォーメーション文字列から実際の点数を動的計算
-            combo_str = str(rec.get("予想買い目", ""))
-            actual_combos = _expand_formation(combo_str)
-            tickets = len(actual_combos) if actual_combos else 4
-            cost = tickets * bet_per_ticket
-            b["bets"] = b.get("bets", 0) + cost
-            b["ret"]  = b.get("ret", 0)
-            b["hits"] = b.get("hits", 0)
-            d  = str(rec.get("日付", ""))
-            v  = str(rec.get("競艇場", ""))
-            rn = str(rec.get("レース", ""))
-            race_key = (d, v, rn)
-            if "race_keys" not in b:
-                b["race_keys"] = set()
-            b["race_keys"].add(race_key)
-            if "manshu_races" not in b:
-                b["manshu_races"] = set()
-            try:
-                pay_str = str(rec.get("実際の払戻", "0") or "0").replace(",", "").replace("¥", "").strip()
-                if pay_str and int(pay_str) >= 10000:
-                    b["manshu_races"].add(race_key)
-            except (ValueError, TypeError):
-                pass
-            # 1号艇1着追跡
-            actual = str(rec.get("実際の結果", ""))
-            if actual.startswith("1-"):
-                if "boat1_win_keys" not in b:
-                    b["boat1_win_keys"] = set()
-                b["boat1_win_keys"].add(race_key)
-            # 日付別追跡
-            if d not in daily:
-                daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
-            dd = daily[d]
-            dd["bets"] += cost
-            dd["race_keys"].add(race_key)
-            if rec.get("的中", "") == "○":
-                if "hit_race_keys" not in b:
-                    b["hit_race_keys"] = set()
-                b["hit_race_keys"].add(race_key)
-                try:
-                    pay = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
-                    b["ret"] += pay
-                    if "hit_payouts" not in b:
-                        b["hit_payouts"] = []
-                    b["hit_payouts"].append(pay)
-                    dd["ret"] += pay
-                    dd["hit_race_keys"].add(race_key)
-                except (ValueError, TypeError):
-                    pass
-        return fb, daily
+    # ④ 穴フォメセクション
+    rows.append(_r("■ 穴フォメセクション（全PT）"))
+    for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
+        lbl = f"{pt}PT" if isinstance(pt, int) else pt
+        _write_pt_section(f"穴フォメ {lbl}", _pt_tier_stats("穴フォメ", pt))
+    rows.append(_r())
 
-    def _print_form_pt_section(title, stats, is_honmei=False):
-        buckets, daily = stats
-        # 全期間合計を集計
-        all_race_keys: set = set()
-        for b in buckets.values():
-            all_race_keys |= b.get("race_keys", set())
-        total_bets = sum(b.get("bets", 0) for b in buckets.values())
-        total_ret  = sum(b.get("ret", 0) for b in buckets.values())
-        all_hit_race_keys: set = set()
-        for b in buckets.values():
-            all_hit_race_keys |= b.get("hit_race_keys", set())
-        total_hits = len(all_hit_race_keys)
-        total_rc   = len(all_race_keys)
-        total_hitr = f"{total_hits/total_rc*100:.1f}%" if total_rc > 0 else "0.0%"
-        total_roi  = f"{total_ret/total_bets*100:.1f}%" if total_bets > 0 else "0.0%"
-        total_pft  = total_ret - total_bets
+    # ⑤ 穴フォメ改セクション
+    rows.append(_r("■ 穴フォメ改セクション（全PT）"))
+    for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
+        lbl = f"{pt}PT" if isinstance(pt, int) else pt
+        _write_pt_section(f"穴フォメ改 {lbl}", _pt_tier_stats("穴フォメ改", pt))
+    rows.append(_r())
 
-        rows.append(_r(f"▶ {title}  全期間合計"))
-        rows.append(_r("予想R数", "的中数", "的中率", "総払戻", "回収率", "収支"))
-        rows.append(_r(total_rc, total_hits, total_hitr, f"¥{total_ret:,}", total_roi, total_pft))
-        rows.append(_r())
-        rows.append(_r(f"▶ {title}  日付別内訳"))
-        rows.append(_r("日付", "予想R数", "的中数", "的中率", "払戻合計", "収支"))
-        for d in sorted(daily.keys()):
-            dd  = daily[d]
-            dpr = len(dd["race_keys"])
-            h   = len(dd["hit_race_keys"])
-            r   = dd["ret"]
-            dr  = f"{h/dpr*100:.1f}%" if dpr > 0 else "0.0%"
-            dp  = r - dd["bets"]
-            rows.append(_r(d, dpr, h, dr, f"¥{r:,}", dp))
-        rows.append(_r())
-        rows.append(_r(f"▶ {title}  荒れPT別集計"))
-        if is_honmei:
-            rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "1号艇1着率", "払戻合計", "回収率", "収支", "払戻平均", "的中時平均配当"))
-        else:
-            rows.append(_r("PT", "予想R数", "的中数", "的中率", "間隔", "万舟数", "万舟率", "払戻合計", "回収率", "収支", "払戻平均"))
-        for key in [1, 2, 3, 4, 5, 6, "7以上"]:
-            b = buckets.get(key, {})
-            bets = b.get("bets", 0)
-            hits = len(b.get("hit_race_keys", set()))
-            ret  = b.get("ret", 0)
-            rc   = len(b.get("race_keys", set()))
-            hitr = f"{hits/rc*100:.1f}%" if rc > 0 else "0.0%"
-            ivl  = f"{rc/hits:.1f}回に1回" if hits > 0 else "未的中"
-            ap   = pt_avg_pay.get(key)
-            avg_pay = f"¥{ap:,}" if ap else "-"
-            roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
-            pft  = ret - bets
-            label = f"{key}PT" if isinstance(key, int) else f"{key}（神熱）"
-            if is_honmei:
-                b1w = len(b.get("boat1_win_keys", set()))
-                b1r = f"{b1w/rc*100:.1f}%" if rc > 0 else "0.0%"
-                hp  = b.get("hit_payouts", [])
-                hit_avg = f"¥{int(sum(hp)/len(hp)):,}" if hp else "-"
-                rows.append(_r(label, rc, hits, hitr, ivl, b1r, f"¥{ret:,}", roi, pft, avg_pay, hit_avg))
-            else:
-                mc  = len(b.get("manshu_races", set()))
-                mr  = f"{mc/rc*100:.1f}%" if rc > 0 else "0.0%"
-                rows.append(_r(label, rc, hits, hitr, ivl, mc, mr, f"¥{ret:,}", roi, pft, avg_pay))
-        rows.append(_r())
-        rows.append(_r())
-
-    _print_form_pt_section("熊フォメ（全PT・全艇・1着2艇）", _formation_pt_stats(records, "熊フォメ"), is_honmei=True)
-    _print_form_pt_section("穴フォメ（ML1/3/5番手・実点数計算）", _formation_pt_stats(records, "穴フォメ"), is_honmei=False)
-    _print_form_pt_section("穴フォメ改（ML3位以下×展示+脅威スコア・実点数計算）", _formation_pt_stats(records, "穴フォメ改"), is_honmei=False)
+    # ⑥ 会場別集計
+    _write_venue_section("地熊目＋熊フォメ合算", _venue_stats_tiers({"地熊目", "熊フォメ"}))
+    _write_venue_section("穴フォメ",             _venue_stats_tiers({"穴フォメ"}))
+    _write_venue_section("穴フォメ改",           _venue_stats_tiers({"穴フォメ改"}))
 
     # シートへ書き込み
     try:
         s_sheet = spreadsheet.worksheet(SUMMARY_SHEET)
     except gspread.WorksheetNotFound:
-        s_sheet = spreadsheet.add_worksheet(title=SUMMARY_SHEET, rows=800, cols=NUM_COLS)
+        s_sheet = spreadsheet.add_worksheet(title=SUMMARY_SHEET, rows=1500, cols=NUM_COLS)
 
     s_sheet.clear()
     s_sheet.update("A1", rows, value_input_option="USER_ENTERED")
 
-    # 条件付き書式
     sid = s_sheet.id
-    max_rows = 500
+    max_rows = 1000
     full_range   = {"sheetId": sid, "startRowIndex": 0, "endRowIndex": max_rows,
                     "startColumnIndex": 0, "endColumnIndex": NUM_COLS}
     profit_range = {"sheetId": sid, "startRowIndex": 0, "endRowIndex": max_rows,
@@ -1353,15 +1049,14 @@ def update_summary_sheet(
     except Exception as e:
         print(f"[WARN] 条件付き書式設定エラー: {e}")
 
-    def _roi_str(stats):
-        b = stats["total_bets"]
-        return f"{stats['total_return'] / b * 100:.1f}%" if b > 0 else "0.0%"
-
+    kuma_s = _pt_tier_stats("地熊目", [1, 2, 3])
+    ana_s  = _pt_tier_stats("穴フォメ")
+    kuma_roi = f"{kuma_s['ret']/kuma_s['bets']*100:.1f}%" if kuma_s['bets'] > 0 else "0.0%"
+    ana_roi  = f"{ana_s['ret']/ana_s['bets']*100:.1f}%" if ana_s['bets'] > 0 else "0.0%"
     print(
         f"[OK] {SUMMARY_SHEET}更新: "
-        f"神熱 {hot_stats['pred_races']}R ROI={_roi_str(hot_stats)} / "
-        f"灼熱 {shaku_stats['pred_races']}R ROI={_roi_str(shaku_stats)} / "
-        f"見送り {pass_stats['pred_races']}R ROI={_roi_str(pass_stats)}"
+        f"地熊目(PT1-3) {len(kuma_s['race_keys'])}R ROI={kuma_roi} / "
+        f"穴フォメ {len(ana_s['race_keys'])}R ROI={ana_roi}"
     )
 
 
