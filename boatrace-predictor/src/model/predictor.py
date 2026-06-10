@@ -974,9 +974,9 @@ def get_recommendations(
 
                 # ── イン逃げフォメ ──
                 # 1着: 1号艇（固定）
-                # 2着: 展示タイム最速艇(2-6号) + その一つ外側の艇（6号艇なら内側5号艇）
+                # 2着: 展示タイム最速艇(2-6号) + その一つ外側の艇
                 # 3着: 2-6号艇から展示タイム最遅艇を除いた4艇 → 形: 1-{best}{outer}-{4艇} = 6点
-                # 展示データ不足時はポジション優位艇（3号艇→2号艇）をデフォルト使用
+                # 展示データが2艇未満の場合は見送り
                 if 1 in available_for_form:
                     others = [b for b in available_for_form if b != 1]
                     et_vals_ingo: dict[int, float] = {}
@@ -985,19 +985,12 @@ def get_recommendations(
                         if et and et > 0:
                             et_vals_ingo[bn] = et
 
+                    bet_label_ingo = "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り")
+
                     if len(et_vals_ingo) >= 2:
                         best_et_boat  = min(et_vals_ingo, key=lambda b: et_vals_ingo[b])
                         worst_et_boat = max(et_vals_ingo, key=lambda b: et_vals_ingo[b])
-                    elif len(et_vals_ingo) == 1:
-                        best_et_boat  = next(iter(et_vals_ingo))
-                        worst_et_boat = max(others)
-                    else:
-                        # 展示データなし: ポジション優位（カド3号 → 差し2号）をデフォルト
-                        best_et_boat  = 3 if 3 in others else (2 if 2 in others else others[0])
-                        worst_et_boat = max(others)
 
-                    if others:
-                        # 2着: 最速艇 + 一つ外側（6号艇は内側に折り返し）
                         if best_et_boat < 6:
                             outer = best_et_boat + 1
                             if outer not in available_for_form:
@@ -1005,11 +998,7 @@ def get_recommendations(
                         else:
                             outer = 5 if 5 in available_for_form else None
                         ingo_second = sorted(b for b in {best_et_boat, outer} if b is not None)
-
-                        # 3着: 2-6号艇から展示最遅艇を除く
-                        ingo_third = sorted(
-                            b for b in available_for_form if b != 1 and b != worst_et_boat
-                        )
+                        ingo_third  = sorted(b for b in available_for_form if b != 1 and b != worst_et_boat)
 
                         if len(ingo_second) >= 1 and len(ingo_third) >= 2:
                             ingo_form_str = (
@@ -1017,7 +1006,6 @@ def get_recommendations(
                                 f"{''.join(str(b) for b in ingo_second)}-"
                                 f"{''.join(str(b) for b in ingo_third)}"
                             )
-                            bet_label = "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り")
                             all_recommendations.append({
                                 "date":          race_row.get("date", ""),
                                 "venue_name":    race_row.get("venue_name", ""),
@@ -1029,52 +1017,77 @@ def get_recommendations(
                                 "confidence":    "イン逃げフォメ",
                                 "odds_source":   nigerate_str,
                                 "tier":          "イン逃げフォメ",
-                                "bet_label":     bet_label,
+                                "bet_label":     bet_label_ingo,
                                 "edge":          "-",
                                 "arare_score":   arare_score,
                                 "arare_reasons": " / ".join(arare_reasons),
                                 "boat1_risk":    _calc_boat1_risk(race_row),
                             })
+                    else:
+                        # 展示データ不足 → 見送り
+                        all_recommendations.append({
+                            "date":          race_row.get("date", ""),
+                            "venue_name":    race_row.get("venue_name", ""),
+                            "race_no":       race_row.get("race_no", ""),
+                            "combination":   "見送り",
+                            "prob":          "-",
+                            "odds":          "-",
+                            "expected_roi":  "-",
+                            "confidence":    "イン逃げフォメ",
+                            "odds_source":   nigerate_str,
+                            "tier":          "イン逃げフォメ",
+                            "bet_label":     bet_label_ingo,
+                            "edge":          "-",
+                            "arare_score":   arare_score,
+                            "arare_reasons": " / ".join(arare_reasons),
+                            "boat1_risk":    _calc_boat1_risk(race_row),
+                        })
 
                 # ── イン逃げフォメ改 ──
                 # 1着: 1号艇（固定）
-                # 2着・3着: 展示タイム + 展示ST + ポジションボーナスで上位3艇ボックス
-                #   ポジション: 3号艇+1.5（カド）、2号艇+1.0（差し）、4号艇+0.5（カド受け）
-                # 形: 1-{top3}-{top3} = 6点
+                # 1着: 1号艇 + モーター2連対率最高艇(2-6号)
+                # 2着: 最高艇の外側（外がなければモーター次位艇）
+                # 3着: さらに外側（外がなければモーター次位艇）
+                # 形: 1{X}-1{X}{outer1}-1{X}{outer1}{outer2} ≒ 8点
                 if 1 in available_for_form:
-                    candidates = [b for b in available_for_form if b != 1]
-                    if len(candidates) >= 3:
-                        et_map: dict[int, float] = {}
-                        for bn in candidates:
-                            et = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
-                            if et and et > 0:
-                                et_map[bn] = et
+                    motor_map: dict[int, float] = {}
+                    for bn in available_for_form:
+                        if bn == 1:
+                            continue
+                        m = _safe_float(race_row.get(f"boat{bn}_motor_2rate"))
+                        if m is not None:
+                            motor_map[bn] = m
 
-                        st_map: dict[int, float] = {}
-                        for bn in candidates:
-                            st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-                            if st and st > 0:
-                                st_map[bn] = st
+                    if motor_map:
+                        motor_ranked = sorted(motor_map, key=lambda b: motor_map[b], reverse=True)
+                        best_motor = motor_ranked[0]
+                        used: set[int] = {best_motor}
 
-                        # 速い順にソート（値が小さいほど速い）
-                        n = len(candidates)
-                        et_sorted = sorted(et_map, key=lambda b: et_map[b])
-                        st_sorted = sorted(st_map, key=lambda b: st_map[b])
+                        # outer1: best_motorの外側。なければモーター次位
+                        if best_motor + 1 <= 6 and (best_motor + 1) in available_for_form:
+                            outer1 = best_motor + 1
+                        else:
+                            outer1 = next((b for b in motor_ranked[1:] if b not in used), None)
+                        if outer1:
+                            used.add(outer1)
 
-                        kai_scores: dict[int, float] = {}
-                        for bn in candidates:
-                            et_pt  = (n - et_sorted.index(bn)) if bn in et_sorted else 0
-                            st_pt  = (n - st_sorted.index(bn)) if bn in st_sorted else 0
-                            pos_pt = {2: 1.0, 3: 1.5, 4: 0.5}.get(bn, 0.0)
-                            kai_scores[bn] = et_pt + st_pt + pos_pt
+                        # outer2: outer1の外側。なければモーター次位
+                        ref = outer1 if outer1 else best_motor
+                        if ref + 1 <= 6 and (ref + 1) in available_for_form and (ref + 1) not in used:
+                            outer2 = ref + 1
+                        else:
+                            outer2 = next((b for b in motor_ranked[1:] if b not in used), None)
 
-                        top3 = sorted(
-                            sorted(kai_scores, key=lambda b: kai_scores[b], reverse=True)[:3]
-                        )
+                        kai_first  = sorted({1, best_motor})
+                        kai_second = sorted({1, best_motor} | ({outer1} if outer1 else set()))
+                        kai_third  = sorted({1, best_motor} | ({outer1} if outer1 else set()) | ({outer2} if outer2 else set()))
 
-                        if len(top3) >= 3:
-                            box_str  = "".join(str(b) for b in top3)
-                            kai_str  = f"1-{box_str}-{box_str}"
+                        if len(kai_third) >= 3:
+                            kai_str = (
+                                f"{''.join(str(b) for b in kai_first)}-"
+                                f"{''.join(str(b) for b in kai_second)}-"
+                                f"{''.join(str(b) for b in kai_third)}"
+                            )
                             kai_bet_label = "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り")
                             all_recommendations.append({
                                 "date":          race_row.get("date", ""),
