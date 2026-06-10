@@ -962,7 +962,7 @@ def get_recommendations(
             })
 
 
-        # 逃げフォメ・モタフォメ 共有ブロック（全PT対象）
+        # 展モタ・モタフォメ 共有ブロック（全PT対象）
         if True:
             available_for_form = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             if len(available_for_form) >= 3:
@@ -972,58 +972,29 @@ def get_recommendations(
                     form_win_probs[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
                 ranked_all = sorted(form_win_probs, key=lambda b: form_win_probs[b], reverse=True)
 
-                # ── 逃げフォメ ──
-                # 1着: 1号艇（固定）
-                # 2着: 展示タイム最速艇(2-6号) + その一つ外側の艇
-                # 3着: 2-6号艇から展示タイム最遅艇を除いた4艇 → 形: 1-{best}{outer}-{4艇} = 6点
-                # 展示データが2艇未満の場合は見送り
+                # ── 展モタ ──
+                # pivot = 展示タイム順位 + モーター2連対率順位 の複合スコア最高艇
+                # 1着: {1号艇, pivot}
+                # 2着: {1着} + pivotの一つ外側（外なければ複合スコア次位）
+                # 3着: {2着} + 複合スコア次位艇（位置ではなく実力で選ぶ）
+                # 展示データ2艇未満の場合は見送り → 8点
                 if 1 in available_for_form:
                     others = [b for b in available_for_form if b != 1]
-                    et_vals_ingo: dict[int, float] = {}
+                    et_map_tm: dict[int, float] = {}
                     for bn in others:
                         et = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
                         if et and et > 0:
-                            et_vals_ingo[bn] = et
+                            et_map_tm[bn] = et
 
-                    bet_label_ingo = "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り")
+                    motor_map_tm: dict[int, float] = {}
+                    for bn in others:
+                        m = _safe_float(race_row.get(f"boat{bn}_motor_2rate"))
+                        if m is not None:
+                            motor_map_tm[bn] = m
 
-                    if len(et_vals_ingo) >= 2:
-                        best_et_boat  = min(et_vals_ingo, key=lambda b: et_vals_ingo[b])
-                        worst_et_boat = max(et_vals_ingo, key=lambda b: et_vals_ingo[b])
+                    bet_label_tm = "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り")
 
-                        if best_et_boat < 6:
-                            outer = best_et_boat + 1
-                            if outer not in available_for_form:
-                                outer = best_et_boat - 1 if best_et_boat > 2 else None
-                        else:
-                            outer = 5 if 5 in available_for_form else None
-                        ingo_second = sorted(b for b in {best_et_boat, outer} if b is not None)
-                        ingo_third  = sorted(b for b in available_for_form if b != 1 and b != worst_et_boat)
-
-                        if len(ingo_second) >= 1 and len(ingo_third) >= 2:
-                            ingo_form_str = (
-                                f"1-"
-                                f"{''.join(str(b) for b in ingo_second)}-"
-                                f"{''.join(str(b) for b in ingo_third)}"
-                            )
-                            all_recommendations.append({
-                                "date":          race_row.get("date", ""),
-                                "venue_name":    race_row.get("venue_name", ""),
-                                "race_no":       race_row.get("race_no", ""),
-                                "combination":   ingo_form_str,
-                                "prob":          "-",
-                                "odds":          "-",
-                                "expected_roi":  "-",
-                                "confidence":    "逃げフォメ",
-                                "odds_source":   nigerate_str,
-                                "tier":          "逃げフォメ",
-                                "bet_label":     bet_label_ingo,
-                                "edge":          "-",
-                                "arare_score":   arare_score,
-                                "arare_reasons": " / ".join(arare_reasons),
-                                "boat1_risk":    _calc_boat1_risk(race_row),
-                            })
-                    else:
+                    if len(et_map_tm) < 2:
                         # 展示データ不足 → 見送り
                         all_recommendations.append({
                             "date":          race_row.get("date", ""),
@@ -1033,15 +1004,66 @@ def get_recommendations(
                             "prob":          "-",
                             "odds":          "-",
                             "expected_roi":  "-",
-                            "confidence":    "逃げフォメ",
+                            "confidence":    "展モタ",
                             "odds_source":   nigerate_str,
-                            "tier":          "逃げフォメ",
-                            "bet_label":     bet_label_ingo,
+                            "tier":          "展モタ",
+                            "bet_label":     bet_label_tm,
                             "edge":          "-",
                             "arare_score":   arare_score,
                             "arare_reasons": " / ".join(arare_reasons),
                             "boat1_risk":    _calc_boat1_risk(race_row),
                         })
+                    else:
+                        n = len(others)
+                        et_sorted_tm    = sorted(et_map_tm,    key=lambda b: et_map_tm[b])
+                        motor_sorted_tm = sorted(motor_map_tm, key=lambda b: motor_map_tm[b], reverse=True)
+
+                        composite: dict[int, float] = {}
+                        for bn in others:
+                            et_pt    = (n - et_sorted_tm.index(bn))    if bn in et_sorted_tm    else 0
+                            motor_pt = (n - motor_sorted_tm.index(bn)) if bn in motor_sorted_tm else 0
+                            composite[bn] = et_pt + motor_pt
+
+                        score_ranked = sorted(composite, key=lambda b: composite[b], reverse=True)
+                        pivot = score_ranked[0]
+
+                        # 2着の+1艇: pivotの一つ外側。外なければ複合スコア次位
+                        if pivot + 1 <= 6 and (pivot + 1) in available_for_form:
+                            outer1 = pivot + 1
+                        else:
+                            outer1 = next((b for b in score_ranked[1:] if b != pivot), None)
+
+                        # 3着の+1艇: 複合スコア次位（pivot・outer1以外）
+                        score_next = next((b for b in score_ranked if b not in {pivot, outer1}), None)
+
+                        tm_first  = sorted({1, pivot})
+                        tm_second = sorted({1, pivot} | ({outer1}     if outer1     else set()))
+                        tm_third  = sorted({1, pivot} | ({outer1}     if outer1     else set())
+                                                      | ({score_next} if score_next else set()))
+
+                        if len(tm_third) >= 3:
+                            tm_str = (
+                                f"{''.join(str(b) for b in tm_first)}-"
+                                f"{''.join(str(b) for b in tm_second)}-"
+                                f"{''.join(str(b) for b in tm_third)}"
+                            )
+                            all_recommendations.append({
+                                "date":          race_row.get("date", ""),
+                                "venue_name":    race_row.get("venue_name", ""),
+                                "race_no":       race_row.get("race_no", ""),
+                                "combination":   tm_str,
+                                "prob":          "-",
+                                "odds":          "-",
+                                "expected_roi":  "-",
+                                "confidence":    "展モタ",
+                                "odds_source":   nigerate_str,
+                                "tier":          "展モタ",
+                                "bet_label":     bet_label_tm,
+                                "edge":          "-",
+                                "arare_score":   arare_score,
+                                "arare_reasons": " / ".join(arare_reasons),
+                                "boat1_risk":    _calc_boat1_risk(race_row),
+                            })
 
                 # ── モタフォメ ──
                 # 1着: 1号艇（固定）
