@@ -976,11 +976,11 @@ def get_recommendations(
                 # 1着: 1号艇（固定）
                 # 2着: 展示タイム最速艇(2-6号) + その一つ外側の艇（6号艇なら内側5号艇）
                 # 3着: 2-6号艇から展示タイム最遅艇を除いた4艇 → 形: 1-{best}{outer}-{4艇} = 6点
+                # 展示データ不足時はポジション優位艇（3号艇→2号艇）をデフォルト使用
                 if 1 in available_for_form:
+                    others = [b for b in available_for_form if b != 1]
                     et_vals_ingo: dict[int, float] = {}
-                    for bn in available_for_form:
-                        if bn == 1:
-                            continue
+                    for bn in others:
                         et = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
                         if et and et > 0:
                             et_vals_ingo[bn] = et
@@ -988,7 +988,15 @@ def get_recommendations(
                     if len(et_vals_ingo) >= 2:
                         best_et_boat  = min(et_vals_ingo, key=lambda b: et_vals_ingo[b])
                         worst_et_boat = max(et_vals_ingo, key=lambda b: et_vals_ingo[b])
+                    elif len(et_vals_ingo) == 1:
+                        best_et_boat  = next(iter(et_vals_ingo))
+                        worst_et_boat = max(others)
+                    else:
+                        # 展示データなし: ポジション優位（カド3号 → 差し2号）をデフォルト
+                        best_et_boat  = 3 if 3 in others else (2 if 2 in others else others[0])
+                        worst_et_boat = max(others)
 
+                    if others:
                         # 2着: 最速艇 + 一つ外側（6号艇は内側に折り返し）
                         if best_et_boat < 6:
                             outer = best_et_boat + 1
