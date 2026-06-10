@@ -552,7 +552,7 @@ def update_result_row(
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
         # 熊フォメ・イン逃げフォメ: 展開して照合（実際の点数×100円で収支計算）
-        if tier in ("熊フォメ", "イン逃げフォメ", "穴フォメ改"):
+        if tier in ("熊フォメ", "イン逃げフォメ", "イン逃げフォメ改"):
             form_combos = _expand_formation(combination)
             hit    = "○" if actual_combination in form_combos else "×"
             payout = actual_payout if hit == "○" else 0
@@ -666,7 +666,7 @@ def _compute_tier_stats(records: list, tier_check) -> dict:
             daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
         # フォーメーションは実際のcombo数×100円、それ以外は1票=100円
         tier_name = str(rec.get("狙い", ""))
-        if tier_name in ("熊フォメ", "イン逃げフォメ", "穴フォメ改"):
+        if tier_name in ("熊フォメ", "イン逃げフォメ", "イン逃げフォメ改"):
             _fc = _expand_formation(str(combination))
             bet_amount = len(_fc) * 100 if _fc else 400
         else:
@@ -713,7 +713,7 @@ def _compute_venue_tier_stats(records: list, tier_check) -> dict:
             venue[vn] = {"race_keys": set(), "hit_race_keys": set(), "bets": 0, "ret": 0}
         venue[vn]["race_keys"].add(race_key)
         _vt = str(rec.get("狙い", ""))
-        if _vt in ("熊フォメ", "イン逃げフォメ", "穴フォメ改"):
+        if _vt in ("熊フォメ", "イン逃げフォメ", "イン逃げフォメ改"):
             _vc = _expand_formation(str(rec.get("予想買い目", "")))
             venue[vn]["bets"] += len(_vc) * 100 if _vc else 400
         else:
@@ -886,7 +886,7 @@ def update_summary_sheet(
             rn = str(rec.get("レース", ""))
             race_key = (d, v, rn)
             race_keys.add(race_key)
-            if tier_name in ("熊フォメ", "イン逃げフォメ", "穴フォメ改"):
+            if tier_name in ("熊フォメ", "イン逃げフォメ", "イン逃げフォメ改"):
                 fc = _expand_formation(combo)
                 bet = len(fc) * 100 if fc else 400
             else:
@@ -951,7 +951,7 @@ def update_summary_sheet(
                 venues[venue] = {"bets": 0, "ret": 0,
                                  "race_keys": set(), "hit_race_keys": set()}
             v = venues[venue]
-            if tn in ("熊フォメ", "イン逃げフォメ", "穴フォメ改"):
+            if tn in ("熊フォメ", "イン逃げフォメ", "イン逃げフォメ改"):
                 fc = _expand_formation(combo)
                 v["bets"] += len(fc) * 100 if fc else 400
             else:
@@ -1020,17 +1020,17 @@ def update_summary_sheet(
         _write_pt_section(f"イン逃げフォメ {lbl}", _pt_tier_stats("イン逃げフォメ", pt))
     rows.append(_r())
 
-    # ⑤ 穴フォメ改セクション
-    rows.append(_r("■ 穴フォメ改セクション（全PT）"))
+    # ⑤ イン逃げフォメ改セクション
+    rows.append(_r("■ イン逃げフォメ改セクション（全PT）"))
     for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
         lbl = f"{pt}PT" if isinstance(pt, int) else pt
-        _write_pt_section(f"穴フォメ改 {lbl}", _pt_tier_stats("穴フォメ改", pt))
+        _write_pt_section(f"イン逃げフォメ改 {lbl}", _pt_tier_stats("イン逃げフォメ改", pt))
     rows.append(_r())
 
     # ⑥ 会場別集計
     _write_venue_section("地熊目＋熊フォメ合算", _venue_stats_tiers({"地熊目", "熊フォメ"}))
     _write_venue_section("イン逃げフォメ",         _venue_stats_tiers({"イン逃げフォメ"}))
-    _write_venue_section("穴フォメ改",           _venue_stats_tiers({"穴フォメ改"}))
+    _write_venue_section("イン逃げフォメ改",           _venue_stats_tiers({"イン逃げフォメ改"}))
 
     # シートへ書き込み
     try:
