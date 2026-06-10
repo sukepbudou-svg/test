@@ -24,6 +24,18 @@ SUMMARY_SHEET = "サマリー15"
 _WIND_NOTE_LINE1 = "【風向き判断】向かい風3〜7m → 地熊目・熊フォメ 積極的に勝負"
 _WIND_NOTE_LINE2 = "追い風5m以上 → 穴フォメ・穴系に切り替え or 見送り"
 
+# 会場マーク: ▲=荒れやすい  ◎=イン強・荒れにくい
+_VENUE_MARK = {
+    "江戸川": "▲", "戸田": "▲", "平和島": "▲",
+    "三国": "▲", "鳴門": "▲", "下関": "▲",
+    "大村": "◎", "宮島": "◎", "住之江": "◎",
+    "蒲郡": "◎", "浜名湖": "◎", "桐生": "◎",
+}
+
+def _marked_venue(venue_name: str) -> str:
+    mark = _VENUE_MARK.get(venue_name, "")
+    return f"{venue_name}{mark}" if mark else venue_name
+
 
 def _expand_formation(formation_str: str) -> set:
     """
@@ -268,6 +280,7 @@ def append_prediction_row(
     cols = ["date", "venue_name", "race_no", "tier", "combination",
             "odds", "odds_source"]
     values = [row.get(c, "-") for c in cols]
+    values[1] = _marked_venue(str(values[1]))
     values.append(race_count if race_count is not None else "-")
     values.append(row.get("bet_label", ""))
     values.append(row.get("arare_score", ""))
