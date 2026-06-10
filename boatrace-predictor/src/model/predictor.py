@@ -962,9 +962,7 @@ def get_recommendations(
             })
 
 
-        # 穴フォメ（全PT対象・全艇対象・カスケード方式）
-        # 1着: ML1位 + ML3位（全艇・1号艇含む）
-        # 穴フォメ: 1着=ML3+4位、2着=ML3+4+1位、3着=ML3+4+1+5位（34-134-1345形）
+        # イン逃げフォメ・穴フォメ改 共有ブロック（全PT対象）
         if True:
             available_for_form = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             if len(available_for_form) >= 3:
@@ -974,45 +972,61 @@ def get_recommendations(
                     form_win_probs[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
                 ranked_all = sorted(form_win_probs, key=lambda b: form_win_probs[b], reverse=True)
 
-                # 穴フォメ: 45-1-23型（4点）
-                # 1着: ML4位 + ML5位
-                ml4 = ranked_all[3] if len(ranked_all) >= 4 else ranked_all[-1]
-                ml5 = ranked_all[4] if len(ranked_all) >= 5 else ranked_all[-1]
-                form_first_set = {ml4, ml5}
-                form_first = sorted(form_first_set)
+                # ── イン逃げフォメ ──
+                # 1着: 1号艇（固定）
+                # 2着: 展示タイム最速艇(2-6号) + その一つ外側の艇（6号艇なら内側5号艇）
+                # 3着: 2-6号艇から展示タイム最遅艇を除いた4艇 → 形: 1-{best}{outer}-{4艇} = 6点
+                if 1 in available_for_form:
+                    et_vals_ingo: dict[int, float] = {}
+                    for bn in available_for_form:
+                        if bn == 1:
+                            continue
+                        et = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
+                        if et and et > 0:
+                            et_vals_ingo[bn] = et
 
-                # 2着: ML1位のみ
-                ml1 = ranked_all[0]
-                form_second = [ml1]
+                    if len(et_vals_ingo) >= 2:
+                        best_et_boat  = min(et_vals_ingo, key=lambda b: et_vals_ingo[b])
+                        worst_et_boat = max(et_vals_ingo, key=lambda b: et_vals_ingo[b])
 
-                # 3着: ML2位 + ML3位
-                ml2 = ranked_all[1] if len(ranked_all) >= 2 else ranked_all[-1]
-                ml3 = ranked_all[2] if len(ranked_all) >= 3 else ranked_all[-1]
-                form_third = sorted({ml2, ml3})
+                        # 2着: 最速艇 + 一つ外側（6号艇は内側に折り返し）
+                        if best_et_boat < 6:
+                            outer = best_et_boat + 1
+                            if outer not in available_for_form:
+                                outer = best_et_boat - 1 if best_et_boat > 2 else None
+                        else:
+                            outer = 5 if 5 in available_for_form else None
+                        ingo_second = sorted(b for b in {best_et_boat, outer} if b is not None)
 
-                formation_str = (
-                    f"{''.join(str(b) for b in form_first)}-"
-                    f"{''.join(str(b) for b in form_second)}-"
-                    f"{''.join(str(b) for b in form_third)}"
-                )
-                bet_label = "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り")
-                all_recommendations.append({
-                    "date":          race_row.get("date", ""),
-                    "venue_name":    race_row.get("venue_name", ""),
-                    "race_no":       race_row.get("race_no", ""),
-                    "combination":   formation_str,
-                    "prob":          "-",
-                    "odds":          "-",
-                    "expected_roi":  "-",
-                    "confidence":    "穴フォメ",
-                    "odds_source":   nigerate_str,
-                    "tier":          "穴フォメ",
-                    "bet_label":     bet_label,
-                    "edge":          "-",
-                    "arare_score":   arare_score,
-                    "arare_reasons": " / ".join(arare_reasons),
-                    "boat1_risk":    _calc_boat1_risk(race_row),
-                })
+                        # 3着: 2-6号艇から展示最遅艇を除く
+                        ingo_third = sorted(
+                            b for b in available_for_form if b != 1 and b != worst_et_boat
+                        )
+
+                        if len(ingo_second) >= 1 and len(ingo_third) >= 2:
+                            ingo_form_str = (
+                                f"1-"
+                                f"{''.join(str(b) for b in ingo_second)}-"
+                                f"{''.join(str(b) for b in ingo_third)}"
+                            )
+                            bet_label = "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り")
+                            all_recommendations.append({
+                                "date":          race_row.get("date", ""),
+                                "venue_name":    race_row.get("venue_name", ""),
+                                "race_no":       race_row.get("race_no", ""),
+                                "combination":   ingo_form_str,
+                                "prob":          "-",
+                                "odds":          "-",
+                                "expected_roi":  "-",
+                                "confidence":    "イン逃げフォメ",
+                                "odds_source":   nigerate_str,
+                                "tier":          "イン逃げフォメ",
+                                "bet_label":     bet_label,
+                                "edge":          "-",
+                                "arare_score":   arare_score,
+                                "arare_reasons": " / ".join(arare_reasons),
+                                "boat1_risk":    _calc_boat1_risk(race_row),
+                            })
 
                 # ── 穴フォメ改 ──
                 # 追い風あり: 穴スコア上位2艇を1着（穴艇軸）
