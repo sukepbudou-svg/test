@@ -18,8 +18,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-RESULT_SHEET = "成績15"
-SUMMARY_SHEET = "サマリー15"
+RESULT_SHEET = "成績16"
+SUMMARY_SHEET = "サマリー16"
 
 _WIND_NOTE_LINE1 = "【風向き判断】向かい風3〜7m → 地熊目・熊フォメ 積極的に勝負"
 _WIND_NOTE_LINE2 = "追い風5m以上 → 展モタ・穴系に切り替え or 見送り"
@@ -554,7 +554,7 @@ def update_result_row(
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
         # 熊フォメ・展モタ: 展開して照合（実際の点数×100円で収支計算）
-        if tier in ("熊フォメ", "展モタ", "モタフォメ"):
+        if tier in ("熊フォメ", "展モタ"):
             form_combos = _expand_formation(combination)
             hit    = "○" if actual_combination in form_combos else "×"
             payout = actual_payout if hit == "○" else 0
@@ -668,7 +668,7 @@ def _compute_tier_stats(records: list, tier_check) -> dict:
             daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
         # フォーメーションは実際のcombo数×100円、それ以外は1票=100円
         tier_name = str(rec.get("狙い", ""))
-        if tier_name in ("熊フォメ", "展モタ", "モタフォメ"):
+        if tier_name in ("熊フォメ", "展モタ"):
             _fc = _expand_formation(str(combination))
             bet_amount = len(_fc) * 100 if _fc else 400
         else:
@@ -694,41 +694,6 @@ def _compute_tier_stats(records: list, tier_check) -> dict:
         "hit_races": len(hit_race_keys),
         "daily": daily,
     }
-
-
-def _compute_venue_tier_stats(records: list, tier_check) -> dict:
-    """指定tierの会場別集計を計算する"""
-    venue: dict = {}
-    for rec in records:
-        combination = rec.get("予想買い目", "")
-        if combination in ("", "（予想なし）", "見送り", "-"):
-            continue
-        if not tier_check(rec):
-            continue
-
-        vn = str(rec.get("競艇場", ""))
-        d = str(rec.get("日付", ""))
-        rn = str(rec.get("レース", ""))
-        race_key = (d, vn, rn)
-
-        if vn not in venue:
-            venue[vn] = {"race_keys": set(), "hit_race_keys": set(), "bets": 0, "ret": 0}
-        venue[vn]["race_keys"].add(race_key)
-        _vt = str(rec.get("狙い", ""))
-        if _vt in ("熊フォメ", "展モタ", "モタフォメ"):
-            _vc = _expand_formation(str(rec.get("予想買い目", "")))
-            venue[vn]["bets"] += len(_vc) * 100 if _vc else 400
-        else:
-            venue[vn]["bets"] += 100
-
-        if rec.get("的中", "") == "○":
-            venue[vn]["hit_race_keys"].add(race_key)
-            try:
-                payout = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
-                venue[vn]["ret"] += payout
-            except (ValueError, TypeError):
-                pass
-    return venue
 
 
 def _build_summary_cf_rules(sid: int, full_range: dict, profit_range: dict) -> list:
@@ -888,7 +853,7 @@ def update_summary_sheet(
             rn = str(rec.get("レース", ""))
             race_key = (d, v, rn)
             race_keys.add(race_key)
-            if tier_name in ("熊フォメ", "展モタ", "モタフォメ"):
+            if tier_name in ("熊フォメ", "展モタ"):
                 fc = _expand_formation(combo)
                 bet = len(fc) * 100 if fc else 400
             else:
@@ -939,54 +904,6 @@ def update_summary_sheet(
             rows.append(_r(d, drc, dhc, dh, f"¥{dr:,}", dp))
         rows.append(_r())
 
-    def _venue_stats_tiers(tier_names):
-        venues: dict = {}
-        for rec in records:
-            tn = str(rec.get("狙い", ""))
-            if tn not in tier_names:
-                continue
-            combo = str(rec.get("予想買い目", ""))
-            if combo in ("", "（予想なし）", "見送り", "-"):
-                continue
-            venue = str(rec.get("競艇場", "不明"))
-            if venue not in venues:
-                venues[venue] = {"bets": 0, "ret": 0,
-                                 "race_keys": set(), "hit_race_keys": set()}
-            v = venues[venue]
-            if tn in ("熊フォメ", "展モタ", "モタフォメ"):
-                fc = _expand_formation(combo)
-                v["bets"] += len(fc) * 100 if fc else 400
-            else:
-                v["bets"] += 100
-            d  = str(rec.get("日付", ""))
-            rn = str(rec.get("レース", ""))
-            race_key = (d, venue, rn)
-            v["race_keys"].add(race_key)
-            if rec.get("的中", "") == "○":
-                v["hit_race_keys"].add(race_key)
-                try:
-                    v["ret"] += int(str(rec.get("実際の払戻", 0)).replace(",", ""))
-                except (ValueError, TypeError):
-                    pass
-        return venues
-
-    def _write_venue_section(title, vd):
-        rows.append(_r(f"■ 会場別 集計（{title}）"))
-        rows.append(_r("会場", "予想R数", "的中数", "的中率", "間隔", "払戻合計", "回収率", "収支"))
-        for venue in sorted(vd.keys()):
-            v    = vd[venue]
-            bets = v["bets"]
-            hits = len(v["hit_race_keys"])
-            ret  = v["ret"]
-            rc   = len(v["race_keys"])
-            hitr = f"{hits/rc*100:.1f}%" if rc > 0 else "0.0%"
-            ivl  = f"{rc/hits:.1f}回に1回" if hits > 0 else "未的中"
-            roi  = f"{ret/bets*100:.1f}%" if bets > 0 else "0.0%"
-            pft  = ret - bets
-            rows.append(_r(venue, rc, hits, hitr, ivl, f"¥{ret:,}", roi, pft))
-        rows.append(_r())
-        rows.append(_r())
-
     rows: list = []
     rows.append(_r("【予想成績サマリー】"))
     rows.append(_r("集計日時", now))
@@ -1022,17 +939,6 @@ def update_summary_sheet(
         _write_pt_section(f"展モタ {lbl}", _pt_tier_stats("展モタ", pt))
     rows.append(_r())
 
-    # ⑤ モタフォメセクション
-    rows.append(_r("■ モタフォメセクション（全PT）"))
-    for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
-        lbl = f"{pt}PT" if isinstance(pt, int) else pt
-        _write_pt_section(f"モタフォメ {lbl}", _pt_tier_stats("モタフォメ", pt))
-    rows.append(_r())
-
-    # ⑥ 会場別集計
-    _write_venue_section("地熊目＋熊フォメ合算", _venue_stats_tiers({"地熊目", "熊フォメ"}))
-    _write_venue_section("展モタ",         _venue_stats_tiers({"展モタ"}))
-    _write_venue_section("モタフォメ",           _venue_stats_tiers({"モタフォメ"}))
 
     # シートへ書き込み
     try:

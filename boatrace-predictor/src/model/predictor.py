@@ -1032,23 +1032,33 @@ def get_recommendations(
                     score_ranked_tm = sorted(composite_tm, key=lambda b: composite_tm[b], reverse=True)
                     pivot = score_ranked_tm[0]
 
-                    # 2着の+1艇: pivotの一つ外側。外なければ複合スコア次位
+                    # 2着①: pivotの外側（外なければ複合次位）
                     if pivot + 1 <= 6 and (pivot + 1) in available_for_form:
                         outer1 = pivot + 1
                     else:
                         outer1 = next((b for b in score_ranked_tm[1:] if b != pivot), None)
 
-                    # 3着の+1艇: 複合スコア次位（pivot・outer1以外）
-                    score_next_tm = next((b for b in score_ranked_tm if b not in {pivot, outer1}), None)
+                    # 3着拡張①: outer1のさらに外側
+                    ref_tm = outer1 if outer1 else pivot
+                    if ref_tm + 1 <= 6 and (ref_tm + 1) in available_for_form and (ref_tm + 1) != pivot:
+                        outer2 = ref_tm + 1
+                    else:
+                        outer2 = None
 
-                    tm_first  = sorted({1, pivot})
-                    tm_second = sorted({1, pivot} | ({outer1}       if outer1       else set()))
-                    tm_third  = sorted({1, pivot} | ({outer1}       if outer1       else set())
-                                                  | ({score_next_tm} if score_next_tm else set()))
+                    # 3着拡張②: 複合スコア次点（pivot/outer1/outer2以外）
+                    used_tm = {pivot} | ({outer1} if outer1 else set()) | ({outer2} if outer2 else set())
+                    score_next_tm = next((b for b in score_ranked_tm if b not in used_tm), None)
 
-                    if len(tm_third) >= 3:
+                    # 2着: {pivot, outer1}  3着: {pivot, outer1, outer2, score_next_tm}
+                    tm_second = sorted({pivot} | ({outer1}        if outer1        else set()))
+                    tm_third  = sorted({pivot}
+                                       | ({outer1}        if outer1        else set())
+                                       | ({outer2}        if outer2        else set())
+                                       | ({score_next_tm} if score_next_tm else set()))
+
+                    if len(tm_second) >= 2 and len(tm_third) >= 3:
                         tm_str = (
-                            f"{''.join(str(b) for b in tm_first)}-"
+                            f"1-"
                             f"{''.join(str(b) for b in tm_second)}-"
                             f"{''.join(str(b) for b in tm_third)}"
                         )
@@ -1069,70 +1079,6 @@ def get_recommendations(
                             "arare_reasons": " / ".join(arare_reasons),
                             "boat1_risk":    _calc_boat1_risk(race_row),
                         })
-
-                # ── モタフォメ ──
-                # 1着: 1号艇（固定）
-                # 1着: 1号艇 + モーター2連対率最高艇(2-6号)
-                # 2着: 最高艇の外側（外がなければモーター次位艇）
-                # 3着: さらに外側（外がなければモーター次位艇）
-                # 形: 1{X}-1{X}{outer1}-1{X}{outer1}{outer2} ≒ 8点
-                if 1 in available_for_form:
-                    motor_map: dict[int, float] = {}
-                    for bn in available_for_form:
-                        if bn == 1:
-                            continue
-                        m = _safe_float(race_row.get(f"boat{bn}_motor_2rate"))
-                        if m is not None:
-                            motor_map[bn] = m
-
-                    if motor_map:
-                        motor_ranked = sorted(motor_map, key=lambda b: motor_map[b], reverse=True)
-                        best_motor = motor_ranked[0]
-                        used: set[int] = {best_motor}
-
-                        # outer1: best_motorの外側。なければモーター次位
-                        if best_motor + 1 <= 6 and (best_motor + 1) in available_for_form:
-                            outer1 = best_motor + 1
-                        else:
-                            outer1 = next((b for b in motor_ranked[1:] if b not in used), None)
-                        if outer1:
-                            used.add(outer1)
-
-                        # outer2: outer1の外側。なければモーター次位
-                        ref = outer1 if outer1 else best_motor
-                        if ref + 1 <= 6 and (ref + 1) in available_for_form and (ref + 1) not in used:
-                            outer2 = ref + 1
-                        else:
-                            outer2 = next((b for b in motor_ranked[1:] if b not in used), None)
-
-                        kai_first  = sorted({1, best_motor})
-                        kai_second = sorted({1, best_motor} | ({outer1} if outer1 else set()))
-                        kai_third  = sorted({1, best_motor} | ({outer1} if outer1 else set()) | ({outer2} if outer2 else set()))
-
-                        if len(kai_third) >= 3:
-                            kai_str = (
-                                f"{''.join(str(b) for b in kai_first)}-"
-                                f"{''.join(str(b) for b in kai_second)}-"
-                                f"{''.join(str(b) for b in kai_third)}"
-                            )
-                            kai_bet_label = "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り")
-                            all_recommendations.append({
-                                "date":          race_row.get("date", ""),
-                                "venue_name":    race_row.get("venue_name", ""),
-                                "race_no":       race_row.get("race_no", ""),
-                                "combination":   kai_str,
-                                "prob":          "-",
-                                "odds":          "-",
-                                "expected_roi":  "-",
-                                "confidence":    "モタフォメ",
-                                "odds_source":   nigerate_str,
-                                "tier":          "モタフォメ",
-                                "bet_label":     kai_bet_label,
-                                "edge":          "-",
-                                "arare_score":   arare_score,
-                                "arare_reasons": " / ".join(arare_reasons),
-                                "boat1_risk":    _calc_boat1_risk(race_row),
-                            })
 
     return pd.DataFrame(all_recommendations)
 
