@@ -895,7 +895,7 @@ def get_recommendations(
                 confidence, bet_label = "★☆☆☆", "見送り"
             src = rec.get("odds_source", "history")
             edge_val = round(float(rec["prob"]) * float(rec["odds_value"]), 2)
-            combo = "見送り" if arare_score >= 4 else rec["combination"]
+            combo = rec["combination"]
             return {
                 "date": race_row.get("date", ""),
                 "venue_name": race_row.get("venue_name", ""),
@@ -947,7 +947,7 @@ def get_recommendations(
                 "date":          race_row.get("date", ""),
                 "venue_name":    race_row.get("venue_name", ""),
                 "race_no":       race_row.get("race_no", ""),
-                "combination":   "見送り" if arare_score >= 4 else kuma_str,
+                "combination":   kuma_str,
                 "prob":          "-",
                 "odds":          "-",
                 "expected_roi":  "-",
@@ -1030,8 +1030,10 @@ def get_recommendations(
 
                 # ── イン逃げフォメ改 ──
                 # 1着: 1号艇 + 展示タイム最速艇(2-6号)
-                # 2着/3着: 最速艇から外に連鎖（外がなければ内に折り返し）
-                # 例: 最速=3号 → 13-134-1345 = 8点
+                # 2着/3着: 外に連鎖。外がなければ展示上位艇で補完
+                #   best=2-4: 1{X}-1{X}{X+1}-1{X}{X+1}{X+2} = 8点
+                #   best=5  : 15-156-156{展示2位艇} = 8点
+                #   best=6  : 16-16{展示2位}-16{展示2位}{外orX3} = 8点
                 if 1 in available_for_form:
                     et_vals_kai: dict[int, float] = {}
                     for bn in available_for_form:
@@ -1042,23 +1044,32 @@ def get_recommendations(
                             et_vals_kai[bn] = et
 
                     if et_vals_kai:
-                        best_kai = min(et_vals_kai, key=lambda b: et_vals_kai[b])
+                        et_ranked_kai = sorted(et_vals_kai, key=lambda b: et_vals_kai[b])
+                        best_kai = et_ranked_kai[0]
 
-                        # 外に向けて連鎖展開、外がなければ内側に折り返す
-                        chain = [best_kai]
-                        expand_up   = best_kai + 1
-                        expand_down = best_kai - 1
-                        for _ in range(2):
-                            if expand_up <= 6 and expand_up in available_for_form:
-                                chain.append(expand_up)
-                                expand_up += 1
-                            elif expand_down >= 2 and expand_down in available_for_form and expand_down not in chain:
-                                chain.append(expand_down)
-                                expand_down -= 1
+                        if best_kai <= 4:
+                            # 通常: 外に2連鎖
+                            kai_first  = sorted({1, best_kai})
+                            kai_second = sorted({1, best_kai, best_kai + 1})
+                            kai_third  = sorted({1, best_kai, best_kai + 1, best_kai + 2})
 
-                        kai_first  = sorted({1} | {chain[0]})
-                        kai_second = sorted({1} | set(chain[:2]))
-                        kai_third  = sorted({1} | set(chain))
+                        elif best_kai == 5:
+                            # 5号艇: 2着は外(6)、3着は6の外がないので展示2位で補完
+                            x2 = et_ranked_kai[1] if len(et_ranked_kai) >= 2 else None
+                            kai_first  = sorted({1, 5})
+                            kai_second = sorted({1, 5, 6})
+                            kai_third  = sorted({1, 5, 6} | ({x2} if x2 and x2 not in {1, 5, 6} else set()))
+
+                        else:  # best_kai == 6
+                            # 6号艇: 2着で展示2位を展示選出、3着はその外側 or 展示3位
+                            x2 = et_ranked_kai[1] if len(et_ranked_kai) >= 2 else None
+                            kai_first  = sorted({1, 6})
+                            kai_second = sorted({1, 6} | ({x2} if x2 else set()))
+                            if x2 and x2 + 1 <= 6 and (x2 + 1) in available_for_form and x2 + 1 != 6:
+                                kai_third = sorted({1, 6, x2, x2 + 1})
+                            else:
+                                x3 = next((b for b in et_ranked_kai[2:] if b not in {1, 6, x2}), None)
+                                kai_third = sorted({1, 6} | ({x2} if x2 else set()) | ({x3} if x3 else set()))
 
                         kai_str = (
                             f"{''.join(str(b) for b in kai_first)}-"

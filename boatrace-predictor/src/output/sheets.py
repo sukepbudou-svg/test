@@ -536,9 +536,11 @@ def update_result_row(
 
     rc = race_count if race_count is not None else "-"
 
+    marked_venue = _marked_venue(venue_name)
+
     if not race_preds:
         r_sheet.append_row(
-            [date, venue_name, race_no, "-", "（予想なし）",
+            [date, marked_venue, race_no, "-", "（予想なし）",
              actual_combination, actual_payout, "-", 0, rc, "", ""],
             value_input_option="RAW"
         )
@@ -564,7 +566,7 @@ def update_result_row(
             profit = payout - 100
 
         r_sheet.append_row(
-            [date, venue_name, race_no, tier, combination,
+            [date, marked_venue, race_no, tier, combination,
              actual_combination, actual_payout, hit, profit, rc, bet_label, arare_pt],
             value_input_option="RAW"
         )
