@@ -368,16 +368,13 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None) -> tuple[int, l
         score += 1
         reasons.append(f"1号今節{meet_avg_rank1:.1f}着平均")
 
-    # 外艇A1選手: 1号艇がA1でない場合のみ加算（実力差がある時だけ荒れ要因）
-    g1_grade = _safe_float(race_row.get("boat1_grade_num"))
-    boat1_is_a1 = g1_grade is not None and g1_grade >= 4
-    if not boat1_is_a1:
-        for bn in [4, 5, 6]:
-            g = _safe_float(race_row.get(f"boat{bn}_grade_num"))
-            if g is not None and g >= 4:
-                score += 1
-                reasons.append(f"{bn}号A1")
-                break
+    # 外艇A1選手
+    for bn in [4, 5, 6]:
+        g = _safe_float(race_row.get(f"boat{bn}_grade_num"))
+        if g is not None and g >= 4:
+            score += 1
+            reasons.append(f"{bn}号A1")
+            break
 
     # 外艇ST速い（複数艇カウント・上限2点）
     fast_st_count = 0
