@@ -974,21 +974,21 @@ def get_recommendations(
                     form_win_probs[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
                 ranked_all = sorted(form_win_probs, key=lambda b: form_win_probs[b], reverse=True)
 
-                # 穴フォメ: 35-1-24型（4点）
-                # 1着: ML3位 + ML5位
-                ml3 = ranked_all[2] if len(ranked_all) >= 3 else ranked_all[-1]
+                # 穴フォメ: 45-1-23型（4点）
+                # 1着: ML4位 + ML5位
+                ml4 = ranked_all[3] if len(ranked_all) >= 4 else ranked_all[-1]
                 ml5 = ranked_all[4] if len(ranked_all) >= 5 else ranked_all[-1]
-                form_first_set = {ml3, ml5}
+                form_first_set = {ml4, ml5}
                 form_first = sorted(form_first_set)
 
                 # 2着: ML1位のみ
                 ml1 = ranked_all[0]
                 form_second = [ml1]
 
-                # 3着: ML2位 + ML4位
+                # 3着: ML2位 + ML3位
                 ml2 = ranked_all[1] if len(ranked_all) >= 2 else ranked_all[-1]
-                ml4 = ranked_all[3] if len(ranked_all) >= 4 else ranked_all[-1]
-                form_third = sorted({ml2, ml4})
+                ml3 = ranked_all[2] if len(ranked_all) >= 3 else ranked_all[-1]
+                form_third = sorted({ml2, ml3})
 
                 formation_str = (
                     f"{''.join(str(b) for b in form_first)}-"
