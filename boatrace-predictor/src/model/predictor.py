@@ -361,12 +361,6 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None) -> tuple[int, l
         score += 1
         reasons.append(f"1号2率{n2_1:.0%}")
 
-    # 1号艇の今節成績が不振（2R以上出走かつ平均着順4.0以上）
-    meet_avg_rank1 = _safe_float(race_row.get("boat1_meet_avg_rank"))
-    meet_races1 = int(race_row.get("boat1_meet_races", 0) or 0)
-    if meet_avg_rank1 is not None and meet_races1 >= 2 and meet_avg_rank1 >= 4.0:
-        score += 1
-        reasons.append(f"1号今節{meet_avg_rank1:.1f}着平均")
 
     for bn in [4, 5, 6]:
         g = _safe_float(race_row.get(f"boat{bn}_grade_num"))
