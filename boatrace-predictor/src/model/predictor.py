@@ -1029,71 +1029,62 @@ def get_recommendations(
                             })
 
                 # ── イン逃げフォメ改 ──
-                # 1着: 1号艇 + 展示タイム最速艇(2-6号)
-                # 2着/3着: 外に連鎖。外がなければ展示上位艇で補完
-                #   best=2-4: 1{X}-1{X}{X+1}-1{X}{X+1}{X+2} = 8点
-                #   best=5  : 15-156-156{展示2位艇} = 8点
-                #   best=6  : 16-16{展示2位}-16{展示2位}{外orX3} = 8点
+                # 1着: 1号艇（固定）
+                # 2着・3着: 展示タイム + 展示ST + ポジションボーナスで上位3艇ボックス
+                #   ポジション: 3号艇+1.5（カド）、2号艇+1.0（差し）、4号艇+0.5（カド受け）
+                # 形: 1-{top3}-{top3} = 6点
                 if 1 in available_for_form:
-                    et_vals_kai: dict[int, float] = {}
-                    for bn in available_for_form:
-                        if bn == 1:
-                            continue
-                        et = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
-                        if et and et > 0:
-                            et_vals_kai[bn] = et
+                    candidates = [b for b in available_for_form if b != 1]
+                    if len(candidates) >= 3:
+                        et_map: dict[int, float] = {}
+                        for bn in candidates:
+                            et = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
+                            if et and et > 0:
+                                et_map[bn] = et
 
-                    if et_vals_kai:
-                        et_ranked_kai = sorted(et_vals_kai, key=lambda b: et_vals_kai[b])
-                        best_kai = et_ranked_kai[0]
+                        st_map: dict[int, float] = {}
+                        for bn in candidates:
+                            st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                            if st and st > 0:
+                                st_map[bn] = st
 
-                        if best_kai <= 4:
-                            # 通常: 外に2連鎖
-                            kai_first  = sorted({1, best_kai})
-                            kai_second = sorted({1, best_kai, best_kai + 1})
-                            kai_third  = sorted({1, best_kai, best_kai + 1, best_kai + 2})
+                        # 速い順にソート（値が小さいほど速い）
+                        n = len(candidates)
+                        et_sorted = sorted(et_map, key=lambda b: et_map[b])
+                        st_sorted = sorted(st_map, key=lambda b: st_map[b])
 
-                        elif best_kai == 5:
-                            # 5号艇: 2着は外(6)、3着は6の外がないので展示2位で補完
-                            x2 = et_ranked_kai[1] if len(et_ranked_kai) >= 2 else None
-                            kai_first  = sorted({1, 5})
-                            kai_second = sorted({1, 5, 6})
-                            kai_third  = sorted({1, 5, 6} | ({x2} if x2 and x2 not in {1, 5, 6} else set()))
+                        kai_scores: dict[int, float] = {}
+                        for bn in candidates:
+                            et_pt  = (n - et_sorted.index(bn)) if bn in et_sorted else 0
+                            st_pt  = (n - st_sorted.index(bn)) if bn in st_sorted else 0
+                            pos_pt = {2: 1.0, 3: 1.5, 4: 0.5}.get(bn, 0.0)
+                            kai_scores[bn] = et_pt + st_pt + pos_pt
 
-                        else:  # best_kai == 6
-                            # 6号艇: 2着で展示2位を展示選出、3着はその外側 or 展示3位
-                            x2 = et_ranked_kai[1] if len(et_ranked_kai) >= 2 else None
-                            kai_first  = sorted({1, 6})
-                            kai_second = sorted({1, 6} | ({x2} if x2 else set()))
-                            if x2 and x2 + 1 <= 6 and (x2 + 1) in available_for_form and x2 + 1 != 6:
-                                kai_third = sorted({1, 6, x2, x2 + 1})
-                            else:
-                                x3 = next((b for b in et_ranked_kai[2:] if b not in {1, 6, x2}), None)
-                                kai_third = sorted({1, 6} | ({x2} if x2 else set()) | ({x3} if x3 else set()))
-
-                        kai_str = (
-                            f"{''.join(str(b) for b in kai_first)}-"
-                            f"{''.join(str(b) for b in kai_second)}-"
-                            f"{''.join(str(b) for b in kai_third)}"
+                        top3 = sorted(
+                            sorted(kai_scores, key=lambda b: kai_scores[b], reverse=True)[:3]
                         )
-                        kai_bet_label = "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り")
-                        all_recommendations.append({
-                            "date":          race_row.get("date", ""),
-                            "venue_name":    race_row.get("venue_name", ""),
-                            "race_no":       race_row.get("race_no", ""),
-                            "combination":   kai_str,
-                            "prob":          "-",
-                            "odds":          "-",
-                            "expected_roi":  "-",
-                            "confidence":    "イン逃げフォメ改",
-                            "odds_source":   nigerate_str,
-                            "tier":          "イン逃げフォメ改",
-                            "bet_label":     kai_bet_label,
-                            "edge":          "-",
-                            "arare_score":   arare_score,
-                            "arare_reasons": " / ".join(arare_reasons),
-                            "boat1_risk":    _calc_boat1_risk(race_row),
-                        })
+
+                        if len(top3) >= 3:
+                            box_str  = "".join(str(b) for b in top3)
+                            kai_str  = f"1-{box_str}-{box_str}"
+                            kai_bet_label = "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り")
+                            all_recommendations.append({
+                                "date":          race_row.get("date", ""),
+                                "venue_name":    race_row.get("venue_name", ""),
+                                "race_no":       race_row.get("race_no", ""),
+                                "combination":   kai_str,
+                                "prob":          "-",
+                                "odds":          "-",
+                                "expected_roi":  "-",
+                                "confidence":    "イン逃げフォメ改",
+                                "odds_source":   nigerate_str,
+                                "tier":          "イン逃げフォメ改",
+                                "bet_label":     kai_bet_label,
+                                "edge":          "-",
+                                "arare_score":   arare_score,
+                                "arare_reasons": " / ".join(arare_reasons),
+                                "boat1_risk":    _calc_boat1_risk(race_row),
+                            })
 
     return pd.DataFrame(all_recommendations)
 
