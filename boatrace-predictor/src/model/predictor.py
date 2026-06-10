@@ -962,7 +962,7 @@ def get_recommendations(
             })
 
 
-        # イン逃げフォメ・イン逃げフォメ改 共有ブロック（全PT対象）
+        # 逃げフォメ・モタフォメ 共有ブロック（全PT対象）
         if True:
             available_for_form = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             if len(available_for_form) >= 3:
@@ -972,7 +972,7 @@ def get_recommendations(
                     form_win_probs[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
                 ranked_all = sorted(form_win_probs, key=lambda b: form_win_probs[b], reverse=True)
 
-                # ── イン逃げフォメ ──
+                # ── 逃げフォメ ──
                 # 1着: 1号艇（固定）
                 # 2着: 展示タイム最速艇(2-6号) + その一つ外側の艇
                 # 3着: 2-6号艇から展示タイム最遅艇を除いた4艇 → 形: 1-{best}{outer}-{4艇} = 6点
@@ -1014,9 +1014,9 @@ def get_recommendations(
                                 "prob":          "-",
                                 "odds":          "-",
                                 "expected_roi":  "-",
-                                "confidence":    "イン逃げフォメ",
+                                "confidence":    "逃げフォメ",
                                 "odds_source":   nigerate_str,
-                                "tier":          "イン逃げフォメ",
+                                "tier":          "逃げフォメ",
                                 "bet_label":     bet_label_ingo,
                                 "edge":          "-",
                                 "arare_score":   arare_score,
@@ -1033,9 +1033,9 @@ def get_recommendations(
                             "prob":          "-",
                             "odds":          "-",
                             "expected_roi":  "-",
-                            "confidence":    "イン逃げフォメ",
+                            "confidence":    "逃げフォメ",
                             "odds_source":   nigerate_str,
-                            "tier":          "イン逃げフォメ",
+                            "tier":          "逃げフォメ",
                             "bet_label":     bet_label_ingo,
                             "edge":          "-",
                             "arare_score":   arare_score,
@@ -1043,7 +1043,7 @@ def get_recommendations(
                             "boat1_risk":    _calc_boat1_risk(race_row),
                         })
 
-                # ── イン逃げフォメ改 ──
+                # ── モタフォメ ──
                 # 1着: 1号艇（固定）
                 # 1着: 1号艇 + モーター2連対率最高艇(2-6号)
                 # 2着: 最高艇の外側（外がなければモーター次位艇）
@@ -1097,9 +1097,9 @@ def get_recommendations(
                                 "prob":          "-",
                                 "odds":          "-",
                                 "expected_roi":  "-",
-                                "confidence":    "イン逃げフォメ改",
+                                "confidence":    "モタフォメ",
                                 "odds_source":   nigerate_str,
-                                "tier":          "イン逃げフォメ改",
+                                "tier":          "モタフォメ",
                                 "bet_label":     kai_bet_label,
                                 "edge":          "-",
                                 "arare_score":   arare_score,
