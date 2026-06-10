@@ -973,18 +973,26 @@ def get_recommendations(
                 ranked_all = sorted(form_win_probs, key=lambda b: form_win_probs[b], reverse=True)
 
                 # ── 展モタ ──
-                # pivot = 展示タイム順位 + モーター2連対率順位 の複合スコア最高艇
-                # 1着: {1号艇, pivot}
-                # 2着: {1着} + pivotの一つ外側（外なければ複合スコア次位）
-                # 3着: {2着} + 複合スコア次位艇（位置ではなく実力で選ぶ）
-                # 展示データ2艇未満の場合は見送り → 8点
+                # フォールバック順:
+                #   ① 当日展示タイム2艇以上 → 展示pt + モーターpt（複合スコア）
+                #   ② 展示不足 → 今節平均STpt + モーターpt
+                #   ③ STも不足 → モーターptのみ
+                # モーターデータなし艇は中央値ptで補完
                 if 1 in available_for_form:
                     others = [b for b in available_for_form if b != 1]
+                    n = len(others)
+
                     et_map_tm: dict[int, float] = {}
                     for bn in others:
                         et = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
                         if et and et > 0:
                             et_map_tm[bn] = et
+
+                    st_map_tm: dict[int, float] = {}
+                    for bn in others:
+                        st = _safe_float(race_row.get(f"boat{bn}_meet_avg_st"))
+                        if st and st > 0:
+                            st_map_tm[bn] = st
 
                     motor_map_tm: dict[int, float] = {}
                     for bn in others:
@@ -994,13 +1002,58 @@ def get_recommendations(
 
                     bet_label_tm = "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り")
 
-                    if len(et_map_tm) < 2:
-                        # 展示データ不足 → 見送り
+                    # フォールバック: ①展示 ②今節平均ST ③モーターのみ
+                    if len(et_map_tm) >= 2:
+                        primary_map = et_map_tm
+                        primary_asc = True   # 展示タイムは小さい方が速い
+                    elif len(st_map_tm) >= 2:
+                        primary_map = st_map_tm
+                        primary_asc = True   # STも小さい方が速い
+                    else:
+                        primary_map = {}
+                        primary_asc = True
+
+                    # モーター中央値補完pt（データなし艇に使用）
+                    motor_median_pt = (n + 1) // 2 if motor_map_tm else 0
+
+                    # 複合スコア計算
+                    primary_sorted = sorted(primary_map, key=lambda b: primary_map[b], reverse=not primary_asc) if primary_map else []
+                    motor_sorted_tm = sorted(motor_map_tm, key=lambda b: motor_map_tm[b], reverse=True)
+
+                    composite_tm: dict[int, float] = {}
+                    for bn in others:
+                        p_pt = (n - primary_sorted.index(bn)) if bn in primary_sorted else 0
+                        m_pt = (n - motor_sorted_tm.index(bn)) if bn in motor_sorted_tm else motor_median_pt
+                        composite_tm[bn] = p_pt + m_pt
+
+                    score_ranked_tm = sorted(composite_tm, key=lambda b: composite_tm[b], reverse=True)
+                    pivot = score_ranked_tm[0]
+
+                    # 2着の+1艇: pivotの一つ外側。外なければ複合スコア次位
+                    if pivot + 1 <= 6 and (pivot + 1) in available_for_form:
+                        outer1 = pivot + 1
+                    else:
+                        outer1 = next((b for b in score_ranked_tm[1:] if b != pivot), None)
+
+                    # 3着の+1艇: 複合スコア次位（pivot・outer1以外）
+                    score_next_tm = next((b for b in score_ranked_tm if b not in {pivot, outer1}), None)
+
+                    tm_first  = sorted({1, pivot})
+                    tm_second = sorted({1, pivot} | ({outer1}       if outer1       else set()))
+                    tm_third  = sorted({1, pivot} | ({outer1}       if outer1       else set())
+                                                  | ({score_next_tm} if score_next_tm else set()))
+
+                    if len(tm_third) >= 3:
+                        tm_str = (
+                            f"{''.join(str(b) for b in tm_first)}-"
+                            f"{''.join(str(b) for b in tm_second)}-"
+                            f"{''.join(str(b) for b in tm_third)}"
+                        )
                         all_recommendations.append({
                             "date":          race_row.get("date", ""),
                             "venue_name":    race_row.get("venue_name", ""),
                             "race_no":       race_row.get("race_no", ""),
-                            "combination":   "見送り",
+                            "combination":   tm_str,
                             "prob":          "-",
                             "odds":          "-",
                             "expected_roi":  "-",
@@ -1013,57 +1066,6 @@ def get_recommendations(
                             "arare_reasons": " / ".join(arare_reasons),
                             "boat1_risk":    _calc_boat1_risk(race_row),
                         })
-                    else:
-                        n = len(others)
-                        et_sorted_tm    = sorted(et_map_tm,    key=lambda b: et_map_tm[b])
-                        motor_sorted_tm = sorted(motor_map_tm, key=lambda b: motor_map_tm[b], reverse=True)
-
-                        composite: dict[int, float] = {}
-                        for bn in others:
-                            et_pt    = (n - et_sorted_tm.index(bn))    if bn in et_sorted_tm    else 0
-                            motor_pt = (n - motor_sorted_tm.index(bn)) if bn in motor_sorted_tm else 0
-                            composite[bn] = et_pt + motor_pt
-
-                        score_ranked = sorted(composite, key=lambda b: composite[b], reverse=True)
-                        pivot = score_ranked[0]
-
-                        # 2着の+1艇: pivotの一つ外側。外なければ複合スコア次位
-                        if pivot + 1 <= 6 and (pivot + 1) in available_for_form:
-                            outer1 = pivot + 1
-                        else:
-                            outer1 = next((b for b in score_ranked[1:] if b != pivot), None)
-
-                        # 3着の+1艇: 複合スコア次位（pivot・outer1以外）
-                        score_next = next((b for b in score_ranked if b not in {pivot, outer1}), None)
-
-                        tm_first  = sorted({1, pivot})
-                        tm_second = sorted({1, pivot} | ({outer1}     if outer1     else set()))
-                        tm_third  = sorted({1, pivot} | ({outer1}     if outer1     else set())
-                                                      | ({score_next} if score_next else set()))
-
-                        if len(tm_third) >= 3:
-                            tm_str = (
-                                f"{''.join(str(b) for b in tm_first)}-"
-                                f"{''.join(str(b) for b in tm_second)}-"
-                                f"{''.join(str(b) for b in tm_third)}"
-                            )
-                            all_recommendations.append({
-                                "date":          race_row.get("date", ""),
-                                "venue_name":    race_row.get("venue_name", ""),
-                                "race_no":       race_row.get("race_no", ""),
-                                "combination":   tm_str,
-                                "prob":          "-",
-                                "odds":          "-",
-                                "expected_roi":  "-",
-                                "confidence":    "展モタ",
-                                "odds_source":   nigerate_str,
-                                "tier":          "展モタ",
-                                "bet_label":     bet_label_tm,
-                                "edge":          "-",
-                                "arare_score":   arare_score,
-                                "arare_reasons": " / ".join(arare_reasons),
-                                "boat1_risk":    _calc_boat1_risk(race_row),
-                            })
 
                 # ── モタフォメ ──
                 # 1着: 1号艇（固定）
