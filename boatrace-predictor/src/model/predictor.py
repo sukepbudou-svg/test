@@ -1049,12 +1049,20 @@ def get_recommendations(
                     used_tm = {pivot} | ({outer1} if outer1 else set()) | ({outer2} if outer2 else set())
                     score_next_tm = next((b for b in score_ranked_tm if b not in used_tm), None)
 
-                    # 2着: {pivot, outer1}  3着: {pivot, outer1, outer2, score_next_tm}
-                    tm_second = sorted({pivot} | ({outer1}        if outer1        else set()))
+                    # outer2がNone（外に伸ばせない）なら複合スコア次々点も追加して3着4艇に
+                    if outer2 is None:
+                        used_tm2 = used_tm | ({score_next_tm} if score_next_tm else set())
+                        score_next2_tm = next((b for b in score_ranked_tm if b not in used_tm2), None)
+                    else:
+                        score_next2_tm = None
+
+                    # 2着: {pivot, outer1}  3着: {pivot, outer1, outer2, score_next_tm, score_next2_tm}
+                    tm_second = sorted({pivot} | ({outer1}         if outer1         else set()))
                     tm_third  = sorted({pivot}
-                                       | ({outer1}        if outer1        else set())
-                                       | ({outer2}        if outer2        else set())
-                                       | ({score_next_tm} if score_next_tm else set()))
+                                       | ({outer1}         if outer1         else set())
+                                       | ({outer2}         if outer2         else set())
+                                       | ({score_next_tm}  if score_next_tm  else set())
+                                       | ({score_next2_tm} if score_next2_tm else set()))
 
                     if len(tm_second) >= 2 and len(tm_third) >= 3:
                         tm_str = (
