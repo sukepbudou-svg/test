@@ -912,8 +912,9 @@ def update_summary_sheet(
     # ① ティア別グループ比較
     rows.append(_r("■ ティア別グループ比較"))
     rows.append(_r("グループ", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
-    for grp, tn, pf in [("地熊目 PT1-3合計", "地熊目", [1, 2, 3]),
-                         ("熊フォメ PT1-3合計", "熊フォメ", [1, 2, 3])]:
+    for grp, tn, pf in [("地熊目 PT1-3合計",  "地熊目",  [1, 2, 3]),
+                         ("熊フォメ PT1-3合計", "熊フォメ", [1, 2, 3]),
+                         ("展モタ PT1-3合計",   "展モタ",   [1, 2, 3])]:
         s = _pt_tier_stats(tn, pf)
         rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
         rows.append(_r(grp, rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
@@ -947,6 +948,16 @@ def update_summary_sheet(
         s_sheet = spreadsheet.add_worksheet(title=SUMMARY_SHEET, rows=1500, cols=NUM_COLS)
 
     s_sheet.clear()
+    # 書式（%フォーマット等）もリセットして収支欄の-375000%バグを防ぐ
+    try:
+        spreadsheet.batch_update({"requests": [{
+            "updateCells": {
+                "range": {"sheetId": s_sheet.id},
+                "fields": "userEnteredFormat"
+            }
+        }]})
+    except Exception:
+        pass
     s_sheet.update("A1", rows, value_input_option="USER_ENTERED")
 
     sid = s_sheet.id
