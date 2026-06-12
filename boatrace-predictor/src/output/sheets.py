@@ -22,7 +22,7 @@ RESULT_SHEET = "成績16"
 SUMMARY_SHEET = "サマリー16"
 
 _WIND_NOTE_LINE1 = "【風向き判断】向かい風3〜7m → 地熊目・熊フォメ 積極的に勝負"
-_WIND_NOTE_LINE2 = "追い風5m以上 → 展モタ・穴系に切り替え or 見送り"
+_WIND_NOTE_LINE2 = "追い風5m以上 → 穴専用・穴系に切り替え or 見送り"
 
 # 会場マーク: ▲=荒れやすい  ◎=イン強・荒れにくい
 _VENUE_MARK = {
@@ -554,7 +554,7 @@ def update_result_row(
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
         # 熊フォメ・展モタ: 展開して照合（実際の点数×100円で収支計算）
-        if tier in ("熊フォメ", "展モタ"):
+        if tier in ("熊フォメ", "穴専用"):
             form_combos = _expand_formation(combination)
             hit    = "○" if actual_combination in form_combos else "×"
             payout = actual_payout if hit == "○" else 0
@@ -668,7 +668,7 @@ def _compute_tier_stats(records: list, tier_check) -> dict:
             daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
         # フォーメーションは実際のcombo数×100円、それ以外は1票=100円
         tier_name = str(rec.get("狙い", ""))
-        if tier_name in ("熊フォメ", "展モタ"):
+        if tier_name in ("熊フォメ", "穴専用"):
             _fc = _expand_formation(str(combination))
             bet_amount = len(_fc) * 100 if _fc else 400
         else:
@@ -853,7 +853,7 @@ def update_summary_sheet(
             rn = str(rec.get("レース", ""))
             race_key = (d, v, rn)
             race_keys.add(race_key)
-            if tier_name in ("熊フォメ", "展モタ"):
+            if tier_name in ("熊フォメ", "穴専用"):
                 fc = _expand_formation(combo)
                 bet = len(fc) * 100 if fc else 400
             else:
@@ -912,9 +912,9 @@ def update_summary_sheet(
     # ① ティア別グループ比較
     rows.append(_r("■ ティア別グループ比較"))
     rows.append(_r("グループ", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
-    for grp, tn, pf in [("地熊目 PT1-3合計",  "地熊目",  [1, 2, 3]),
-                         ("熊フォメ PT1-3合計", "熊フォメ", [1, 2, 3]),
-                         ("展モタ PT1-3合計",   "展モタ",   [1, 2, 3])]:
+    for grp, tn, pf in [("地熊目 全PT合計",  "地熊目",  None),
+                         ("熊フォメ 全PT合計", "熊フォメ", None),
+                         ("穴専用 全PT合計",   "穴専用",   None)]:
         s = _pt_tier_stats(tn, pf)
         rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
         rows.append(_r(grp, rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
@@ -922,22 +922,24 @@ def update_summary_sheet(
     rows.append(_r())
 
     # ② 地熊目セクション
-    rows.append(_r("■ 地熊目セクション（PT1〜3）"))
-    for pt in [1, 2, 3]:
-        _write_pt_section(f"地熊目 {pt}PT", _pt_tier_stats("地熊目", pt))
+    rows.append(_r("■ 地熊目セクション（全PT）"))
+    for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
+        lbl = f"{pt}PT" if isinstance(pt, int) else pt
+        _write_pt_section(f"地熊目 {lbl}", _pt_tier_stats("地熊目", pt))
     rows.append(_r())
 
     # ③ 熊フォメセクション
-    rows.append(_r("■ 熊フォメセクション（PT1〜3）"))
-    for pt in [1, 2, 3]:
-        _write_pt_section(f"熊フォメ {pt}PT", _pt_tier_stats("熊フォメ", pt))
-    rows.append(_r())
-
-    # ④ 展モタセクション
-    rows.append(_r("■ 展モタセクション（全PT）"))
+    rows.append(_r("■ 熊フォメセクション（全PT）"))
     for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
         lbl = f"{pt}PT" if isinstance(pt, int) else pt
-        _write_pt_section(f"展モタ {lbl}", _pt_tier_stats("展モタ", pt))
+        _write_pt_section(f"熊フォメ {lbl}", _pt_tier_stats("熊フォメ", pt))
+    rows.append(_r())
+
+    # ④ 穴専用セクション
+    rows.append(_r("■ 穴専用セクション（全PT）"))
+    for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
+        lbl = f"{pt}PT" if isinstance(pt, int) else pt
+        _write_pt_section(f"穴専用 {lbl}", _pt_tier_stats("穴専用", pt))
     rows.append(_r())
 
 
@@ -987,14 +989,14 @@ def update_summary_sheet(
     except Exception as e:
         print(f"[WARN] 条件付き書式設定エラー: {e}")
 
-    kuma_s = _pt_tier_stats("地熊目", [1, 2, 3])
-    ana_s  = _pt_tier_stats("展モタ")
+    kuma_s = _pt_tier_stats("地熊目")
+    ana_s  = _pt_tier_stats("穴専用")
     kuma_roi = f"{kuma_s['ret']/kuma_s['bets']*100:.1f}%" if kuma_s['bets'] > 0 else "0.0%"
     ana_roi  = f"{ana_s['ret']/ana_s['bets']*100:.1f}%" if ana_s['bets'] > 0 else "0.0%"
     print(
         f"[OK] {SUMMARY_SHEET}更新: "
-        f"地熊目(PT1-3) {len(kuma_s['race_keys'])}R ROI={kuma_roi} / "
-        f"展モタ {len(ana_s['race_keys'])}R ROI={ana_roi}"
+        f"地熊目(全PT) {len(kuma_s['race_keys'])}R ROI={kuma_roi} / "
+        f"穴専用 {len(ana_s['race_keys'])}R ROI={ana_roi}"
     )
 
 

@@ -1066,9 +1066,9 @@ def get_recommendations(
 
                     if len(tm_second) >= 2 and len(tm_third) >= 3:
                         tm_str = (
-                            f"1-"
+                            f"{''.join(str(b) for b in tm_third)}-"
                             f"{''.join(str(b) for b in tm_second)}-"
-                            f"{''.join(str(b) for b in tm_third)}"
+                            f"1"
                         )
                         all_recommendations.append({
                             "date":          race_row.get("date", ""),
@@ -1078,9 +1078,9 @@ def get_recommendations(
                             "prob":          "-",
                             "odds":          "-",
                             "expected_roi":  "-",
-                            "confidence":    "展モタ",
+                            "confidence":    "穴専用",
                             "odds_source":   nigerate_str,
-                            "tier":          "展モタ",
+                            "tier":          "穴専用",
                             "bet_label":     bet_label_tm,
                             "edge":          "-",
                             "arare_score":   arare_score,
