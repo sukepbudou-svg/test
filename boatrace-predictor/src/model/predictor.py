@@ -1006,23 +1006,20 @@ def get_recommendations(
                          if outer_cands else None)
 
             if inner_rep and outer_rep:
-                # bridge: 差し・まくり両展開の中間点（コース番号の重心）に最も近い艇
-                between = [b for b in available_nc
-                           if b != 1 and b != inner_rep and b != outer_rep
-                           and inner_rep < b < outer_rep]
-                if between:
+                # bridge: 展開的位置（重心への近さ）×40% + 実力スコア×60% のブレンドで選出
+                # 1号・inner_rep・outer_rep 以外の全艇が候補
+                bridge_cands = [b for b in available_nc
+                                if b != 1 and b != inner_rep and b != outer_rep]
+                if bridge_cands:
                     center = (inner_rep + outer_rep) / 2.0
-                    bridge = min(between, key=lambda b: abs(b - center))
+                    def _bridge_blend(b):
+                        pos  = 1.0 - abs(b - center) / 3.0
+                        perf = (_calc_inner_score(b, race_row) if b <= 3
+                                else _calc_threat_score(b, race_row))
+                        return pos * 0.4 + perf * 0.6
+                    bridge = max(bridge_cands, key=_bridge_blend)
                 else:
-                    alt = []
-                    if outer_rep + 1 <= 6 and outer_rep + 1 in available_nc:
-                        alt.append(outer_rep + 1)
-                    if inner_rep - 1 >= 2 and inner_rep - 1 in available_nc:
-                        alt.append(inner_rep - 1)
-                    if not alt:
-                        alt = [b for b in available_nc if b != 1 and b != inner_rep and b != outer_rep]
-                    center = (inner_rep + outer_rep) / 2.0
-                    bridge = min(alt, key=lambda b: abs(b - center)) if alt else None
+                    bridge = None
 
                 nc_second = sorted({inner_rep, outer_rep})
                 nc_third  = sorted({inner_rep, outer_rep} | ({bridge} if bridge else set()))
