@@ -1167,7 +1167,7 @@ def get_recommendations(
                                 f"{''.join(str(b) for b in perry_third)}"
                             )
 
-                            # ペリー来航: 必須2条件 + 補強1条件以上
+                            # ペリー来航: STベース（必須2条件 + 補強1条件以上）
                             st1 = _safe_float(race_row.get("boat1_exhibition_st"))
                             must_ok = (
                                 perry_ace_st is not None and perry_ace_st <= 0.10
@@ -1182,7 +1182,43 @@ def get_recommendations(
                                 or (g1_p is not None and g1_p <= 2)
                                 or (_pw is not None and _pw >= 5 and _pwd == "tail")
                             )
-                            perry_label = "ペリー来航" if (must_ok and support_ok) else "見送り"
+
+                            # ペリー来航★: STなし版（3グループ全通過）
+                            # グループA: 1号艇が複合的に弱い（2条件全て）
+                            g1_nst = _safe_float(race_row.get("boat1_meet_avg_st"))
+                            grp_a = (
+                                (m1_p is not None and m1_p < 0.35)
+                                and (
+                                    (g1_p is not None and g1_p <= 2)
+                                    or (g1_nst is not None and g1_nst >= 0.17)
+                                )
+                            )
+                            # グループB: 外艇軸に突破力の根拠（どれか1つ）
+                            ace_gn   = _safe_float(race_row.get(f"boat{perry_ace}_grade_num"))
+                            ace_et   = _safe_float(race_row.get(f"boat{perry_ace}_exhibition_time"))
+                            ace_nst  = _safe_float(race_row.get(f"boat{perry_ace}_meet_avg_st"))
+                            all_et   = [_safe_float(race_row.get(f"boat{b}_exhibition_time"))
+                                        for b in range(1, 7)]
+                            all_et   = [v for v in all_et if v and v > 0]
+                            ace_et_best = (ace_et is not None and ace_et > 0
+                                           and all_et and ace_et == min(all_et))
+                            grp_b = (
+                                (ace_gn is not None and ace_gn >= 4)           # A1選手
+                                or ace_et_best                                  # ET全艇最速
+                                or (ace_nst is not None and ace_nst <= 0.12)   # 節ST速い
+                            )
+                            # グループC: レース全体が荒れやすい（どれか1つ）
+                            grp_c = (
+                                arare_score >= ARARE_MIN_SCORE
+                                or (_pw is not None and _pw >= 5 and _pwd == "tail")
+                            )
+
+                            if must_ok and support_ok:
+                                perry_label = "ペリー来航"
+                            elif grp_a and grp_b and grp_c:
+                                perry_label = "ペリー来航★"
+                            else:
+                                perry_label = "見送り"
                             tier_label  = f"ペリー舟券({data_label})"
 
                             all_recommendations.append({

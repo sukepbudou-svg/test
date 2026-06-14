@@ -384,6 +384,17 @@ def append_prediction_row(
                     }},
                     "fields": "userEnteredFormat(backgroundColor,textFormat)",
                 }})
+            elif bet_label == "ペリー来航★":
+                reqs.append({"repeatCell": {
+                    "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
+                              "startColumnIndex": 8, "endColumnIndex": 9},
+                    "cell": {"userEnteredFormat": {
+                        "backgroundColor": {"red": 0.20, "green": 0.35, "blue": 0.65},
+                        "textFormat": {"bold": True,
+                                       "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
+                    }},
+                    "fields": "userEnteredFormat(backgroundColor,textFormat)",
+                }})
 
 
         # イン逃げ率（G列=index6）: 65%以上で薄赤、50%未満で薄青
