@@ -859,35 +859,170 @@ def get_recommendations(
         predictions = predict_race(model, race_row, payout_lookup, live_odds, weather, absent_boats)
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
 
-        # 新地熊（1号艇1着固定・内外バランス型フォーメーション・全PT対象）
-        # 1着: 1号艇固定 / 2着: 内側代表+外側代表 / 3着: 2着2艇+bridge艇
-        available_nc = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
-        if len(available_nc) < 4:
-            continue
+        def pick_by_edge(pool, tier_name, n=2, min_odds=0, max_odds=None,
+                         hot_threshold=2.0, fire_threshold=3.0, exclude_boats=None,
+                         min_prob=None, exclude_first_boats=None, sort_by="edge"):
+            """指定オッズ範囲の組み合わせからエッジ上位n点を返す"""
+            filtered = pool.copy()
+            filtered["odds_value"] = pd.to_numeric(filtered["odds_value"], errors="coerce")
+            filtered = filtered.dropna(subset=["odds_value"])
+            if min_odds > 0:
+                filtered = filtered[filtered["odds_value"] >= min_odds]
+            if max_odds is not None:
+                filtered = filtered[filtered["odds_value"] <= max_odds]
+            if exclude_boats:
+                for col in ("boat1", "boat2", "boat3"):
+                    if col in filtered.columns:
+                        filtered = filtered[~filtered[col].isin(exclude_boats)]
+            if exclude_first_boats and "boat1" in filtered.columns:
+                filtered = filtered[~filtered["boat1"].isin(exclude_first_boats)]
+            if min_prob is not None:
+                filtered = filtered[filtered["prob"] >= min_prob]
+            if filtered.empty:
+                return pd.DataFrame(), 0, False, None
+            filtered["edge_score"] = filtered["prob"] * filtered["odds_value"]
+            if sort_by == "prob":
+                filtered = filtered.sort_values("prob", ascending=False).reset_index(drop=True)
+            elif sort_by == "blend":
+                filtered["blend_score"] = (filtered["prob"] * filtered["edge_score"]) ** 0.5
+                filtered = filtered.sort_values("blend_score", ascending=False).reset_index(drop=True)
+            else:
+                filtered = filtered.sort_values("edge_score", ascending=False).reset_index(drop=True)
+            top_edge = float(filtered.iloc[0]["edge_score"])
+            if top_edge >= fire_threshold:
+                star_level = 3
+            elif top_edge >= hot_threshold:
+                star_level = 2
+            elif top_edge >= 1.3:
+                star_level = 1
+            else:
+                star_level = 0
+            is_confident = star_level >= 2
+            topN = filtered.head(n).copy()
+            topN["tier"] = tier_name
+            second_b2 = int(filtered.iloc[n]["boat2"]) if len(filtered) > n else None
+            return topN.reset_index(drop=True), star_level, is_confident, second_b2
 
-        if 1 in available_nc:
-            # 内側代表: 2・3号を複合スコア（展示ST・ET・モーター・グレード・今節成績）で比較
+        # 地熊目: 全120通りからprob上位2点
+        lucky_pool, lucky_star, _, _ = pick_by_edge(
+            by_prob, "地熊目", n=20, min_odds=0,
+            hot_threshold=99, fire_threshold=4.0, sort_by="prob")
+        lucky_rows = []
+        used_combos: set = set()
+        for _, row in lucky_pool.iterrows():
+            if row["combination"] not in used_combos:
+                used_combos.add(row["combination"])
+                lucky_rows.append(row)
+            if len(lucky_rows) >= 2:
+                break
+        lucky_recs = pd.DataFrame(lucky_rows).reset_index(drop=True) if lucky_rows else pd.DataFrame()
+
+        def _make_row(rec, star_lv, second):
+            if arare_ok:
+                confidence, bet_label = "★★★★", "神熱"
+            elif arare_score >= ARARE_MIN_SCORE:
+                confidence, bet_label = "★★★☆", "灼熱"
+            elif arare_score == 1:
+                confidence, bet_label = "★☆☆☆", "熊熱"
+            else:
+                confidence, bet_label = "★☆☆☆", "見送り"
+            src = rec.get("odds_source", "history")
+            edge_val = round(float(rec["prob"]) * float(rec["odds_value"]), 2)
+            combo = rec["combination"]
+            return {
+                "date": race_row.get("date", ""),
+                "venue_name": race_row.get("venue_name", ""),
+                "race_no": race_row.get("race_no", ""),
+                "combination": combo,
+                "prob": f"{rec['prob']*100:.2f}%",
+                "odds": f"{rec['odds_value']}倍" if src == "live" else f"{rec['odds_value']}倍(履歴)",
+                "expected_roi": f"{rec['expected_roi']*100:.0f}%",
+                "confidence": confidence,
+                "odds_source": nigerate_str,
+                "tier": rec.get("tier", ""),
+                "bet_label": bet_label,
+                "edge": str(edge_val),
+                "arare_score": arare_score,
+                "arare_reasons": " / ".join(arare_reasons),
+                "boat1_risk": _calc_boat1_risk(race_row),
+            }
+
+        if not lucky_recs.empty:
+            for _, rec in lucky_recs.iterrows():
+                all_recommendations.append(_make_row(rec, lucky_star, None))
+
+        # 熊フォメ（全PT対象・ML確率上位2艇を1着、脅威スコアで2着・3着を拡張）
+        kuma_wp = {}
+        for bn in range(1, 7):
+            if absent_boats and bn in absent_boats:
+                continue
+            mask = by_prob["boat1"] == bn
+            kuma_wp[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
+        kuma_ranked = sorted(kuma_wp, key=lambda b: kuma_wp[b], reverse=True)
+        if len(kuma_ranked) >= 3:
+            kuma_first = kuma_ranked[:2]
+            kuma_pool2 = [b for b in kuma_ranked if b not in set(kuma_first)]
+            kuma_threat_a = (max(kuma_pool2, key=lambda b: _calc_threat_score(b, race_row))
+                             if kuma_pool2 else None)
+            kuma_second = sorted(set(kuma_first) | {kuma_threat_a}) if kuma_threat_a else sorted(kuma_first)
+            if arare_score >= 7:
+                kuma_pool3 = [b for b in kuma_ranked if b not in set(kuma_second)]
+                kuma_threat_b = (max(kuma_pool3, key=lambda b: _calc_threat_score(b, race_row))
+                                 if kuma_pool3 else None)
+                kuma_third = sorted(set(kuma_second) | {kuma_threat_b}) if kuma_threat_b else kuma_second
+            else:
+                kuma_third = kuma_second
+            kuma_str = (
+                f"{''.join(str(b) for b in sorted(kuma_first))}-"
+                f"{''.join(str(b) for b in kuma_second)}-"
+                f"{''.join(str(b) for b in kuma_third)}"
+            )
+            all_recommendations.append({
+                "date":          race_row.get("date", ""),
+                "venue_name":    race_row.get("venue_name", ""),
+                "race_no":       race_row.get("race_no", ""),
+                "combination":   kuma_str,
+                "prob":          "-",
+                "odds":          "-",
+                "expected_roi":  "-",
+                "confidence":    "熊フォメ",
+                "odds_source":   nigerate_str,
+                "tier":          "熊フォメ",
+                "bet_label":     "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り"),
+                "edge":          "-",
+                "arare_score":   arare_score,
+                "arare_reasons": " / ".join(arare_reasons),
+                "boat1_risk":    _calc_boat1_risk(race_row),
+            })
+
+        # 地熊2.0（1号艇1着固定・展開ベースbridge選出）
+        available_nc = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
+        if len(available_nc) >= 4 and 1 in available_nc:
             inner_cands = [b for b in [2, 3] if b in available_nc]
             inner_rep = (max(inner_cands, key=lambda b: _calc_inner_score(b, race_row))
                          if inner_cands else None)
-
-            # 外側代表: 4〜6号を脅威スコアで比較
             outer_cands = [b for b in [4, 5, 6] if b in available_nc]
             outer_rep = (max(outer_cands, key=lambda b: _calc_threat_score(b, race_row))
                          if outer_cands else None)
 
             if inner_rep and outer_rep:
-                # bridge_boat: 内外代表の「間」にいる艇（展開のつながり）
+                # bridge: 差し・まくり両展開の中間点（コース番号の重心）に最も近い艇
                 between = [b for b in available_nc
                            if b != 1 and b != inner_rep and b != outer_rep
                            and inner_rep < b < outer_rep]
-                if not between:
-                    between = [b for b in available_nc
-                               if b != 1 and b != inner_rep and b != outer_rep]
-                bridge = (max(between,
-                              key=lambda b: (_calc_inner_score(b, race_row) if b <= 3
-                                             else _calc_threat_score(b, race_row)))
-                          if between else None)
+                if between:
+                    center = (inner_rep + outer_rep) / 2.0
+                    bridge = min(between, key=lambda b: abs(b - center))
+                else:
+                    alt = []
+                    if outer_rep + 1 <= 6 and outer_rep + 1 in available_nc:
+                        alt.append(outer_rep + 1)
+                    if inner_rep - 1 >= 2 and inner_rep - 1 in available_nc:
+                        alt.append(inner_rep - 1)
+                    if not alt:
+                        alt = [b for b in available_nc if b != 1 and b != inner_rep and b != outer_rep]
+                    center = (inner_rep + outer_rep) / 2.0
+                    bridge = min(alt, key=lambda b: abs(b - center)) if alt else None
 
                 nc_second = sorted({inner_rep, outer_rep})
                 nc_third  = sorted({inner_rep, outer_rep} | ({bridge} if bridge else set()))
@@ -909,9 +1044,9 @@ def get_recommendations(
                         "prob":          "-",
                         "odds":          "-",
                         "expected_roi":  "-",
-                        "confidence":    "新地熊",
+                        "confidence":    "地熊2.0",
                         "odds_source":   nigerate_str,
-                        "tier":          "新地熊",
+                        "tier":          "地熊2.0",
                         "bet_label":     nc_label,
                         "edge":          "-",
                         "arare_score":   arare_score,
