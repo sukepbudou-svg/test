@@ -1190,7 +1190,7 @@ def get_recommendations(
                                 or (_pw is not None and _pw >= 5 and _pwd == "tail")
                             )
 
-                            # ペリー来航★: STなし版（3グループ全通過）
+                            # ペリー来航★: STなし版（2グループ全通過・荒れPT判断はユーザーに委ねる）
                             # グループA: 1号艇が複合的に弱い（2条件全て）
                             g1_nst = _safe_float(race_row.get("boat1_meet_avg_st"))
                             grp_a = (
@@ -1214,15 +1214,10 @@ def get_recommendations(
                                 or ace_et_best                                  # ET全艇最速
                                 or (ace_nst is not None and ace_nst <= 0.12)   # 節ST速い
                             )
-                            # グループC: レース全体が荒れやすい（どれか1つ）
-                            grp_c = (
-                                arare_score >= ARARE_MIN_SCORE
-                                or (_pw is not None and _pw >= 5 and _pwd == "tail")
-                            )
 
                             if must_ok and support_ok:
                                 perry_label = "ペリー来航"
-                            elif grp_a and grp_b and grp_c:
+                            elif grp_a and grp_b:
                                 perry_label = "ペリー来航★"
                             else:
                                 perry_label = "見送り"
