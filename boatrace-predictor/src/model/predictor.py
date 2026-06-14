@@ -1310,23 +1310,7 @@ def get_recommendations(
                                             f"{perry_ace2}-{kai2_inner1}-"
                                             f"{''.join(str(b) for b in third_kai2)}"
                                         )
-                                        # ペリー来航条件をperry_ace2で再評価
-                                        ace2_gn  = _safe_float(race_row.get(f"boat{perry_ace2}_grade_num"))
-                                        ace2_et  = _safe_float(race_row.get(f"boat{perry_ace2}_exhibition_time"))
-                                        ace2_nst = _safe_float(race_row.get(f"boat{perry_ace2}_meet_avg_st"))
-                                        ace2_et_best = (ace2_et is not None and ace2_et > 0
-                                                        and all_et and ace2_et == min(all_et))
-                                        grp_b2 = (
-                                            (ace2_gn is not None and ace2_gn >= 4 and not inner_has_a1)
-                                            or ace2_et_best
-                                            or (ace2_nst is not None and ace2_nst <= 0.12)
-                                        )
-                                        if must_ok and support_ok:
-                                            kai2_label = "ペリー来航"
-                                        elif grp_a and grp_b2 and grp_c:
-                                            kai2_label = "ペリー来航★"
-                                        else:
-                                            kai2_label = "見送り"
+                                        # 来航判定はペリー舟券の軸(perry_ace)基準のperry_labelをそのまま使用
                                         all_recommendations.append({
                                             "date":          race_row.get("date", ""),
                                             "venue_name":    race_row.get("venue_name", ""),
@@ -1338,7 +1322,7 @@ def get_recommendations(
                                             "confidence":    "ペリー改2",
                                             "odds_source":   nigerate_str,
                                             "tier":          "ペリー改2",
-                                            "bet_label":     kai2_label,
+                                            "bet_label":     perry_label,
                                             "edge":          "-",
                                             "arare_score":   arare_score,
                                             "arare_reasons": " / ".join(arare_reasons),
