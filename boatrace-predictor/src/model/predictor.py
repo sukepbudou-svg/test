@@ -1049,10 +1049,10 @@ def get_recommendations(
                 elif best_et_boat is not None and best_et_boat <= 3:
                     # 差し展開: 内艇ETが全艇中最速 → その内艇が1着2艇目(B)
                     second_ace = best_et_boat
-                    # X: 外側脅威艇（4〜6号の脅威スコア最高）がまくり余波で来る
-                    outer_cands = [b for b in available_nc if b != 1 and b != second_ace and b >= 4]
-                    threat_ace = (max(outer_cands, key=lambda b: _calc_threat_score(b, race_row))
-                                  if outer_cands else None)
+                    # X: 制限なし（内内・内外どちらもあり）、脅威スコアで実力判定
+                    remaining_diff = [b for b in available_nc if b not in {1, second_ace}]
+                    threat_ace = (max(remaining_diff, key=lambda b: _calc_threat_score(b, race_row))
+                                  if remaining_diff else None)
 
                 else:
                     # ETデータなし
