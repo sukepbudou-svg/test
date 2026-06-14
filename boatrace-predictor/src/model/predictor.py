@@ -1117,13 +1117,13 @@ def get_recommendations(
                     mask = by_prob["boat1"] == bn
                     p_ml_map[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
 
-                # フォールバック: ①ST ②節ST ③ET ④ML（ST/節STは小さいほど速い、ML確率は大が速い）
+                # フォールバック: ①ST ②ET ③節ST ④ML（ST/ET/節STは小、ML確率は大が速い）
                 if p_st_map:
                     use_map, data_label, p_asc = p_st_map, "ST", True
-                elif p_nst_map:
-                    use_map, data_label, p_asc = p_nst_map, "節ST", True
                 elif p_et_map:
                     use_map, data_label, p_asc = p_et_map, "ET", True
+                elif p_nst_map:
+                    use_map, data_label, p_asc = p_nst_map, "節ST", True
                 elif p_ml_map:
                     use_map, data_label, p_asc = p_ml_map, "ML", False
                 else:
