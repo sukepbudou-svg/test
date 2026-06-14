@@ -970,32 +970,42 @@ def get_recommendations(
         if True:
             available_perry = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             if len(available_perry) >= 3:
-                # 外艇（3〜6号）の展示ST収集
-                outer_st_map: dict[int, float] = {}
+                # 外艇（3〜6号）のデータ収集（優先順: ①展示ST ②展示タイム ③今節平均ST ④ML確率）
+                p_st_map:  dict[int, float] = {}
+                p_et_map:  dict[int, float] = {}
+                p_nst_map: dict[int, float] = {}
+                p_ml_map:  dict[int, float] = {}
                 for bn in [3, 4, 5, 6]:
                     if bn not in available_perry:
                         continue
-                    st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-                    if st and st > 0:
-                        outer_st_map[bn] = st
+                    v = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                    if v and v > 0:
+                        p_st_map[bn] = v
+                    v = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
+                    if v and v > 0:
+                        p_et_map[bn] = v
+                    v = _safe_float(race_row.get(f"boat{bn}_meet_avg_st"))
+                    if v and v > 0:
+                        p_nst_map[bn] = v
+                    mask = by_prob["boat1"] == bn
+                    p_ml_map[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
 
-                # 展示STがなければ展示タイムで代替
-                if outer_st_map:
-                    use_map = outer_st_map
+                # フォールバック: ①ST ②ET ③節ST ④ML（ST/ET/節STは小、ML確率は大が速い）
+                if p_st_map:
+                    use_map, data_label, p_asc = p_st_map, "ST", True
+                elif p_et_map:
+                    use_map, data_label, p_asc = p_et_map, "ET", True
+                elif p_nst_map:
+                    use_map, data_label, p_asc = p_nst_map, "節ST", True
+                elif p_ml_map:
+                    use_map, data_label, p_asc = p_ml_map, "ML", False
                 else:
-                    outer_et_map: dict[int, float] = {}
-                    for bn in [3, 4, 5, 6]:
-                        if bn not in available_perry:
-                            continue
-                        et = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
-                        if et and et > 0:
-                            outer_et_map[bn] = et
-                    use_map = outer_et_map
+                    use_map, data_label, p_asc = {}, "", True
 
                 if use_map:
-                    # 軸艇: 展示STが最も速い（小さい）外艇
-                    perry_ace = min(use_map, key=lambda b: use_map[b])
-                    perry_ace_st = outer_st_map.get(perry_ace)
+                    perry_ace = (min(use_map, key=lambda b: use_map[b]) if p_asc
+                                 else max(use_map, key=lambda b: use_map[b]))
+                    perry_ace_st = p_st_map.get(perry_ace)
 
                     # 2着候補: perry_aceより内側の艇（1号艇除く、perry_aceに近い順）
                     inner_candidates = sorted(
@@ -1019,13 +1029,23 @@ def get_recommendations(
                                 f"{''.join(str(b) for b in perry_third)}"
                             )
 
-                            # ペリー来航: 軸艇ST≤0.10 かつ 1号艇ST≥0.18
+                            # ペリー来航: 必須2条件 + 補強1条件以上
                             st1 = _safe_float(race_row.get("boat1_exhibition_st"))
-                            perry_kobe = (
+                            must_ok = (
                                 perry_ace_st is not None and perry_ace_st <= 0.10
                                 and st1 is not None and st1 >= 0.18
                             )
-                            perry_label = "ペリー来航" if perry_kobe else "ペリー"
+                            m1_p = _safe_float(race_row.get("boat1_motor_2rate"))
+                            g1_p = _safe_float(race_row.get("boat1_grade_num"))
+                            _pw  = _safe_float((weather or {}).get("wind_speed"))
+                            _pwd = (weather or {}).get("wind_direction", "")
+                            support_ok = (
+                                (m1_p is not None and m1_p < 0.35)
+                                or (g1_p is not None and g1_p <= 2)
+                                or (_pw is not None and _pw >= 5 and _pwd == "tail")
+                            )
+                            perry_label = "ペリー来航" if (must_ok and support_ok) else "ペリー"
+                            tier_label  = f"ペリー舟券({data_label})"
 
                             all_recommendations.append({
                                 "date":          race_row.get("date", ""),
@@ -1035,9 +1055,9 @@ def get_recommendations(
                                 "prob":          "-",
                                 "odds":          "-",
                                 "expected_roi":  "-",
-                                "confidence":    "ペリー舟券",
+                                "confidence":    tier_label,
                                 "odds_source":   nigerate_str,
-                                "tier":          "ペリー舟券",
+                                "tier":          tier_label,
                                 "bet_label":     perry_label,
                                 "edge":          "-",
                                 "arare_score":   arare_score,
