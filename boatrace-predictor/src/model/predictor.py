@@ -1103,6 +1103,15 @@ def get_recommendations(
                         reverse=True
                     )
                     inner2 = inner_candidates[:2]
+                    # 内側が1艇しかない場合は外側に補完して2着を必ず2艇にする
+                    if len(inner2) < 2:
+                        outer_candidates = sorted(
+                            [b for b in available_perry if b > perry_ace]
+                        )
+                        for ob in outer_candidates:
+                            if ob not in inner2:
+                                inner2.append(ob)
+                                break
 
                     if inner2:
                         # 3着: 1号艇 + inner2 + perry_aceの外側1艇
