@@ -1055,7 +1055,20 @@ def get_recommendations(
                                   if outer_cands else None)
 
                 else:
-                    # ETデータなし: 節STで代替を試み、なければ内外グループ比較で展開を推定
+                    # ETデータなし
+                    # ── B選出: 個艇の今日の力（モーター×スキル、MLなし）で最強艇を指名 ──
+                    def _nc_score_no_ml(bn):
+                        motor = _safe_float(race_row.get(f"boat{bn}_motor_2rate")) or 0.0
+                        gn_raw = race_row.get(f"boat{bn}_grade_num", 2)
+                        try:
+                            gn = int(float(gn_raw)) if gn_raw is not None else 2
+                        except (TypeError, ValueError):
+                            gn = 2
+                        grade = {4: 1.0, 3: 0.67, 2: 0.33, 1: 0.0}.get(gn, 0.33)
+                        nat2 = _safe_float(race_row.get(f"boat{bn}_national_2rate")) or 0.0
+                        return motor * 0.50 + (grade + nat2) / 2.0 * 0.50
+
+                    # 節STがあれば展開判定に使う（ET代替）
                     nc_nst_vals = {}
                     for b in available_nc:
                         v = _safe_float(race_row.get(f"boat{b}_meet_avg_st"))
@@ -1063,35 +1076,35 @@ def get_recommendations(
                             nc_nst_vals[b] = v
                     best_nst_boat = min(nc_nst_vals, key=nc_nst_vals.get) if nc_nst_vals else None
 
-                    if best_nst_boat is not None and best_nst_boat >= 4:
-                        # 節ST最速が外艇 → まくり展開気味
-                        second_ace = best_nst_boat
-                    elif best_nst_boat is not None and best_nst_boat <= 3:
-                        # 節ST最速が内艇 → 差し展開気味
-                        second_ace = best_nst_boat
-                    else:
-                        # 節STもなし: 内外グループのモーター平均を比較して優勢グループからB選出
-                        inner_boats_nc = [b for b in available_nc if b != 1 and b <= 3]
-                        outer_boats_nc = [b for b in available_nc if b >= 4]
-                        avg_inner = (sum((_safe_float(race_row.get(f"boat{b}_motor_2rate")) or 0)
-                                        for b in inner_boats_nc) / len(inner_boats_nc)
-                                     if inner_boats_nc else 0.0)
-                        avg_outer = (sum((_safe_float(race_row.get(f"boat{b}_motor_2rate")) or 0)
-                                        for b in outer_boats_nc) / len(outer_boats_nc)
-                                     if outer_boats_nc else 0.0)
-                        if avg_outer - avg_inner > 0.03 and outer_boats_nc:
-                            # 外グループ優勢
-                            second_ace = max(outer_boats_nc, key=_nc_score)
-                        elif avg_inner - avg_outer > 0.03 and inner_boats_nc:
-                            # 内グループ優勢
-                            second_ace = max(inner_boats_nc, key=_nc_score)
+                    if best_nst_boat is not None:
+                        # 節STで展開の方向を決め、そのゾーンから個艇力最強をB指名
+                        if best_nst_boat >= 4:
+                            zone_b = [b for b in available_nc if b != 1 and b >= 4]
                         else:
-                            # 均衡: 総合スコア上位
-                            second_ace = max(non_first, key=_nc_score)
-                    # X: グループ制限なし（外外・内内・内外すべてあり）
-                    remaining_nc = [b for b in available_nc if b not in {1, second_ace}]
-                    threat_ace = (max(remaining_nc, key=lambda b: _calc_threat_score(b, race_row))
-                                  if remaining_nc else None)
+                            zone_b = [b for b in available_nc if b != 1 and b <= 3]
+                        second_ace = max(zone_b, key=_nc_score_no_ml) if zone_b else max(non_first, key=_nc_score_no_ml)
+                    else:
+                        # 節STもなし: 全艇中モーター×スキルで最強個艇をB指名
+                        second_ace = max(non_first, key=_nc_score_no_ml)
+
+                    # ── X選出: 内外グループのモーター平均比較で優勢ゾーンから脅威最高艇 ──
+                    # 外外・内内・内外すべてあり得る（グループ制限なし）
+                    inner_boats_nc = [b for b in available_nc if b != 1 and b != second_ace and b <= 3]
+                    outer_boats_nc = [b for b in available_nc if b != second_ace and b >= 4]
+                    avg_inner_x = (sum((_safe_float(race_row.get(f"boat{b}_motor_2rate")) or 0)
+                                       for b in inner_boats_nc) / len(inner_boats_nc)
+                                   if inner_boats_nc else 0.0)
+                    avg_outer_x = (sum((_safe_float(race_row.get(f"boat{b}_motor_2rate")) or 0)
+                                       for b in outer_boats_nc) / len(outer_boats_nc)
+                                   if outer_boats_nc else 0.0)
+                    if avg_outer_x - avg_inner_x > 0.03 and outer_boats_nc:
+                        zone_x = outer_boats_nc
+                    elif avg_inner_x - avg_outer_x > 0.03 and inner_boats_nc:
+                        zone_x = inner_boats_nc
+                    else:
+                        zone_x = [b for b in available_nc if b not in {1, second_ace}]
+                    threat_ace = (max(zone_x, key=lambda b: _calc_threat_score(b, race_row))
+                                  if zone_x else None)
 
                 # 熊フォメ型: AB-ABX-ABX
                 nc_first  = sorted([1, second_ace])
