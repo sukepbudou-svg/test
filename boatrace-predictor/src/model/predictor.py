@@ -995,8 +995,8 @@ def get_recommendations(
                 "boat1_risk":    _calc_boat1_risk(race_row),
             })
 
-        # 地熊2.0（1号艇1着固定＋ETで展開シナリオを判定して2着・3着を選出）
-        # 形: 1-AB-ABC（4点）| まくり/差し展開シナリオに応じて2着・3着艇が変わる
+        # 地熊2.0（熊フォメ型: AB-ABX-ABX）
+        # ETで展開シナリオを判定 → B(1着2艇目)とX(3着追加艇)を決める、形は熊フォメと同じ
         available_nc = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
         if len(available_nc) >= 3 and 1 in available_nc:
             # ETランク: 全艇中での順位を0〜1に正規化（データなし=0.5の中立値）
@@ -1033,58 +1033,40 @@ def get_recommendations(
                 et    = nc_et_ranks.get(bn, 0.5)
                 return ml * 0.30 + motor * 0.25 + skill * 0.25 + et * 0.20
 
-            # 1着: 1号艇固定、展開シナリオに基づいて2着・3着を選出
+            # 1着: 1号艇 + ETシナリオで選んだ艇（熊フォメ型: AB-ABX-ABX）
             non_first = [b for b in available_nc if b != 1]
             if non_first:
-                nc_first = [1]  # 1着は1号艇のみ固定
-
-                # ETベースで今日の展開シナリオを判定
+                # ETベースで今日の展開シナリオを判定し、1着の2艇目(B)と3着追加艇(X)を決める
                 best_et_boat = min(nc_et_vals, key=nc_et_vals.get) if nc_et_vals else None
 
                 if best_et_boat is not None and best_et_boat >= 4:
-                    # まくり展開: 外艇ETが全艇中最速 → その外艇 + 内側の差し艇を2着候補
-                    inner_diff = [b for b in available_nc if b != 1 and b <= 3]
-                    inner_for_2nd = max(inner_diff, key=_nc_score) if inner_diff else None
-                    nc_second = sorted({best_et_boat} | ({inner_for_2nd} if inner_for_2nd else set()))
-                    # 3着: 2着2艇 + まくり後の余波で残るスコア上位艇
-                    remaining_nc = [b for b in available_nc if b != 1 and b not in set(nc_second)]
-                    extra_third = (max(remaining_nc, key=lambda b: _calc_threat_score(b, race_row))
-                                   if remaining_nc else None)
-                    nc_third = sorted(set(nc_second) | ({extra_third} if extra_third else set()))
+                    # まくり展開: 外艇ETが全艇中最速 → その外艇が1着2艇目(B)
+                    second_ace = best_et_boat
+                    # X: 内側の差し艇（2〜3号のスコア上位）がまくり後に差してくる
+                    inner_diff = [b for b in available_nc if b != 1 and b != second_ace and b <= 3]
+                    threat_ace = max(inner_diff, key=_nc_score) if inner_diff else None
 
                 elif best_et_boat is not None and best_et_boat <= 3:
-                    # 差し展開: 内艇ETが全艇中最速 → その内艇 + 外側の脅威艇を2着候補
-                    outer_cands = [b for b in available_nc if b != 1 and b >= 4]
-                    outer_for_2nd = (max(outer_cands, key=lambda b: _calc_threat_score(b, race_row))
-                                     if outer_cands else None)
-                    nc_second = sorted({best_et_boat} | ({outer_for_2nd} if outer_for_2nd else set()))
-                    # 3着: 2着2艇 + 差し余波で来る残りスコア上位艇
-                    remaining_nc = [b for b in available_nc if b != 1 and b not in set(nc_second)]
-                    extra_third = max(remaining_nc, key=_nc_score) if remaining_nc else None
-                    nc_third = sorted(set(nc_second) | ({extra_third} if extra_third else set()))
+                    # 差し展開: 内艇ETが全艇中最速 → その内艇が1着2艇目(B)
+                    second_ace = best_et_boat
+                    # X: 外側脅威艇（4〜6号の脅威スコア最高）がまくり余波で来る
+                    outer_cands = [b for b in available_nc if b != 1 and b != second_ace and b >= 4]
+                    threat_ace = (max(outer_cands, key=lambda b: _calc_threat_score(b, race_row))
+                                  if outer_cands else None)
 
                 else:
-                    # ETデータなし: 総合スコア上位2艇を2着に、脅威スコア最高艇を3着追加
-                    sorted_nf = sorted(non_first, key=_nc_score, reverse=True)
-                    nc_second = sorted(sorted_nf[:2])
-                    remaining_nc = [b for b in available_nc if b != 1 and b not in set(nc_second)]
-                    extra_third = (max(remaining_nc, key=lambda b: _calc_threat_score(b, race_row))
-                                   if remaining_nc else None)
-                    nc_third = sorted(set(nc_second) | ({extra_third} if extra_third else set()))
+                    # ETデータなし: 総合スコア上位艇をB、脅威スコア最高艇をX
+                    second_ace = max(non_first, key=_nc_score)
+                    remaining_nc = [b for b in available_nc if b not in {1, second_ace}]
+                    threat_ace = (max(remaining_nc, key=lambda b: _calc_threat_score(b, race_row))
+                                  if remaining_nc else None)
 
-                # 2着が1艇しかない場合は残りからスコア上位を補完
-                if len(nc_second) < 2:
-                    fill = [b for b in available_nc if b != 1 and b not in set(nc_second)]
-                    if fill:
-                        nc_second = sorted(set(nc_second) | {max(fill, key=_nc_score)})
-                # 3着が2艇以下の場合は補完
-                while len(nc_third) < 3:
-                    fill = [b for b in available_nc if b != 1 and b not in set(nc_third)]
-                    if not fill:
-                        break
-                    nc_third = sorted(set(nc_third) | {max(fill, key=_nc_score)})
+                # 熊フォメ型: AB-ABX-ABX
+                nc_first  = sorted([1, second_ace])
+                nc_second = sorted(set(nc_first) | ({threat_ace} if threat_ace else set()))
+                nc_third  = nc_second
 
-                if len(nc_second) >= 2 and len(nc_third) >= 3:
+                if len(nc_first) >= 2 and len(nc_second) >= 3:
                     nc_str = (
                         f"{''.join(str(b) for b in nc_first)}-"
                         f"{''.join(str(b) for b in nc_second)}-"
