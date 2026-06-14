@@ -576,7 +576,7 @@ def update_result_row(
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
         # フォーメーション: 展開して照合（実際の点数×100円で収支計算）
-        if tier in ("熊フォメ", "地熊2.0") or tier.startswith("ペリー舟券"):
+        if tier in ("熊フォメ", "地熊2.0") or tier.startswith("ペリー舟券") or tier.startswith("ペリー改"):
             form_combos = _expand_formation(combination)
             hit    = "○" if actual_combination in form_combos else "×"
             payout = actual_payout if hit == "○" else 0
@@ -690,7 +690,7 @@ def _compute_tier_stats(records: list, tier_check) -> dict:
             daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
         # フォーメーションは実際のcombo数×100円、それ以外は1票=100円
         tier_name = str(rec.get("狙い", ""))
-        if tier_name in ("熊フォメ", "地熊2.0") or tier_name.startswith("ペリー舟券"):
+        if tier_name in ("熊フォメ", "地熊2.0") or tier_name.startswith("ペリー舟券") or tier_name.startswith("ペリー改"):
             _fc = _expand_formation(str(combination))
             bet_amount = len(_fc) * 100 if _fc else 400
         else:
@@ -879,7 +879,7 @@ def update_summary_sheet(
             rn = str(rec.get("レース", ""))
             race_key = (d, v, rn)
             race_keys.add(race_key)
-            if tier_name in ("熊フォメ", "地熊2.0") or tier_val.startswith("ペリー舟券"):
+            if tier_name in ("熊フォメ", "地熊2.0") or tier_val.startswith("ペリー舟券") or tier_val.startswith("ペリー改"):
                 fc = _expand_formation(combo)
                 bet = len(fc) * 100 if fc else 400
             else:
@@ -951,6 +951,12 @@ def update_summary_sheet(
         ("ペリー舟券 PT1-3",  "ペリー舟券",  [1, 2, 3]),
         ("ペリー舟券 PT4-6",  "ペリー舟券",  [4, 5, 6]),
         ("ペリー舟券 PT7以上", "ペリー舟券",  "7以上"),
+        ("ペリー改1  PT1-3",  "ペリー改1",  [1, 2, 3]),
+        ("ペリー改1  PT4-6",  "ペリー改1",  [4, 5, 6]),
+        ("ペリー改1  PT7以上", "ペリー改1",  "7以上"),
+        ("ペリー改2  PT1-3",  "ペリー改2",  [1, 2, 3]),
+        ("ペリー改2  PT4-6",  "ペリー改2",  [4, 5, 6]),
+        ("ペリー改2  PT7以上", "ペリー改2",  "7以上"),
     ]:
         s = _pt_tier_stats(tn, pf)
         rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
@@ -985,6 +991,15 @@ def update_summary_sheet(
         lbl = f"{pt}PT" if isinstance(pt, int) else pt
         _write_pt_section(f"ペリー舟券 {lbl}", _pt_tier_stats("ペリー舟券", pt))
     rows.append(_r())
+
+    # ⑥ ペリー改セクション
+    rows.append(_r("■ ペリー改セクション（全PT）"))
+    for kai_tier in ["ペリー改1", "ペリー改2"]:
+        rows.append(_r(f"▼ {kai_tier}"))
+        for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
+            lbl = f"{pt}PT" if isinstance(pt, int) else pt
+            _write_pt_section(f"{kai_tier} {lbl}", _pt_tier_stats(kai_tier, pt))
+        rows.append(_r())
 
 
     # シートへ書き込み

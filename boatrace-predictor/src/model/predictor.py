@@ -1251,6 +1251,100 @@ def get_recommendations(
                                 "boat1_risk":    _calc_boat1_risk(race_row),
                             })
 
+                            # ペリー改1（4点）: 同じ軸・inner2 + {1号艇+脅威艇}の3着2艇
+                            remaining_kai1 = [b for b in available_perry
+                                              if b not in {perry_ace, 1} and b not in set(inner2)]
+                            threat_kai1 = (max(remaining_kai1, key=lambda b: _calc_threat_score(b, race_row))
+                                           if remaining_kai1 else None)
+                            third_kai1 = sorted({1} | ({threat_kai1} if threat_kai1 else set()))
+                            if len(third_kai1) < 2:
+                                fill_kai1 = [b for b in available_perry
+                                             if b not in {perry_ace} and b not in set(inner2) and b not in set(third_kai1)]
+                                if fill_kai1:
+                                    third_kai1 = sorted(set(third_kai1) | {fill_kai1[0]})
+                            if len(inner2) >= 2 and len(third_kai1) >= 2:
+                                kai1_str = (
+                                    f"{perry_ace}-"
+                                    f"{''.join(str(b) for b in inner2)}-"
+                                    f"{''.join(str(b) for b in third_kai1)}"
+                                )
+                                all_recommendations.append({
+                                    "date":          race_row.get("date", ""),
+                                    "venue_name":    race_row.get("venue_name", ""),
+                                    "race_no":       race_row.get("race_no", ""),
+                                    "combination":   kai1_str,
+                                    "prob":          "-",
+                                    "odds":          "-",
+                                    "expected_roi":  "-",
+                                    "confidence":    "ペリー改1",
+                                    "odds_source":   nigerate_str,
+                                    "tier":          "ペリー改1",
+                                    "bet_label":     perry_label,
+                                    "edge":          "-",
+                                    "arare_score":   arare_score,
+                                    "arare_reasons": " / ".join(arare_reasons),
+                                    "boat1_risk":    _calc_boat1_risk(race_row),
+                                })
+
+                            # ペリー改2（2点）: ET2位外艇が軸
+                            sorted_outer = (sorted(use_map.keys(), key=lambda b: use_map[b])
+                                            if p_asc else
+                                            sorted(use_map.keys(), key=lambda b: use_map[b], reverse=True))
+                            perry_ace2 = sorted_outer[1] if len(sorted_outer) >= 2 else None
+                            if perry_ace2 is not None:
+                                inner_cands2 = sorted(
+                                    [b for b in available_perry if b < perry_ace2 and b != 1],
+                                    reverse=True
+                                )
+                                kai2_inner1 = inner_cands2[0] if inner_cands2 else None
+                                kai2_inner2 = inner_cands2[1] if len(inner_cands2) >= 2 else None
+                                if kai2_inner1 is not None:
+                                    third_kai2 = sorted({1} | ({kai2_inner2} if kai2_inner2 else set()))
+                                    if len(third_kai2) < 2:
+                                        fill_kai2 = [b for b in available_perry
+                                                     if b not in {perry_ace2, kai2_inner1} and b not in set(third_kai2)]
+                                        if fill_kai2:
+                                            third_kai2 = sorted(set(third_kai2) | {fill_kai2[0]})
+                                    if len(third_kai2) >= 2:
+                                        kai2_str = (
+                                            f"{perry_ace2}-{kai2_inner1}-"
+                                            f"{''.join(str(b) for b in third_kai2)}"
+                                        )
+                                        # ペリー来航条件をperry_ace2で再評価
+                                        ace2_gn  = _safe_float(race_row.get(f"boat{perry_ace2}_grade_num"))
+                                        ace2_et  = _safe_float(race_row.get(f"boat{perry_ace2}_exhibition_time"))
+                                        ace2_nst = _safe_float(race_row.get(f"boat{perry_ace2}_meet_avg_st"))
+                                        ace2_et_best = (ace2_et is not None and ace2_et > 0
+                                                        and all_et and ace2_et == min(all_et))
+                                        grp_b2 = (
+                                            (ace2_gn is not None and ace2_gn >= 4 and not inner_has_a1)
+                                            or ace2_et_best
+                                            or (ace2_nst is not None and ace2_nst <= 0.12)
+                                        )
+                                        if must_ok and support_ok:
+                                            kai2_label = "ペリー来航"
+                                        elif grp_a and grp_b2 and grp_c:
+                                            kai2_label = "ペリー来航★"
+                                        else:
+                                            kai2_label = "見送り"
+                                        all_recommendations.append({
+                                            "date":          race_row.get("date", ""),
+                                            "venue_name":    race_row.get("venue_name", ""),
+                                            "race_no":       race_row.get("race_no", ""),
+                                            "combination":   kai2_str,
+                                            "prob":          "-",
+                                            "odds":          "-",
+                                            "expected_roi":  "-",
+                                            "confidence":    "ペリー改2",
+                                            "odds_source":   nigerate_str,
+                                            "tier":          "ペリー改2",
+                                            "bet_label":     kai2_label,
+                                            "edge":          "-",
+                                            "arare_score":   arare_score,
+                                            "arare_reasons": " / ".join(arare_reasons),
+                                            "boat1_risk":    _calc_boat1_risk(race_row),
+                                        })
+
     return pd.DataFrame(all_recommendations)
 
 
