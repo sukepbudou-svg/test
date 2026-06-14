@@ -995,34 +995,74 @@ def get_recommendations(
                 "boat1_risk":    _calc_boat1_risk(race_row),
             })
 
-        # 地熊2.0（1号艇1着固定・展開ベースbridge選出）
+        # 地熊2.0（1号艇1着固定・展開×実力ブレンド型）
         available_nc = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
         if len(available_nc) >= 4 and 1 in available_nc:
-            inner_cands = [b for b in [2, 3] if b in available_nc]
-            inner_rep = (max(inner_cands, key=lambda b: _calc_inner_score(b, race_row))
-                         if inner_cands else None)
-            outer_cands = [b for b in [4, 5, 6] if b in available_nc]
-            outer_rep = (max(outer_cands, key=lambda b: _calc_threat_score(b, race_row))
-                         if outer_cands else None)
+            second_cands = [b for b in available_nc if b != 1]
+            if len(second_cands) >= 2:
 
-            if inner_rep and outer_rep:
-                # bridge: 展開的位置（重心への近さ）×40% + 実力スコア×60% のブレンドで選出
-                # 1号・inner_rep・outer_rep 以外の全艇が候補
+                def _second_deploy(bn):
+                    """2着展開適性: 1号艇1着時の差し力 or まくり力"""
+                    exh_st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                    if bn <= 3:
+                        # 内側: コース近さ(差し展開) + ST速さ
+                        course = (4 - bn) / 2.0
+                        st_b   = (0.155 - exh_st) * 4.0 if exh_st and exh_st > 0 else 0.0
+                        return course + st_b
+                    else:
+                        # 外側: STでのまくり突破力 - コース外側ペナルティ
+                        penalty = (bn - 3) * 0.3
+                        if exh_st and exh_st > 0:
+                            if exh_st <= 0.10:   st_p = 1.0
+                            elif exh_st <= 0.13: st_p = 0.5
+                            elif exh_st <= 0.16: st_p = 0.1
+                            else:                st_p = -0.3
+                        else:
+                            st_p = 0.0
+                        return st_p - penalty
+
+                def _second_blend(bn):
+                    perf = (_calc_inner_score(bn, race_row) if bn <= 3
+                            else _calc_threat_score(bn, race_row))
+                    return perf * 0.5 + _second_deploy(bn) * 0.5
+
+                # 2着: 2〜6号をフラットに評価して上位2艇
+                nc_second = sorted(
+                    sorted(second_cands, key=_second_blend, reverse=True)[:2]
+                )
+
+                def _third_deploy(bn):
+                    """3着展開適性: 2着の動きが生んだ空間を利用できるか"""
+                    exh_st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                    # 2着艇に隣接している艇は空間ボーナス（その艇が動いた後の穴を埋めやすい）
+                    adj = sum(1 for s in nc_second if abs(bn - s) == 1)
+                    if bn <= 3:
+                        base  = (4 - bn) * 0.15
+                        st_b  = (0.155 - exh_st) * 3.0 if exh_st and exh_st > 0 else 0.0
+                        return base + st_b + adj * 0.35
+                    else:
+                        penalty = (bn - 3) * 0.25
+                        if exh_st and exh_st > 0:
+                            if exh_st <= 0.10:   st_p = 0.9
+                            elif exh_st <= 0.13: st_p = 0.4
+                            elif exh_st <= 0.16: st_p = 0.0
+                            else:                st_p = -0.3
+                        else:
+                            st_p = 0.0
+                        return st_p - penalty + adj * 0.25
+
+                def _third_blend(bn):
+                    perf = (_calc_inner_score(bn, race_row) if bn <= 3
+                            else _calc_threat_score(bn, race_row))
+                    return perf * 0.4 + _third_deploy(bn) * 0.6
+
+                # bridge: 2着以外から展開×実力ブレンドで1艇選出
                 bridge_cands = [b for b in available_nc
-                                if b != 1 and b != inner_rep and b != outer_rep]
-                if bridge_cands:
-                    center = (inner_rep + outer_rep) / 2.0
-                    def _bridge_blend(b):
-                        pos  = 1.0 - abs(b - center) / 3.0
-                        perf = (_calc_inner_score(b, race_row) if b <= 3
-                                else _calc_threat_score(b, race_row))
-                        return pos * 0.4 + perf * 0.6
-                    bridge = max(bridge_cands, key=_bridge_blend)
-                else:
-                    bridge = None
+                                if b != 1 and b not in set(nc_second)]
+                bridge = (max(bridge_cands, key=_third_blend)
+                          if bridge_cands else None)
 
-                nc_second = sorted({inner_rep, outer_rep})
-                nc_third  = sorted({inner_rep, outer_rep} | ({bridge} if bridge else set()))
+                nc_third = sorted(set(nc_second) | ({bridge} if bridge else set()))
 
                 if len(nc_second) >= 2 and len(nc_third) >= 2:
                     nc_str = (
