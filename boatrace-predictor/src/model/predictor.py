@@ -1064,6 +1064,11 @@ def get_recommendations(
                 # 熊フォメ型: AB-ABX-ABX
                 nc_first  = sorted([1, second_ace])
                 nc_second = sorted(set(nc_first) | ({threat_ace} if threat_ace else set()))
+                # threat_aceがNoneでnc_secondが2艇以下の場合は残りからスコア上位を補完
+                if len(nc_second) < 3:
+                    fill = [b for b in available_nc if b not in set(nc_second)]
+                    if fill:
+                        nc_second = sorted(set(nc_second) | {max(fill, key=_nc_score)})
                 nc_third  = nc_second
 
                 if len(nc_first) >= 2 and len(nc_second) >= 3:
