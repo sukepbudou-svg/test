@@ -565,7 +565,7 @@ def update_result_row(
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
         # 熊フォメ・展モタ: 展開して照合（実際の点数×100円で収支計算）
-        if tier in ("熊フォメ",) or tier.startswith("ペリー舟券"):
+        if tier in ("新地熊", "熊フォメ") or tier.startswith("ペリー舟券"):
             form_combos = _expand_formation(combination)
             hit    = "○" if actual_combination in form_combos else "×"
             payout = actual_payout if hit == "○" else 0
@@ -679,7 +679,7 @@ def _compute_tier_stats(records: list, tier_check) -> dict:
             daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
         # フォーメーションは実際のcombo数×100円、それ以外は1票=100円
         tier_name = str(rec.get("狙い", ""))
-        if tier_name in ("熊フォメ",) or str(rec.get("狙い", "")).startswith("ペリー舟券"):
+        if tier_name in ("新地熊", "熊フォメ") or tier_name.startswith("ペリー舟券"):
             _fc = _expand_formation(str(combination))
             bet_amount = len(_fc) * 100 if _fc else 400
         else:
@@ -868,7 +868,7 @@ def update_summary_sheet(
             rn = str(rec.get("レース", ""))
             race_key = (d, v, rn)
             race_keys.add(race_key)
-            if tier_name in ("熊フォメ",) or tier_val.startswith("ペリー舟券"):
+            if tier_name in ("新地熊", "熊フォメ") or tier_val.startswith("ペリー舟券"):
                 fc = _expand_formation(combo)
                 bet = len(fc) * 100 if fc else 400
             else:
@@ -928,12 +928,9 @@ def update_summary_sheet(
     rows.append(_r("■ ティア別グループ比較"))
     rows.append(_r("グループ", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
     for grp, tn, pf in [
-        ("地熊目  PT1-3",  "地熊目",  [1, 2, 3]),
-        ("地熊目  PT4-6",  "地熊目",  [4, 5, 6]),
-        ("地熊目  PT7以上", "地熊目",  "7以上"),
-        ("熊フォメ PT1-3",  "熊フォメ", [1, 2, 3]),
-        ("熊フォメ PT4-6",  "熊フォメ", [4, 5, 6]),
-        ("熊フォメ PT7以上", "熊フォメ", "7以上"),
+        ("新地熊  PT1-3",   "新地熊",   [1, 2, 3]),
+        ("新地熊  PT4-6",   "新地熊",   [4, 5, 6]),
+        ("新地熊  PT7以上",  "新地熊",   "7以上"),
         ("ペリー舟券 PT1-3",  "ペリー舟券",  [1, 2, 3]),
         ("ペリー舟券 PT4-6",  "ペリー舟券",  [4, 5, 6]),
         ("ペリー舟券 PT7以上", "ペリー舟券",  "7以上"),
@@ -944,18 +941,11 @@ def update_summary_sheet(
     rows.append(_r())
     rows.append(_r())
 
-    # ② 地熊目セクション
-    rows.append(_r("■ 地熊目セクション（全PT）"))
+    # ② 新地熊セクション
+    rows.append(_r("■ 新地熊セクション（全PT）"))
     for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
         lbl = f"{pt}PT" if isinstance(pt, int) else pt
-        _write_pt_section(f"地熊目 {lbl}", _pt_tier_stats("地熊目", pt))
-    rows.append(_r())
-
-    # ③ 熊フォメセクション
-    rows.append(_r("■ 熊フォメセクション（全PT）"))
-    for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
-        lbl = f"{pt}PT" if isinstance(pt, int) else pt
-        _write_pt_section(f"熊フォメ {lbl}", _pt_tier_stats("熊フォメ", pt))
+        _write_pt_section(f"新地熊 {lbl}", _pt_tier_stats("新地熊", pt))
     rows.append(_r())
 
     # ④ ペリー舟券セクション
@@ -1012,13 +1002,13 @@ def update_summary_sheet(
     except Exception as e:
         print(f"[WARN] 条件付き書式設定エラー: {e}")
 
-    kuma_s  = _pt_tier_stats("地熊目")
+    nc_s    = _pt_tier_stats("新地熊")
     perry_s = _pt_tier_stats("ペリー舟券")
-    kuma_roi  = f"{kuma_s['ret']/kuma_s['bets']*100:.1f}%" if kuma_s['bets'] > 0 else "0.0%"
+    nc_roi    = f"{nc_s['ret']/nc_s['bets']*100:.1f}%" if nc_s['bets'] > 0 else "0.0%"
     perry_roi = f"{perry_s['ret']/perry_s['bets']*100:.1f}%" if perry_s['bets'] > 0 else "0.0%"
     print(
         f"[OK] {SUMMARY_SHEET}更新: "
-        f"地熊目(全PT) {len(kuma_s['race_keys'])}R ROI={kuma_roi} / "
+        f"新地熊(全PT) {len(nc_s['race_keys'])}R ROI={nc_roi} / "
         f"ペリー舟券 {len(perry_s['race_keys'])}R ROI={perry_roi}"
     )
 
