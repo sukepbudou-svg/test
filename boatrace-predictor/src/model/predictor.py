@@ -995,78 +995,60 @@ def get_recommendations(
                 "boat1_risk":    _calc_boat1_risk(race_row),
             })
 
-        # 地熊2.0（1号艇1着固定・展開×実力ブレンド型）
+        # 地熊2.0（1号艇1着固定＋総合競争力スコアで2艇目選出）
+        # 形: 1B-1BX-1BX（4点）
         available_nc = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
-        if len(available_nc) >= 4 and 1 in available_nc:
-            second_cands = [b for b in available_nc if b != 1]
-            if len(second_cands) >= 2:
+        if len(available_nc) >= 3 and 1 in available_nc:
+            # ETランク: 全艇中での順位を0〜1に正規化（データなし=0.5の中立値）
+            nc_et_vals = {}
+            for b in available_nc:
+                v = _safe_float(race_row.get(f"boat{b}_exhibition_time"))
+                if v and v > 0:
+                    nc_et_vals[b] = v
+            nc_et_ranks = {}
+            if len(nc_et_vals) >= 2:
+                sorted_et = sorted(nc_et_vals.values())
+                n_et = len(sorted_et)
+                for b, v in nc_et_vals.items():
+                    rank = sorted_et.index(v)
+                    nc_et_ranks[b] = 1.0 - rank / (n_et - 1)
+            # ML正規化（各艇の1着確率合計を最大値で割って0〜1に）
+            nc_ml = {}
+            for b in available_nc:
+                mask = by_prob["boat1"] == b
+                nc_ml[b] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
+            nc_ml_max = max(nc_ml.values()) if nc_ml else 1.0
 
-                def _second_deploy(bn):
-                    """2着展開適性: 1号艇1着時の差し力 or まくり力"""
-                    exh_st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-                    if bn <= 3:
-                        # 内側: コース近さ(差し展開) + ST速さ
-                        course = (4 - bn) / 2.0
-                        st_b   = (0.155 - exh_st) * 4.0 if exh_st and exh_st > 0 else 0.0
-                        return course + st_b
-                    else:
-                        # 外側: STでのまくり突破力 - コース外側ペナルティ
-                        penalty = (bn - 3) * 0.3
-                        if exh_st and exh_st > 0:
-                            if exh_st <= 0.10:   st_p = 1.0
-                            elif exh_st <= 0.13: st_p = 0.5
-                            elif exh_st <= 0.16: st_p = 0.1
-                            else:                st_p = -0.3
-                        else:
-                            st_p = 0.0
-                        return st_p - penalty
+            def _nc_score(bn):
+                ml    = nc_ml.get(bn, 0.0) / (nc_ml_max or 1.0)
+                motor = _safe_float(race_row.get(f"boat{bn}_motor_2rate")) or 0.0
+                gn_raw = race_row.get(f"boat{bn}_grade_num", 2)
+                try:
+                    gn = int(float(gn_raw)) if gn_raw is not None else 2
+                except (TypeError, ValueError):
+                    gn = 2
+                grade = {4: 1.0, 3: 0.67, 2: 0.33, 1: 0.0}.get(gn, 0.33)
+                nat2  = _safe_float(race_row.get(f"boat{bn}_national_2rate")) or 0.0
+                skill = (grade + nat2) / 2.0
+                et    = nc_et_ranks.get(bn, 0.5)
+                return ml * 0.30 + motor * 0.25 + skill * 0.25 + et * 0.20
 
-                def _second_blend(bn):
-                    perf = (_calc_inner_score(bn, race_row) if bn <= 3
-                            else _calc_threat_score(bn, race_row))
-                    return perf * 0.5 + _second_deploy(bn) * 0.5
+            # 1着: 1号艇 + スコア上位1艇（1号除く）
+            non_first = [b for b in available_nc if b != 1]
+            if non_first:
+                second_ace = max(non_first, key=_nc_score)
+                nc_first = sorted([1, second_ace])
 
-                # 2着: 2〜6号をフラットに評価して上位2艇
-                nc_second = sorted(
-                    sorted(second_cands, key=_second_blend, reverse=True)[:2]
-                )
+                # 2着・3着: 1着2艇 + 脅威スコア最高の残り1艇
+                remaining_nc = [b for b in available_nc if b not in set(nc_first)]
+                threat_ace = (max(remaining_nc, key=lambda b: _calc_threat_score(b, race_row))
+                              if remaining_nc else None)
+                nc_second = sorted(set(nc_first) | ({threat_ace} if threat_ace else set()))
+                nc_third  = nc_second
 
-                def _third_deploy(bn):
-                    """3着展開適性: 2着の動きが生んだ空間を利用できるか"""
-                    exh_st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-                    # 2着艇に隣接している艇は空間ボーナス（その艇が動いた後の穴を埋めやすい）
-                    adj = sum(1 for s in nc_second if abs(bn - s) == 1)
-                    if bn <= 3:
-                        base  = (4 - bn) * 0.15
-                        st_b  = (0.155 - exh_st) * 3.0 if exh_st and exh_st > 0 else 0.0
-                        return base + st_b + adj * 0.35
-                    else:
-                        penalty = (bn - 3) * 0.25
-                        if exh_st and exh_st > 0:
-                            if exh_st <= 0.10:   st_p = 0.9
-                            elif exh_st <= 0.13: st_p = 0.4
-                            elif exh_st <= 0.16: st_p = 0.0
-                            else:                st_p = -0.3
-                        else:
-                            st_p = 0.0
-                        return st_p - penalty + adj * 0.25
-
-                def _third_blend(bn):
-                    perf = (_calc_inner_score(bn, race_row) if bn <= 3
-                            else _calc_threat_score(bn, race_row))
-                    return perf * 0.4 + _third_deploy(bn) * 0.6
-
-                # bridge: 2着以外から展開×実力ブレンドで1艇選出
-                bridge_cands = [b for b in available_nc
-                                if b != 1 and b not in set(nc_second)]
-                bridge = (max(bridge_cands, key=_third_blend)
-                          if bridge_cands else None)
-
-                nc_third = sorted(set(nc_second) | ({bridge} if bridge else set()))
-
-                if len(nc_second) >= 2 and len(nc_third) >= 2:
+                if len(nc_first) >= 2 and len(nc_second) >= 3:
                     nc_str = (
-                        f"1-"
+                        f"{''.join(str(b) for b in nc_first)}-"
                         f"{''.join(str(b) for b in nc_second)}-"
                         f"{''.join(str(b) for b in nc_third)}"
                     )
