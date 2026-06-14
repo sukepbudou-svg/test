@@ -1055,8 +1055,40 @@ def get_recommendations(
                                   if outer_cands else None)
 
                 else:
-                    # ETデータなし: 総合スコア上位艇をB、脅威スコア最高艇をX
-                    second_ace = max(non_first, key=_nc_score)
+                    # ETデータなし: 節STで代替を試み、なければ内外グループ比較で展開を推定
+                    nc_nst_vals = {}
+                    for b in available_nc:
+                        v = _safe_float(race_row.get(f"boat{b}_meet_avg_st"))
+                        if v and v > 0:
+                            nc_nst_vals[b] = v
+                    best_nst_boat = min(nc_nst_vals, key=nc_nst_vals.get) if nc_nst_vals else None
+
+                    if best_nst_boat is not None and best_nst_boat >= 4:
+                        # 節ST最速が外艇 → まくり展開気味
+                        second_ace = best_nst_boat
+                    elif best_nst_boat is not None and best_nst_boat <= 3:
+                        # 節ST最速が内艇 → 差し展開気味
+                        second_ace = best_nst_boat
+                    else:
+                        # 節STもなし: 内外グループのモーター平均を比較して優勢グループからB選出
+                        inner_boats_nc = [b for b in available_nc if b != 1 and b <= 3]
+                        outer_boats_nc = [b for b in available_nc if b >= 4]
+                        avg_inner = (sum((_safe_float(race_row.get(f"boat{b}_motor_2rate")) or 0)
+                                        for b in inner_boats_nc) / len(inner_boats_nc)
+                                     if inner_boats_nc else 0.0)
+                        avg_outer = (sum((_safe_float(race_row.get(f"boat{b}_motor_2rate")) or 0)
+                                        for b in outer_boats_nc) / len(outer_boats_nc)
+                                     if outer_boats_nc else 0.0)
+                        if avg_outer - avg_inner > 0.03 and outer_boats_nc:
+                            # 外グループ優勢
+                            second_ace = max(outer_boats_nc, key=_nc_score)
+                        elif avg_inner - avg_outer > 0.03 and inner_boats_nc:
+                            # 内グループ優勢
+                            second_ace = max(inner_boats_nc, key=_nc_score)
+                        else:
+                            # 均衡: 総合スコア上位
+                            second_ace = max(non_first, key=_nc_score)
+                    # X: グループ制限なし（外外・内内・内外すべてあり）
                     remaining_nc = [b for b in available_nc if b not in {1, second_ace}]
                     threat_ace = (max(remaining_nc, key=lambda b: _calc_threat_score(b, race_row))
                                   if remaining_nc else None)
