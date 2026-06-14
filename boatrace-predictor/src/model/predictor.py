@@ -1209,10 +1209,15 @@ def get_recommendations(
                             all_et   = [v for v in all_et if v and v > 0]
                             ace_et_best = (ace_et is not None and ace_et > 0
                                            and all_et and ace_et == min(all_et))
+                            # 内側（2〜3号）にA1がいる場合、外艇A1の優位性は薄れる
+                            inner_has_a1 = any(
+                                (_safe_float(race_row.get(f"boat{b}_grade_num")) or 0) >= 4
+                                for b in available_perry if b <= 3
+                            )
                             grp_b = (
-                                (ace_gn is not None and ace_gn >= 4)           # A1選手
-                                or ace_et_best                                  # ET全艇最速
-                                or (ace_nst is not None and ace_nst <= 0.12)   # 節ST速い
+                                (ace_gn is not None and ace_gn >= 4 and not inner_has_a1)  # 内A1不在時のみ有効
+                                or ace_et_best                                               # ET全艇最速
+                                or (ace_nst is not None and ace_nst <= 0.12)                # 節ST速い
                             )
                             # グループC: レース全体が荒れやすい（どれか1つ）
                             grp_c = (
