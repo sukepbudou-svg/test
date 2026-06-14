@@ -965,128 +965,85 @@ def get_recommendations(
             })
 
 
-        # 展モタ・モタフォメ 共有ブロック（全PT対象）
+        # ペリー舟券（全PT対象）
+        # 外艇の展示STで軸（1着）を決め、その内側2艇を2着、1号艇＋内側＋外側で3着
         if True:
-            available_for_form = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
-            if len(available_for_form) >= 3:
-                form_win_probs = {}
-                for bn in available_for_form:
-                    mask = by_prob["boat1"] == bn
-                    form_win_probs[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
-                ranked_all = sorted(form_win_probs, key=lambda b: form_win_probs[b], reverse=True)
+            available_perry = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
+            if len(available_perry) >= 3:
+                # 外艇（3〜6号）の展示ST収集
+                outer_st_map: dict[int, float] = {}
+                for bn in [3, 4, 5, 6]:
+                    if bn not in available_perry:
+                        continue
+                    st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                    if st and st > 0:
+                        outer_st_map[bn] = st
 
-                # ── 展モタ ──
-                # フォールバック順:
-                #   ① 当日展示タイム2艇以上 → 展示pt + モーターpt（複合スコア）
-                #   ② 展示不足 → 今節平均STpt + モーターpt
-                #   ③ STも不足 → モーターptのみ
-                # モーターデータなし艇は中央値ptで補完
-                if 1 in available_for_form:
-                    others = [b for b in available_for_form if b != 1]
-                    n = len(others)
-
-                    et_map_tm: dict[int, float] = {}
-                    for bn in others:
+                # 展示STがなければ展示タイムで代替
+                if outer_st_map:
+                    use_map = outer_st_map
+                else:
+                    outer_et_map: dict[int, float] = {}
+                    for bn in [3, 4, 5, 6]:
+                        if bn not in available_perry:
+                            continue
                         et = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
                         if et and et > 0:
-                            et_map_tm[bn] = et
+                            outer_et_map[bn] = et
+                    use_map = outer_et_map
 
-                    st_map_tm: dict[int, float] = {}
-                    for bn in others:
-                        st = _safe_float(race_row.get(f"boat{bn}_meet_avg_st"))
-                        if st and st > 0:
-                            st_map_tm[bn] = st
+                if use_map:
+                    # 軸艇: 展示STが最も速い（小さい）外艇
+                    perry_ace = min(use_map, key=lambda b: use_map[b])
+                    perry_ace_st = outer_st_map.get(perry_ace)
 
-                    motor_map_tm: dict[int, float] = {}
-                    for bn in others:
-                        m = _safe_float(race_row.get(f"boat{bn}_motor_2rate"))
-                        if m is not None:
-                            motor_map_tm[bn] = m
+                    # 2着候補: perry_aceより内側の艇（1号艇除く、perry_aceに近い順）
+                    inner_candidates = sorted(
+                        [b for b in available_perry if b < perry_ace and b != 1],
+                        reverse=True
+                    )
+                    inner2 = inner_candidates[:2]
 
-                    bet_label_tm = "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り")
+                    if inner2:
+                        # 3着: 1号艇 + inner2 + perry_aceの外側1艇
+                        third_set = {1} | set(inner2)
+                        outer_of_ace = perry_ace + 1
+                        if outer_of_ace <= 6 and outer_of_ace in available_perry:
+                            third_set.add(outer_of_ace)
+                        perry_third = sorted(third_set)
 
-                    # フォールバック: ①展示 ②今節平均ST ③モーターのみ
-                    if len(et_map_tm) >= 2:
-                        primary_map = et_map_tm
-                        primary_asc = True   # 展示タイムは小さい方が速い
-                    elif len(st_map_tm) >= 2:
-                        primary_map = st_map_tm
-                        primary_asc = True   # STも小さい方が速い
-                    else:
-                        primary_map = {}
-                        primary_asc = True
+                        if len(perry_third) >= 2:
+                            perry_str = (
+                                f"{perry_ace}-"
+                                f"{''.join(str(b) for b in inner2)}-"
+                                f"{''.join(str(b) for b in perry_third)}"
+                            )
 
-                    # モーター中央値補完pt（データなし艇に使用）
-                    motor_median_pt = (n + 1) // 2 if motor_map_tm else 0
+                            # ペリー来航: 軸艇ST≤0.10 かつ 1号艇ST≥0.18
+                            st1 = _safe_float(race_row.get("boat1_exhibition_st"))
+                            perry_kobe = (
+                                perry_ace_st is not None and perry_ace_st <= 0.10
+                                and st1 is not None and st1 >= 0.18
+                            )
+                            perry_label = "ペリー来航" if perry_kobe else "ペリー"
 
-                    # 複合スコア計算
-                    primary_sorted = sorted(primary_map, key=lambda b: primary_map[b], reverse=not primary_asc) if primary_map else []
-                    motor_sorted_tm = sorted(motor_map_tm, key=lambda b: motor_map_tm[b], reverse=True)
-
-                    composite_tm: dict[int, float] = {}
-                    for bn in others:
-                        p_pt = (n - primary_sorted.index(bn)) if bn in primary_sorted else 0
-                        m_pt = (n - motor_sorted_tm.index(bn)) if bn in motor_sorted_tm else motor_median_pt
-                        composite_tm[bn] = p_pt + m_pt
-
-                    score_ranked_tm = sorted(composite_tm, key=lambda b: composite_tm[b], reverse=True)
-                    pivot = score_ranked_tm[0]
-
-                    # 2着①: pivotの外側（外なければ複合次位）
-                    if pivot + 1 <= 6 and (pivot + 1) in available_for_form:
-                        outer1 = pivot + 1
-                    else:
-                        outer1 = next((b for b in score_ranked_tm[1:] if b != pivot), None)
-
-                    # 3着拡張①: outer1のさらに外側
-                    ref_tm = outer1 if outer1 else pivot
-                    if ref_tm + 1 <= 6 and (ref_tm + 1) in available_for_form and (ref_tm + 1) != pivot:
-                        outer2 = ref_tm + 1
-                    else:
-                        outer2 = None
-
-                    # 3着拡張②: 複合スコア次点（pivot/outer1/outer2以外）
-                    used_tm = {pivot} | ({outer1} if outer1 else set()) | ({outer2} if outer2 else set())
-                    score_next_tm = next((b for b in score_ranked_tm if b not in used_tm), None)
-
-                    # outer2がNone（外に伸ばせない）なら複合スコア次々点も追加して3着4艇に
-                    if outer2 is None:
-                        used_tm2 = used_tm | ({score_next_tm} if score_next_tm else set())
-                        score_next2_tm = next((b for b in score_ranked_tm if b not in used_tm2), None)
-                    else:
-                        score_next2_tm = None
-
-                    # 2着: {pivot, outer1}  3着: {pivot, outer1, outer2, score_next_tm, score_next2_tm}
-                    tm_second = sorted({pivot} | ({outer1}         if outer1         else set()))
-                    tm_third  = sorted({pivot}
-                                       | ({outer1}         if outer1         else set())
-                                       | ({outer2}         if outer2         else set())
-                                       | ({score_next_tm}  if score_next_tm  else set())
-                                       | ({score_next2_tm} if score_next2_tm else set()))
-
-                    if len(tm_second) >= 2 and len(tm_third) >= 3:
-                        tm_str = (
-                            f"{''.join(str(b) for b in tm_third)}-"
-                            f"{''.join(str(b) for b in tm_second)}-"
-                            f"1"
-                        )
-                        all_recommendations.append({
-                            "date":          race_row.get("date", ""),
-                            "venue_name":    race_row.get("venue_name", ""),
-                            "race_no":       race_row.get("race_no", ""),
-                            "combination":   tm_str,
-                            "prob":          "-",
-                            "odds":          "-",
-                            "expected_roi":  "-",
-                            "confidence":    "穴専用",
-                            "odds_source":   nigerate_str,
-                            "tier":          "穴専用",
-                            "bet_label":     bet_label_tm,
-                            "edge":          "-",
-                            "arare_score":   arare_score,
-                            "arare_reasons": " / ".join(arare_reasons),
-                            "boat1_risk":    _calc_boat1_risk(race_row),
-                        })
+                            all_recommendations.append({
+                                "date":          race_row.get("date", ""),
+                                "venue_name":    race_row.get("venue_name", ""),
+                                "race_no":       race_row.get("race_no", ""),
+                                "combination":   perry_str,
+                                "prob":          "-",
+                                "odds":          "-",
+                                "expected_roi":  "-",
+                                "confidence":    "ペリー舟券",
+                                "odds_source":   nigerate_str,
+                                "tier":          "ペリー舟券",
+                                "bet_label":     perry_label,
+                                "edge":          "-",
+                                "arare_score":   arare_score,
+                                "arare_reasons": " / ".join(arare_reasons),
+                                "boat1_risk":    _calc_boat1_risk(race_row),
+                            })
 
     return pd.DataFrame(all_recommendations)
 

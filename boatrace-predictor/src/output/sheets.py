@@ -22,7 +22,7 @@ RESULT_SHEET = "成績16"
 SUMMARY_SHEET = "サマリー16"
 
 _WIND_NOTE_LINE1 = "【風向き判断】向かい風3〜7m → 地熊目・熊フォメ 積極的に勝負"
-_WIND_NOTE_LINE2 = "追い風5m以上 → 穴専用・穴系に切り替え or 見送り"
+_WIND_NOTE_LINE2 = "追い風5m以上 → ペリー舟券・穴系に切り替え or 見送り"
 
 # 会場マーク: ▲=荒れやすい  ◎=イン強・荒れにくい
 _VENUE_MARK = {
@@ -373,6 +373,17 @@ def append_prediction_row(
                     }},
                     "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
                 }})
+            elif bet_label == "ペリー来航":
+                reqs.append({"repeatCell": {
+                    "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
+                              "startColumnIndex": 8, "endColumnIndex": 9},
+                    "cell": {"userEnteredFormat": {
+                        "backgroundColor": {"red": 0.10, "green": 0.18, "blue": 0.50},
+                        "textFormat": {"bold": True,
+                                       "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
+                    }},
+                    "fields": "userEnteredFormat(backgroundColor,textFormat)",
+                }})
 
 
         # イン逃げ率（G列=index6）: 65%以上で薄赤、50%未満で薄青
@@ -554,7 +565,7 @@ def update_result_row(
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
         # 熊フォメ・展モタ: 展開して照合（実際の点数×100円で収支計算）
-        if tier in ("熊フォメ", "穴専用"):
+        if tier in ("熊フォメ", "ペリー舟券"):
             form_combos = _expand_formation(combination)
             hit    = "○" if actual_combination in form_combos else "×"
             payout = actual_payout if hit == "○" else 0
@@ -668,7 +679,7 @@ def _compute_tier_stats(records: list, tier_check) -> dict:
             daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
         # フォーメーションは実際のcombo数×100円、それ以外は1票=100円
         tier_name = str(rec.get("狙い", ""))
-        if tier_name in ("熊フォメ", "穴専用"):
+        if tier_name in ("熊フォメ", "ペリー舟券"):
             _fc = _expand_formation(str(combination))
             bet_amount = len(_fc) * 100 if _fc else 400
         else:
@@ -853,7 +864,7 @@ def update_summary_sheet(
             rn = str(rec.get("レース", ""))
             race_key = (d, v, rn)
             race_keys.add(race_key)
-            if tier_name in ("熊フォメ", "穴専用"):
+            if tier_name in ("熊フォメ", "ペリー舟券"):
                 fc = _expand_formation(combo)
                 bet = len(fc) * 100 if fc else 400
             else:
@@ -919,9 +930,9 @@ def update_summary_sheet(
         ("熊フォメ PT1-3",  "熊フォメ", [1, 2, 3]),
         ("熊フォメ PT4-6",  "熊フォメ", [4, 5, 6]),
         ("熊フォメ PT7以上", "熊フォメ", "7以上"),
-        ("穴専用  PT1-3",  "穴専用",  [1, 2, 3]),
-        ("穴専用  PT4-6",  "穴専用",  [4, 5, 6]),
-        ("穴専用  PT7以上", "穴専用",  "7以上"),
+        ("ペリー舟券 PT1-3",  "ペリー舟券",  [1, 2, 3]),
+        ("ペリー舟券 PT4-6",  "ペリー舟券",  [4, 5, 6]),
+        ("ペリー舟券 PT7以上", "ペリー舟券",  "7以上"),
     ]:
         s = _pt_tier_stats(tn, pf)
         rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
@@ -943,11 +954,11 @@ def update_summary_sheet(
         _write_pt_section(f"熊フォメ {lbl}", _pt_tier_stats("熊フォメ", pt))
     rows.append(_r())
 
-    # ④ 穴専用セクション
-    rows.append(_r("■ 穴専用セクション（全PT）"))
+    # ④ ペリー舟券セクション
+    rows.append(_r("■ ペリー舟券セクション（全PT）"))
     for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
         lbl = f"{pt}PT" if isinstance(pt, int) else pt
-        _write_pt_section(f"穴専用 {lbl}", _pt_tier_stats("穴専用", pt))
+        _write_pt_section(f"ペリー舟券 {lbl}", _pt_tier_stats("ペリー舟券", pt))
     rows.append(_r())
 
 
@@ -997,14 +1008,14 @@ def update_summary_sheet(
     except Exception as e:
         print(f"[WARN] 条件付き書式設定エラー: {e}")
 
-    kuma_s = _pt_tier_stats("地熊目")
-    ana_s  = _pt_tier_stats("穴専用")
-    kuma_roi = f"{kuma_s['ret']/kuma_s['bets']*100:.1f}%" if kuma_s['bets'] > 0 else "0.0%"
-    ana_roi  = f"{ana_s['ret']/ana_s['bets']*100:.1f}%" if ana_s['bets'] > 0 else "0.0%"
+    kuma_s  = _pt_tier_stats("地熊目")
+    perry_s = _pt_tier_stats("ペリー舟券")
+    kuma_roi  = f"{kuma_s['ret']/kuma_s['bets']*100:.1f}%" if kuma_s['bets'] > 0 else "0.0%"
+    perry_roi = f"{perry_s['ret']/perry_s['bets']*100:.1f}%" if perry_s['bets'] > 0 else "0.0%"
     print(
         f"[OK] {SUMMARY_SHEET}更新: "
         f"地熊目(全PT) {len(kuma_s['race_keys'])}R ROI={kuma_roi} / "
-        f"穴専用 {len(ana_s['race_keys'])}R ROI={ana_roi}"
+        f"ペリー舟券 {len(perry_s['race_keys'])}R ROI={perry_roi}"
     )
 
 
