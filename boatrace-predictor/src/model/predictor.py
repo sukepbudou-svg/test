@@ -1117,13 +1117,13 @@ def get_recommendations(
                     mask = by_prob["boat1"] == bn
                     p_ml_map[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
 
-                # フォールバック: ①ST ②ET ③節ST ④ML（ST/ET/節STは小、ML確率は大が速い）
+                # フォールバック: ①ST ②節ST ③ET ④ML（ST/節STは小さいほど速い、ML確率は大が速い）
                 if p_st_map:
                     use_map, data_label, p_asc = p_st_map, "ST", True
-                elif p_et_map:
-                    use_map, data_label, p_asc = p_et_map, "ET", True
                 elif p_nst_map:
                     use_map, data_label, p_asc = p_nst_map, "節ST", True
+                elif p_et_map:
+                    use_map, data_label, p_asc = p_et_map, "ET", True
                 elif p_ml_map:
                     use_map, data_label, p_asc = p_ml_map, "ML", False
                 else:
@@ -1151,11 +1151,13 @@ def get_recommendations(
                                 break
 
                     if inner2:
-                        # 3着: 1号艇 + inner2 + perry_aceの外側1艇
+                        # 3着: 1号艇 + inner2 + 外側→内側の順に補完して必ず4艇確保
                         third_set = {1} | set(inner2)
-                        outer_of_ace = perry_ace + 1
-                        if outer_of_ace <= 6 and outer_of_ace in available_perry:
-                            third_set.add(outer_of_ace)
+                        for ext in list(range(perry_ace + 1, 7)) + list(range(2, perry_ace)):
+                            if len(third_set) >= 4:
+                                break
+                            if ext in available_perry and ext not in third_set:
+                                third_set.add(ext)
                         perry_third = sorted(third_set)
 
                         if len(perry_third) >= 2:
@@ -1180,7 +1182,7 @@ def get_recommendations(
                                 or (g1_p is not None and g1_p <= 2)
                                 or (_pw is not None and _pw >= 5 and _pwd == "tail")
                             )
-                            perry_label = "ペリー来航" if (must_ok and support_ok) else "ペリー"
+                            perry_label = "ペリー来航" if (must_ok and support_ok) else "見送り"
                             tier_label  = f"ペリー舟券({data_label})"
 
                             all_recommendations.append({
