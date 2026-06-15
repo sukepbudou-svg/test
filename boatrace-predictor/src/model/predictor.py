@@ -1269,17 +1269,17 @@ def get_recommendations(
                                 "boat1_risk":    _calc_boat1_risk(race_row),
                             })
 
-                            # ペリー改1（4点）: 同じ軸・inner2 + {1号艇+脅威艇}の3着2艇
-                            remaining_kai1 = [b for b in available_perry
-                                              if b not in {perry_ace, 1} and b not in set(inner2)]
-                            threat_kai1 = (max(remaining_kai1, key=lambda b: _calc_threat_score(b, race_row))
-                                           if remaining_kai1 else None)
-                            third_kai1 = sorted({1} | ({threat_kai1} if threat_kai1 else set()))
-                            if len(third_kai1) < 2:
-                                fill_kai1 = [b for b in available_perry
-                                             if b not in {perry_ace} and b not in set(inner2) and b not in set(third_kai1)]
-                                if fill_kai1:
-                                    third_kai1 = sorted(set(third_kai1) | {fill_kai1[0]})
+                            # ペリー改1（4点固定）: perry_ace-AB-CD（ABとCDが重複しない）
+                            # 3着はinner2(2着2艇)以外から選ぶことで確実に4点確保
+                            rem_kai1 = [b for b in available_perry if b not in {perry_ace} and b not in set(inner2)]
+                            third_kai1_list = []
+                            if 1 in rem_kai1:  # 1号艇を優先
+                                third_kai1_list.append(1)
+                            for b in sorted([x for x in rem_kai1 if x != 1], key=_perry_flex_score, reverse=True):
+                                if len(third_kai1_list) >= 2:
+                                    break
+                                third_kai1_list.append(b)
+                            third_kai1 = sorted(third_kai1_list)
                             if len(inner2) >= 2 and len(third_kai1) >= 2:
                                 kai1_str = (
                                     f"{perry_ace}-"
@@ -1322,20 +1322,21 @@ def get_recommendations(
                                     [b for b in available_perry if b != perry_ace2],
                                     key=_perry_flex_score2, reverse=True
                                 )
-                                kai2_inner1 = all_except_ace2[0] if all_except_ace2 else None
-                                if kai2_inner1 is not None:
-                                    # 3着: 2着1艇 + 1号艇 + 不足時補完 = 2艇確保
-                                    third_kai2_set = {kai2_inner1}
-                                    if 1 in available_perry:
-                                        third_kai2_set.add(1)
-                                    for b in all_except_ace2[1:]:
-                                        if len(third_kai2_set) >= 2:
+                                kai2_second = all_except_ace2[0] if all_except_ace2 else None
+                                if kai2_second is not None:
+                                    # 3着（2点固定）: 2着(kai2_second)を除外した艇から2艇選ぶ
+                                    rem_kai2 = [b for b in available_perry if b not in {perry_ace2, kai2_second}]
+                                    third_kai2_list = []
+                                    if 1 in rem_kai2:  # 1号艇を優先
+                                        third_kai2_list.append(1)
+                                    for b in sorted([x for x in rem_kai2 if x != 1], key=_perry_flex_score2, reverse=True):
+                                        if len(third_kai2_list) >= 2:
                                             break
-                                        third_kai2_set.add(b)
-                                    third_kai2 = sorted(third_kai2_set)
+                                        third_kai2_list.append(b)
+                                    third_kai2 = sorted(third_kai2_list)
                                     if len(third_kai2) >= 2:
                                         kai2_str = (
-                                            f"{perry_ace2}-{kai2_inner1}-"
+                                            f"{perry_ace2}-{kai2_second}-"
                                             f"{''.join(str(b) for b in third_kai2)}"
                                         )
                                         # 来航判定はペリー舟券の軸(perry_ace)基準のperry_labelをそのまま使用
