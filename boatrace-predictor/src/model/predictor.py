@@ -903,13 +903,38 @@ def get_recommendations(
             second_b2 = int(filtered.iloc[n]["boat2"]) if len(filtered) > n else None
             return topN.reset_index(drop=True), star_level, is_confident, second_b2
 
-        # 地熊目: 全120通りからprob上位2点
-        lucky_pool, lucky_star, _, _ = pick_by_edge(
-            by_prob, "地熊目", n=20, min_odds=0,
-            hot_threshold=99, fire_threshold=4.0, sort_by="prob")
+        # 地熊目: ET補正スコア上位2点（オッズ3倍以上・展示タイム良い艇の1着を優先）
+        lucky_et_vals = {}
+        for b in range(1, 7):
+            if absent_boats and b in absent_boats:
+                continue
+            v = _safe_float(race_row.get(f"boat{b}_exhibition_time"))
+            if v and v > 0:
+                lucky_et_vals[b] = v
+        lucky_et_ranks: dict = {}
+        if len(lucky_et_vals) >= 2:
+            sorted_lucky_et = sorted(lucky_et_vals.items(), key=lambda x: x[1])
+            n_let = len(sorted_lucky_et)
+            for rank_i, (b, _) in enumerate(sorted_lucky_et):
+                lucky_et_ranks[b] = 1.0 - rank_i / (n_let - 1)  # 速い=1.0、遅い=0.0
+
+        by_prob_lucky = by_prob.copy()
+        by_prob_lucky["odds_value"] = pd.to_numeric(by_prob_lucky["odds_value"], errors="coerce")
+        by_prob_lucky = by_prob_lucky.dropna(subset=["odds_value"])
+        by_prob_lucky = by_prob_lucky[by_prob_lucky["odds_value"] >= 3.0]  # 3倍未満除外
+        if lucky_et_ranks:
+            by_prob_lucky["et_combo_score"] = by_prob_lucky.apply(
+                lambda r: float(r["prob"]) * 0.65 + lucky_et_ranks.get(int(r["boat1"]), 0.5) * 0.35,
+                axis=1
+            )
+        else:
+            by_prob_lucky["et_combo_score"] = by_prob_lucky["prob"].astype(float)
+        by_prob_lucky = by_prob_lucky.sort_values("et_combo_score", ascending=False).reset_index(drop=True)
+        by_prob_lucky["tier"] = "地熊目"
+
         lucky_rows = []
         used_combos: set = set()
-        for _, row in lucky_pool.iterrows():
+        for _, row in by_prob_lucky.iterrows():
             if row["combination"] not in used_combos:
                 used_combos.add(row["combination"])
                 lucky_rows.append(row)
@@ -949,7 +974,7 @@ def get_recommendations(
 
         if not lucky_recs.empty:
             for _, rec in lucky_recs.iterrows():
-                all_recommendations.append(_make_row(rec, lucky_star, None))
+                all_recommendations.append(_make_row(rec, 0, None))
 
         # 熊フォメ（全PT対象・ML確率上位2艇を1着、脅威スコアで2着・3着を拡張）
         kuma_wp = {}
