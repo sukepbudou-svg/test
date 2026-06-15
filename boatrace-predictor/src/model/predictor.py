@@ -903,44 +903,49 @@ def get_recommendations(
             second_b2 = int(filtered.iloc[n]["boat2"]) if len(filtered) > n else None
             return topN.reset_index(drop=True), star_level, is_confident, second_b2
 
-        # 地熊目: ET補正スコア上位2点（オッズ3倍以上・展示タイム良い艇の1着を優先）
-        lucky_et_vals = {}
-        for b in range(1, 7):
-            if absent_boats and b in absent_boats:
-                continue
-            v = _safe_float(race_row.get(f"boat{b}_exhibition_time"))
-            if v and v > 0:
-                lucky_et_vals[b] = v
-        lucky_et_ranks: dict = {}
-        if len(lucky_et_vals) >= 2:
-            sorted_lucky_et = sorted(lucky_et_vals.items(), key=lambda x: x[1])
-            n_let = len(sorted_lucky_et)
-            for rank_i, (b, _) in enumerate(sorted_lucky_et):
-                lucky_et_ranks[b] = 1.0 - rank_i / (n_let - 1)  # 速い=1.0、遅い=0.0
+        # 地熊目: 1号艇1着固定・2着3着をML70%+ET30%の複合スコアで上位2点選出
+        if not (absent_boats and 1 in absent_boats):
+            lucky_et_vals = {}
+            for b in range(1, 7):
+                if absent_boats and b in absent_boats:
+                    continue
+                v = _safe_float(race_row.get(f"boat{b}_exhibition_time"))
+                if v and v > 0:
+                    lucky_et_vals[b] = v
+            lucky_et_ranks: dict = {}
+            if len(lucky_et_vals) >= 2:
+                sorted_lucky_et = sorted(lucky_et_vals.items(), key=lambda x: x[1])
+                n_let = len(sorted_lucky_et)
+                for rank_i, (b, _) in enumerate(sorted_lucky_et):
+                    lucky_et_ranks[b] = 1.0 - rank_i / (n_let - 1)  # 速い=1.0、遅い=0.0
 
-        by_prob_lucky = by_prob.copy()
-        by_prob_lucky["odds_value"] = pd.to_numeric(by_prob_lucky["odds_value"], errors="coerce")
-        by_prob_lucky = by_prob_lucky.dropna(subset=["odds_value"])
-        by_prob_lucky = by_prob_lucky[by_prob_lucky["odds_value"] >= 3.0]  # 3倍未満除外
-        if lucky_et_ranks:
-            by_prob_lucky["et_combo_score"] = by_prob_lucky.apply(
-                lambda r: float(r["prob"]) * 0.65 + lucky_et_ranks.get(int(r["boat1"]), 0.5) * 0.35,
-                axis=1
-            )
+            by_prob_lucky = by_prob[by_prob["boat1"] == 1].copy()
+            by_prob_lucky["odds_value"] = pd.to_numeric(by_prob_lucky["odds_value"], errors="coerce")
+            by_prob_lucky = by_prob_lucky.dropna(subset=["odds_value"])
+
+            if not by_prob_lucky.empty:
+                def _lucky_score(r):
+                    et2 = lucky_et_ranks.get(int(r["boat2"]), 0.5)
+                    et3 = lucky_et_ranks.get(int(r["boat3"]), 0.5)
+                    return float(r["prob"]) * 0.70 + (et2 + et3) / 2.0 * 0.30
+
+                by_prob_lucky["et_combo_score"] = by_prob_lucky.apply(_lucky_score, axis=1)
+                by_prob_lucky = by_prob_lucky.sort_values("et_combo_score", ascending=False).reset_index(drop=True)
+                by_prob_lucky["tier"] = "地熊目"
+
+                lucky_rows = []
+                used_combos: set = set()
+                for _, row in by_prob_lucky.iterrows():
+                    if row["combination"] not in used_combos:
+                        used_combos.add(row["combination"])
+                        lucky_rows.append(row)
+                    if len(lucky_rows) >= 2:
+                        break
+                lucky_recs = pd.DataFrame(lucky_rows).reset_index(drop=True) if lucky_rows else pd.DataFrame()
+            else:
+                lucky_recs = pd.DataFrame()
         else:
-            by_prob_lucky["et_combo_score"] = by_prob_lucky["prob"].astype(float)
-        by_prob_lucky = by_prob_lucky.sort_values("et_combo_score", ascending=False).reset_index(drop=True)
-        by_prob_lucky["tier"] = "地熊目"
-
-        lucky_rows = []
-        used_combos: set = set()
-        for _, row in by_prob_lucky.iterrows():
-            if row["combination"] not in used_combos:
-                used_combos.add(row["combination"])
-                lucky_rows.append(row)
-            if len(lucky_rows) >= 2:
-                break
-        lucky_recs = pd.DataFrame(lucky_rows).reset_index(drop=True) if lucky_rows else pd.DataFrame()
+            lucky_recs = pd.DataFrame()
 
         def _make_row(rec, star_lv, second):
             if arare_ok:
