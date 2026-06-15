@@ -1025,11 +1025,13 @@ def get_recommendations(
                 "boat1_risk":    _calc_boat1_risk(race_row),
             })
 
-        # 地熊2.0（熊フォメ型: AB-ABX-ABX）
-        # ETで展開シナリオを判定 → B(1着2艇目)とX(3着追加艇)を決める、形は熊フォメと同じ
+        # 地熊2.0: 1号艇1着固定・形 1-AB-ABCD（6点）
+        # 2着A: ML60%+ET30%+内側ポジション10%のスコア1位艇
+        # 2着B: Aの直外側（外がなければスコア2位）
+        # 3着C: Bの直外側（外がなければ次点）
+        # 3着D: スコア次点（A,B,C,1号以外）
         available_nc = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
-        if len(available_nc) >= 3 and 1 in available_nc:
-            # ETランク: 全艇中での順位を0〜1に正規化（データなし=0.5の中立値）
+        if 1 in available_nc and len(available_nc) >= 3:
             nc_et_vals = {}
             for b in available_nc:
                 v = _safe_float(race_row.get(f"boat{b}_exhibition_time"))
@@ -1037,121 +1039,62 @@ def get_recommendations(
                     nc_et_vals[b] = v
             nc_et_ranks = {}
             if len(nc_et_vals) >= 2:
-                sorted_et = sorted(nc_et_vals.values())
-                n_et = len(sorted_et)
-                for b, v in nc_et_vals.items():
-                    rank = sorted_et.index(v)
-                    nc_et_ranks[b] = 1.0 - rank / (n_et - 1)
-            # ML正規化（各艇の1着確率合計を最大値で割って0〜1に）
+                sorted_nc_et = sorted(nc_et_vals.items(), key=lambda x: x[1])
+                n_nlet = len(sorted_nc_et)
+                for rank_i, (b, _) in enumerate(sorted_nc_et):
+                    nc_et_ranks[b] = 1.0 - rank_i / (n_nlet - 1)  # 速い=1.0、遅い=0.0
+
             nc_ml = {}
             for b in available_nc:
                 mask = by_prob["boat1"] == b
                 nc_ml[b] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
             nc_ml_max = max(nc_ml.values()) if nc_ml else 1.0
 
-            def _nc_score(bn):
-                ml    = nc_ml.get(bn, 0.0) / (nc_ml_max or 1.0)
-                motor = _safe_float(race_row.get(f"boat{bn}_motor_2rate")) or 0.0
-                gn_raw = race_row.get(f"boat{bn}_grade_num", 2)
-                try:
-                    gn = int(float(gn_raw)) if gn_raw is not None else 2
-                except (TypeError, ValueError):
-                    gn = 2
-                grade = {4: 1.0, 3: 0.67, 2: 0.33, 1: 0.0}.get(gn, 0.33)
-                nat2  = _safe_float(race_row.get(f"boat{bn}_national_2rate")) or 0.0
-                skill = (grade + nat2) / 2.0
-                et    = nc_et_ranks.get(bn, 0.5)
-                return ml * 0.30 + motor * 0.25 + skill * 0.25 + et * 0.20
+            def _jk2_score(bn):
+                ml = nc_ml.get(bn, 0.0) / (nc_ml_max or 1.0)
+                et = nc_et_ranks.get(bn, 0.5)
+                pos_bonus = (6 - bn) / 20.0  # 内側ほど微小ボーナス（2号=0.02相当）
+                return ml * 0.60 + et * 0.30 + pos_bonus * 0.10
 
-            # 1着: 1号艇 + ETシナリオで選んだ艇（熊フォメ型: AB-ABX-ABX）
             non_first = [b for b in available_nc if b != 1]
-            if non_first:
-                # ETベースで今日の展開シナリオを判定し、1着の2艇目(B)と3着追加艇(X)を決める
-                best_et_boat = min(nc_et_vals, key=nc_et_vals.get) if nc_et_vals else None
+            jk2_ranked = sorted(non_first, key=_jk2_score, reverse=True)
 
-                if best_et_boat is not None and best_et_boat >= 4:
-                    # まくり展開: 外艇ETが全艇中最速 → その外艇が1着2艇目(B)
-                    second_ace = best_et_boat
-                    # X: フリー選出（外外・内外どちらもあり）脅威スコアで判定
-                    remaining_nc_m = [b for b in available_nc if b not in {1, second_ace}]
-                    threat_ace = (max(remaining_nc_m, key=lambda b: _calc_threat_score(b, race_row))
-                                  if remaining_nc_m else None)
+            if len(jk2_ranked) >= 2:
+                # 2着A: スコア1位
+                ace_a = jk2_ranked[0]
+                # 2着B: Aの直外側 → なければスコア2位
+                outer_of_a = [b for b in available_nc if b > ace_a]
+                ace_b = min(outer_of_a) if outer_of_a else jk2_ranked[1]
+                jk2_second = sorted({ace_a, ace_b})
 
-                elif best_et_boat is not None and 2 <= best_et_boat <= 3:
-                    # 差し展開: 内艇ET最速（1号除く2〜3号のみ対象） → その内艇が1着2艇目(B)
-                    second_ace = best_et_boat
-                    # X: 制限なし（内内・内外どちらもあり）、脅威スコアで実力判定
-                    remaining_diff = [b for b in available_nc if b not in {1, second_ace}]
-                    threat_ace = (max(remaining_diff, key=lambda b: _calc_threat_score(b, race_row))
-                                  if remaining_diff else None)
-
+                # 3着C: Bの直外側 → なければ次点
+                max_b = max(jk2_second)
+                outer_of_b = [b for b in available_nc if b > max_b]
+                if outer_of_b:
+                    ace_c = min(outer_of_b)
                 else:
-                    # ETデータなし
-                    # ── B選出: 個艇の今日の力（モーター×スキル、MLなし）で最強艇を指名 ──
-                    def _nc_score_no_ml(bn):
-                        motor = _safe_float(race_row.get(f"boat{bn}_motor_2rate")) or 0.0
-                        gn_raw = race_row.get(f"boat{bn}_grade_num", 2)
-                        try:
-                            gn = int(float(gn_raw)) if gn_raw is not None else 2
-                        except (TypeError, ValueError):
-                            gn = 2
-                        grade = {4: 1.0, 3: 0.67, 2: 0.33, 1: 0.0}.get(gn, 0.33)
-                        nat2 = _safe_float(race_row.get(f"boat{bn}_national_2rate")) or 0.0
-                        return motor * 0.50 + (grade + nat2) / 2.0 * 0.50
+                    rem_c = [b for b in jk2_ranked if b not in set(jk2_second)]
+                    ace_c = rem_c[0] if rem_c else None
 
-                    # 節STがあれば展開判定に使う（ET代替）
-                    nc_nst_vals = {}
-                    for b in available_nc:
-                        v = _safe_float(race_row.get(f"boat{b}_meet_avg_st"))
-                        if v and v > 0:
-                            nc_nst_vals[b] = v
-                    best_nst_boat = min(nc_nst_vals, key=nc_nst_vals.get) if nc_nst_vals else None
+                # 3着D: スコア次点（A,B,C,1号以外）
+                used_jk2 = set(jk2_second) | ({ace_c} if ace_c else set()) | {1}
+                rem_d = [b for b in jk2_ranked if b not in used_jk2]
+                ace_d = rem_d[0] if rem_d else None
 
-                    if best_nst_boat is not None:
-                        # 節STで展開の方向を決め、そのゾーンから個艇力最強をB指名
-                        if best_nst_boat >= 4:
-                            zone_b = [b for b in available_nc if b != 1 and b >= 4]
-                        else:
-                            zone_b = [b for b in available_nc if b != 1 and b <= 3]
-                        second_ace = max(zone_b, key=_nc_score_no_ml) if zone_b else max(non_first, key=_nc_score_no_ml)
-                    else:
-                        # 節STもなし: 全艇中モーター×スキルで最強個艇をB指名
-                        second_ace = max(non_first, key=_nc_score_no_ml)
+                jk2_third = sorted(set(jk2_second) | ({ace_c} if ace_c else set()) | ({ace_d} if ace_d else set()))
 
-                    # ── X選出: 内外グループのモーター平均比較で優勢ゾーンから脅威最高艇 ──
-                    # 外外・内内・内外すべてあり得る（グループ制限なし）
-                    inner_boats_nc = [b for b in available_nc if b != 1 and b != second_ace and b <= 3]
-                    outer_boats_nc = [b for b in available_nc if b != second_ace and b >= 4]
-                    avg_inner_x = (sum((_safe_float(race_row.get(f"boat{b}_motor_2rate")) or 0)
-                                       for b in inner_boats_nc) / len(inner_boats_nc)
-                                   if inner_boats_nc else 0.0)
-                    avg_outer_x = (sum((_safe_float(race_row.get(f"boat{b}_motor_2rate")) or 0)
-                                       for b in outer_boats_nc) / len(outer_boats_nc)
-                                   if outer_boats_nc else 0.0)
-                    if avg_outer_x - avg_inner_x > 0.03 and outer_boats_nc:
-                        zone_x = outer_boats_nc
-                    elif avg_inner_x - avg_outer_x > 0.03 and inner_boats_nc:
-                        zone_x = inner_boats_nc
-                    else:
-                        zone_x = [b for b in available_nc if b not in {1, second_ace}]
-                    threat_ace = (max(zone_x, key=lambda b: _calc_threat_score(b, race_row))
-                                  if zone_x else None)
+                # 4艇未満なら残りから補完
+                for b in jk2_ranked:
+                    if len(jk2_third) >= 4:
+                        break
+                    if b not in set(jk2_third):
+                        jk2_third = sorted(set(jk2_third) | {b})
 
-                # 熊フォメ型: AB-ABX-ABX
-                nc_first  = sorted([1, second_ace])
-                nc_second = sorted(set(nc_first) | ({threat_ace} if threat_ace else set()))
-                # threat_aceがNoneでnc_secondが2艇以下の場合は残りからスコア上位を補完
-                if len(nc_second) < 3:
-                    fill = [b for b in available_nc if b not in set(nc_second)]
-                    if fill:
-                        nc_second = sorted(set(nc_second) | {max(fill, key=_nc_score)})
-                nc_third  = nc_second
-
-                if len(nc_first) >= 2 and len(nc_second) >= 3:
-                    nc_str = (
-                        f"{''.join(str(b) for b in nc_first)}-"
-                        f"{''.join(str(b) for b in nc_second)}-"
-                        f"{''.join(str(b) for b in nc_third)}"
+                if len(jk2_second) >= 2 and len(jk2_third) >= 2:
+                    jk2_str = (
+                        f"1-"
+                        f"{''.join(str(b) for b in jk2_second)}-"
+                        f"{''.join(str(b) for b in jk2_third)}"
                     )
                     nc_label = ("神熱" if arare_ok else
                                 "灼熱" if arare_score >= ARARE_MIN_SCORE else
@@ -1160,7 +1103,7 @@ def get_recommendations(
                         "date":          race_row.get("date", ""),
                         "venue_name":    race_row.get("venue_name", ""),
                         "race_no":       race_row.get("race_no", ""),
-                        "combination":   nc_str,
+                        "combination":   jk2_str,
                         "prob":          "-",
                         "odds":          "-",
                         "expected_roi":  "-",
