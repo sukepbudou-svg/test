@@ -1042,12 +1042,13 @@ def get_recommendations(
                 if best_et_boat is not None and best_et_boat >= 4:
                     # まくり展開: 外艇ETが全艇中最速 → その外艇が1着2艇目(B)
                     second_ace = best_et_boat
-                    # X: 内側の差し艇（2〜3号のスコア上位）がまくり後に差してくる
-                    inner_diff = [b for b in available_nc if b != 1 and b != second_ace and b <= 3]
-                    threat_ace = max(inner_diff, key=_nc_score) if inner_diff else None
+                    # X: フリー選出（外外・内外どちらもあり）脅威スコアで判定
+                    remaining_nc_m = [b for b in available_nc if b not in {1, second_ace}]
+                    threat_ace = (max(remaining_nc_m, key=lambda b: _calc_threat_score(b, race_row))
+                                  if remaining_nc_m else None)
 
-                elif best_et_boat is not None and best_et_boat <= 3:
-                    # 差し展開: 内艇ETが全艇中最速 → その内艇が1着2艇目(B)
+                elif best_et_boat is not None and 2 <= best_et_boat <= 3:
+                    # 差し展開: 内艇ET最速（1号除く2〜3号のみ対象） → その内艇が1着2艇目(B)
                     second_ace = best_et_boat
                     # X: 制限なし（内内・内外どちらもあり）、脅威スコアで実力判定
                     remaining_diff = [b for b in available_nc if b not in {1, second_ace}]
@@ -1186,30 +1187,29 @@ def get_recommendations(
                                  else max(use_map, key=lambda b: use_map[b]))
                     perry_ace_st = p_st_map.get(perry_ace)
 
-                    # 2着候補: perry_aceより内側の艇（1号艇除く、perry_aceに近い順）
-                    inner_candidates = sorted(
-                        [b for b in available_perry if b < perry_ace and b != 1],
-                        reverse=True
-                    )
-                    inner2 = inner_candidates[:2]
-                    # 内側が1艇しかない場合は外側に補完して2着を必ず2艇にする
-                    if len(inner2) < 2:
-                        outer_candidates = sorted(
-                            [b for b in available_perry if b > perry_ace]
-                        )
-                        for ob in outer_candidates:
-                            if ob not in inner2:
-                                inner2.append(ob)
-                                break
+                    # 2着・3着: 脅威スコア+展開位置ボーナスでフレキシブルに選出（1号艇含む）
+                    def _perry_flex_score(b):
+                        ts = _calc_threat_score(b, race_row)
+                        dist = abs(b - perry_ace)
+                        prox = 0.3 if dist == 1 else 0.15 if dist == 2 else 0.0
+                        b1_bonus = 0.2 if b == 1 else 0.0
+                        return ts * 0.6 + (prox + b1_bonus) * 0.4
 
-                    if inner2:
-                        # 3着: 1号艇 + inner2 + 外側→内側の順に補完して必ず4艇確保
-                        third_set = {1} | set(inner2)
-                        for ext in list(range(perry_ace + 1, 7)) + list(range(2, perry_ace)):
+                    all_except_ace = sorted(
+                        [b for b in available_perry if b != perry_ace],
+                        key=_perry_flex_score, reverse=True
+                    )
+                    inner2 = all_except_ace[:2]  # 2着上位2艇（1号艇含む可能性あり）
+
+                    if len(inner2) >= 2:
+                        # 3着: 2着2艇 + 1号艇必須 + スコア順補完で4艇確保
+                        third_set = set(inner2)
+                        if 1 in available_perry:
+                            third_set.add(1)
+                        for b in all_except_ace[2:]:
                             if len(third_set) >= 4:
                                 break
-                            if ext in available_perry and ext not in third_set:
-                                third_set.add(ext)
+                            third_set.add(b)
                         perry_third = sorted(third_set)
 
                         if len(perry_third) >= 2:
@@ -1337,19 +1337,29 @@ def get_recommendations(
                                             sorted(use_map.keys(), key=lambda b: use_map[b], reverse=True))
                             perry_ace2 = sorted_outer[1] if len(sorted_outer) >= 2 else None
                             if perry_ace2 is not None:
-                                inner_cands2 = sorted(
-                                    [b for b in available_perry if b < perry_ace2 and b != 1],
-                                    reverse=True
+                                # 2着・3着: perry_ace2基準のフレキシブルスコアで選出
+                                def _perry_flex_score2(b):
+                                    ts = _calc_threat_score(b, race_row)
+                                    dist = abs(b - perry_ace2)
+                                    prox = 0.3 if dist == 1 else 0.15 if dist == 2 else 0.0
+                                    b1_bonus = 0.2 if b == 1 else 0.0
+                                    return ts * 0.6 + (prox + b1_bonus) * 0.4
+
+                                all_except_ace2 = sorted(
+                                    [b for b in available_perry if b != perry_ace2],
+                                    key=_perry_flex_score2, reverse=True
                                 )
-                                kai2_inner1 = inner_cands2[0] if inner_cands2 else None
-                                kai2_inner2 = inner_cands2[1] if len(inner_cands2) >= 2 else None
+                                kai2_inner1 = all_except_ace2[0] if all_except_ace2 else None
                                 if kai2_inner1 is not None:
-                                    third_kai2 = sorted({1} | ({kai2_inner2} if kai2_inner2 else set()))
-                                    if len(third_kai2) < 2:
-                                        fill_kai2 = [b for b in available_perry
-                                                     if b not in {perry_ace2, kai2_inner1} and b not in set(third_kai2)]
-                                        if fill_kai2:
-                                            third_kai2 = sorted(set(third_kai2) | {fill_kai2[0]})
+                                    # 3着: 2着1艇 + 1号艇 + 不足時補完 = 2艇確保
+                                    third_kai2_set = {kai2_inner1}
+                                    if 1 in available_perry:
+                                        third_kai2_set.add(1)
+                                    for b in all_except_ace2[1:]:
+                                        if len(third_kai2_set) >= 2:
+                                            break
+                                        third_kai2_set.add(b)
+                                    third_kai2 = sorted(third_kai2_set)
                                     if len(third_kai2) >= 2:
                                         kai2_str = (
                                             f"{perry_ace2}-{kai2_inner1}-"
