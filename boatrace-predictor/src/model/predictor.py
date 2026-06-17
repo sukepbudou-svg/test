@@ -1091,12 +1091,19 @@ def get_recommendations(
             })
 
         # 地熊2.0: 1号艇1着固定・形 1-AB-ABCD（6点）
-        # 2着A: ML60%+ET30%+内側ポジション10%のスコア1位艇
-        # 2着B: Aの直外側（外がなければスコア2位）
-        # 3着C: Bの直外側（外がなければ次点）
-        # 3着D: スコア次点（A,B,C,1号以外）
+        # A選出: 条件付き2着確率35%+グレード20%+ET20%+ST15%+前付け5%+外側ボーナス5%
+        # B=Aの直外側、C=Bの直外側、D=スコア次点 → 外に広げて大配当狙い
         available_nc = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
         if 1 in available_nc and len(available_nc) >= 3:
+            # 条件付き2着確率: P(2着=b | 1着=1号)
+            by_prob_1st_nc = by_prob[by_prob["boat1"] == 1]
+            jk2_cond_2nd: dict = {}
+            for b in available_nc:
+                if b != 1:
+                    jk2_cond_2nd[b] = float(by_prob_1st_nc[by_prob_1st_nc["boat2"] == b]["prob"].sum())
+            jk2_max_2nd = max(jk2_cond_2nd.values()) if jk2_cond_2nd else 1.0
+
+            # ETランク（速い=1.0）
             nc_et_vals = {}
             for b in available_nc:
                 v = _safe_float(race_row.get(f"boat{b}_exhibition_time"))
@@ -1107,19 +1114,30 @@ def get_recommendations(
                 sorted_nc_et = sorted(nc_et_vals.items(), key=lambda x: x[1])
                 n_nlet = len(sorted_nc_et)
                 for rank_i, (b, _) in enumerate(sorted_nc_et):
-                    nc_et_ranks[b] = 1.0 - rank_i / (n_nlet - 1)  # 速い=1.0、遅い=0.0
-
-            nc_ml = {}
-            for b in available_nc:
-                mask = by_prob["boat1"] == b
-                nc_ml[b] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
-            nc_ml_max = max(nc_ml.values()) if nc_ml else 1.0
+                    nc_et_ranks[b] = 1.0 - rank_i / (n_nlet - 1)
 
             def _jk2_score(bn):
-                ml = nc_ml.get(bn, 0.0) / (nc_ml_max or 1.0)
+                prob = jk2_cond_2nd.get(bn, 0.0) / (jk2_max_2nd or 1.0)
+                gn_raw = race_row.get(f"boat{bn}_grade_num", 2)
+                try:
+                    gn = int(float(gn_raw)) if gn_raw is not None else 2
+                except (TypeError, ValueError):
+                    gn = 2
+                grade = {4: 1.0, 3: 0.67, 2: 0.33, 1: 0.0}.get(gn, 0.33)
+                nat2 = min(_safe_float(race_row.get(f"boat{bn}_national_2rate")) or 0.0, 1.0)
+                gr = (grade + nat2) / 2.0
                 et = nc_et_ranks.get(bn, 0.5)
-                pos_bonus = (6 - bn) / 20.0  # 内側ほど微小ボーナス（2号=0.02相当）
-                return ml * 0.60 + et * 0.30 + pos_bonus * 0.10
+                st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
+                ac_raw = race_row.get(f"boat{bn}_actual_course")
+                try:
+                    ac = int(ac_raw) if ac_raw is not None else bn
+                except (TypeError, ValueError):
+                    ac = bn
+                mz = 1.0 if ac < bn else 0.0
+                # 外側ボーナス（地熊2.0独自: 外艇を選びやすくして大配当狙い）
+                outer_bonus = 0.0 if bn <= 2 else 0.5 if bn <= 4 else 1.0
+                return prob * 0.35 + gr * 0.20 + et * 0.20 + st_sc * 0.15 + mz * 0.05 + outer_bonus * 0.05
 
             non_first = [b for b in available_nc if b != 1]
             jk2_ranked = sorted(non_first, key=_jk2_score, reverse=True)
