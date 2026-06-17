@@ -1134,7 +1134,7 @@ def get_recommendations(
                            "灼熱" if arare_score >= ARARE_MIN_SCORE else
                            "熊熱" if arare_score == 1 else "見送り")
             if weak_in:
-                lucky_label += "(弱イン)"
+                lucky_label += "(注意:弱イン)"
             all_recommendations.append({
                 "date":          race_row.get("date", ""),
                 "venue_name":    race_row.get("venue_name", ""),
@@ -1153,27 +1153,88 @@ def get_recommendations(
                 "boat1_risk":    _calc_boat1_risk(race_row),
             })
 
-        # 熊フォメ（全PT対象・ML確率上位2艇を1着、脅威スコアで2着・3着を拡張）
+        # 熊フォメ（全PT対象・ML上位2艇を1着、条件付き確率ベースで2着・3着を選出）
+        # 地熊系と同じスコア式: 条件付き確率40% + グレード+2連率20% + ET20% + ST15% + 前付け5%
+        kuma_boats = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
         kuma_wp = {}
-        for bn in range(1, 7):
-            if absent_boats and bn in absent_boats:
-                continue
+        for bn in kuma_boats:
             mask = by_prob["boat1"] == bn
             kuma_wp[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
         kuma_ranked = sorted(kuma_wp, key=lambda b: kuma_wp[b], reverse=True)
         if len(kuma_ranked) >= 3:
-            kuma_first = kuma_ranked[:2]
-            kuma_pool2 = [b for b in kuma_ranked if b not in set(kuma_first)]
-            kuma_threat_a = (max(kuma_pool2, key=lambda b: _calc_threat_score(b, race_row))
-                             if kuma_pool2 else None)
-            kuma_second = sorted(set(kuma_first) | {kuma_threat_a}) if kuma_threat_a else sorted(kuma_first)
+            kuma_first = kuma_ranked[:2]   # ML上位2艇が1着候補
+
+            # ETランク（速い=1.0）
+            kuma_et_vals = {}
+            for b in kuma_boats:
+                v = _safe_float(race_row.get(f"boat{b}_exhibition_time"))
+                if v and v > 0:
+                    kuma_et_vals[b] = v
+            if kuma_et_vals:
+                _ket_sorted = sorted(kuma_et_vals.items(), key=lambda x: x[1])
+                kuma_et_ranks = {b: 1.0 - (i / max(len(_ket_sorted) - 1, 1))
+                                 for i, (b, _) in enumerate(_ket_sorted)}
+            else:
+                kuma_et_ranks = {}
+
+            def _kuma_grade(bn):
+                grade = _safe_float(race_row.get(f"boat{bn}_grade_num")) or 2.0
+                nat2  = _safe_float(race_row.get(f"boat{bn}_national_2rate")) or 0.35
+                return max(0.0, min(1.0, (grade + nat2 * 10) / 14.0))
+
+            def _kuma_maezuke(bn):
+                ac_raw = race_row.get(f"boat{bn}_actual_course")
+                try:
+                    ac = int(ac_raw) if ac_raw is not None else bn
+                except (TypeError, ValueError):
+                    ac = bn
+                return 1.0 if ac < bn else 0.0
+
+            # 条件付き確率を1着候補2艇で平均: P(2着=b|1着=A) / P(3着=b|1着=A)
+            non_first_kuma = [b for b in kuma_boats if b not in set(kuma_first)]
+            kuma_cond_2nd: dict = {}
+            kuma_cond_3rd: dict = {}
+            for b in non_first_kuma:
+                s2 = s3 = 0.0
+                for a in kuma_first:
+                    rows_a = by_prob[by_prob["boat1"] == a]
+                    s2 += float(rows_a[rows_a["boat2"] == b]["prob"].sum())
+                    s3 += float(rows_a[rows_a["boat3"] == b]["prob"].sum())
+                kuma_cond_2nd[b] = s2 / len(kuma_first)
+                kuma_cond_3rd[b] = s3 / len(kuma_first)
+            kuma_max2 = max(kuma_cond_2nd.values()) if kuma_cond_2nd else 1.0
+            kuma_max3 = max(kuma_cond_3rd.values()) if kuma_cond_3rd else 1.0
+
+            def _kuma2nd_score(bn):
+                prob  = kuma_cond_2nd.get(bn, 0.0) / (kuma_max2 or 1.0)
+                gr    = _kuma_grade(bn)
+                et    = kuma_et_ranks.get(bn, 0.5)
+                st    = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
+                mz    = _kuma_maezuke(bn)
+                return prob * 0.40 + gr * 0.20 + et * 0.20 + st_sc * 0.15 + mz * 0.05
+
+            def _kuma3rd_score(bn):
+                prob  = kuma_cond_3rd.get(bn, 0.0) / (kuma_max3 or 1.0)
+                gr    = _kuma_grade(bn)
+                et    = kuma_et_ranks.get(bn, 0.5)
+                st    = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
+                mz    = _kuma_maezuke(bn)
+                return prob * 0.40 + gr * 0.20 + et * 0.20 + st_sc * 0.15 + mz * 0.05
+
+            # 2着: 1着2艇 + 条件付き確率スコア最高の1艇（計3艇）
+            kuma_threat_a = max(non_first_kuma, key=_kuma2nd_score) if non_first_kuma else None
+            kuma_second = sorted(set(kuma_first) | ({kuma_threat_a} if kuma_threat_a else set()))
+
+            # 3着: PT7以上は2着3艇+次位艇（12点）、それ以外は2着と同じ3艇（6点）
             if arare_score >= 7:
-                kuma_pool3 = [b for b in kuma_ranked if b not in set(kuma_second)]
-                kuma_threat_b = (max(kuma_pool3, key=lambda b: _calc_threat_score(b, race_row))
-                                 if kuma_pool3 else None)
-                kuma_third = sorted(set(kuma_second) | {kuma_threat_b}) if kuma_threat_b else kuma_second
+                rem_3rd = [b for b in non_first_kuma if b != kuma_threat_a]
+                kuma_threat_b = max(rem_3rd, key=_kuma3rd_score) if rem_3rd else None
+                kuma_third = sorted(set(kuma_second) | ({kuma_threat_b} if kuma_threat_b else set()))
             else:
                 kuma_third = kuma_second
+
             kuma_str = (
                 f"{''.join(str(b) for b in sorted(kuma_first))}-"
                 f"{''.join(str(b) for b in kuma_second)}-"
@@ -1290,7 +1351,7 @@ def get_recommendations(
                                 "灼熱" if arare_score >= ARARE_MIN_SCORE else
                                 "熊熱" if arare_score == 1 else "見送り")
                     if weak_in:
-                        nc_label += "(弱イン)"
+                        nc_label += "(注意:弱イン)"
                     all_recommendations.append({
                         "date":          race_row.get("date", ""),
                         "venue_name":    race_row.get("venue_name", ""),
