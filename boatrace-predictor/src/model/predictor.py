@@ -1090,7 +1090,8 @@ def get_recommendations(
                     if b not in set(lucky_third):
                         lucky_third = sorted(set(lucky_third) | {b})
 
-                if len(lucky_second) >= 2 and len(lucky_third) >= 2:
+                # 3着が3艇未満 = 4点フォーメーション未満 → 生成しない
+                if len(lucky_second) >= 2 and len(lucky_third) >= 3:
                     lucky_str = (
                         f"1-"
                         f"{''.join(str(b) for b in lucky_second)}-"
@@ -1130,6 +1131,11 @@ def get_recommendations(
             }
 
         if lucky_str:
+            # 地熊目の点数確認ログ（2着2艇×3着3艇 - 2着=3着の2点 = 4点が正常）
+            _l2 = len(lucky_second) if 'lucky_second' in dir() else 0
+            _l3 = len(lucky_third)  if 'lucky_third'  in dir() else 0
+            _lucky_pts = _l2 * _l3 - _l2  # フォーメーション点数の理論値
+            print(f"  [地熊目] {venue_name_log} {race_no}R {lucky_str} ({_lucky_pts}点)")
             lucky_label = ("神熱" if arare_ok else
                            "灼熱" if arare_score >= ARARE_MIN_SCORE else
                            "熊熱" if arare_score == 1 else "見送り")
@@ -1240,6 +1246,13 @@ def get_recommendations(
                 f"{''.join(str(b) for b in kuma_second)}-"
                 f"{''.join(str(b) for b in kuma_third)}"
             )
+            # 熊フォメ点数確認ログ（PT<7=6点, PT>=7=12点が正常）
+            _kf1s = set(kuma_first)
+            _kf2s = set(kuma_second)
+            _kf3s = set(kuma_third)
+            _kuma_pts = sum(1 for a, b, c in permutations(range(1, 7), 3)
+                            if a in _kf1s and b in _kf2s and c in _kf3s)
+            print(f"  [熊フォメ] {venue_name_log} {race_no}R {kuma_str} ({_kuma_pts}点)")
             all_recommendations.append({
                 "date":          race_row.get("date", ""),
                 "venue_name":    race_row.get("venue_name", ""),
@@ -1341,12 +1354,16 @@ def get_recommendations(
                     if b not in set(jk2_third):
                         jk2_third = sorted(set(jk2_third) | {b})
 
-                if len(jk2_second) >= 2 and len(jk2_third) >= 2:
+                # 3着が3艇未満 = 4点未満フォーメーション → 生成しない
+                if len(jk2_second) >= 2 and len(jk2_third) >= 3:
                     jk2_str = (
                         f"1-"
                         f"{''.join(str(b) for b in jk2_second)}-"
                         f"{''.join(str(b) for b in jk2_third)}"
                     )
+                    # 地熊2.0の点数確認ログ（2着2艇×3着4艇 - 2点 = 6点が正常）
+                    _jk2_pts = len(jk2_second) * len(jk2_third) - len(jk2_second)
+                    print(f"  [地熊2.0] {venue_name_log} {race_no}R {jk2_str} ({_jk2_pts}点)")
                     nc_label = ("神熱" if arare_ok else
                                 "灼熱" if arare_score >= ARARE_MIN_SCORE else
                                 "熊熱" if arare_score == 1 else "見送り")
