@@ -904,13 +904,24 @@ def get_recommendations(
             return topN.reset_index(drop=True), star_level, is_confident, second_b2
 
         # 地熊目: 1号艇1着固定・形 1-AB-ABC（4点フォーメーション）
-        # 2着A/B: ML60%+ETランク30%+展示ST10%で上位2艇
-        # 3着C: 脅威スコアで追加1艇（A,B以外）→ 1-AB-ABC = 4点
+        # 2着A/B: P(2着=b|1着=1)40% + グレード+2連率20% + ET20% + 展示ST15% + 前付け5%
+        # 3着C:   P(3着=b|1着=1)40% + グレード+2連率20% + ET20% + 展示ST15% + 前付け5%（A,B以外）
         lucky_str = None
         if not (absent_boats and 1 in absent_boats):
             lucky_boats = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             non_first_lucky = [b for b in lucky_boats if b != 1]
 
+            # 1号艇1着限定の条件付き2着・3着確率
+            by_prob_1st = by_prob[by_prob["boat1"] == 1]
+            cond_2nd: dict = {}
+            cond_3rd: dict = {}
+            for b in non_first_lucky:
+                cond_2nd[b] = float(by_prob_1st[by_prob_1st["boat2"] == b]["prob"].sum())
+                cond_3rd[b] = float(by_prob_1st[by_prob_1st["boat3"] == b]["prob"].sum())
+            max_2nd = max(cond_2nd.values()) if cond_2nd else 1.0
+            max_3rd = max(cond_3rd.values()) if cond_3rd else 1.0
+
+            # ETランク（速い=1.0、データなし=0.5）
             lucky_et_vals = {}
             for b in lucky_boats:
                 v = _safe_float(race_row.get(f"boat{b}_exhibition_time"))
@@ -923,30 +934,53 @@ def get_recommendations(
                 for rank_i, (b, _) in enumerate(sorted_lucky_et):
                     lucky_et_ranks[b] = 1.0 - rank_i / (n_let - 1)
 
-            lucky_ml = {}
-            for b in lucky_boats:
-                _mask = by_prob["boat1"] == b
-                lucky_ml[b] = float(by_prob[_mask]["prob"].sum()) if _mask.any() else 0.0
-            lucky_ml_max = max(lucky_ml.values()) if lucky_ml else 1.0
+            def _lucky_grade(bn):
+                gn_raw = race_row.get(f"boat{bn}_grade_num", 2)
+                try:
+                    gn = int(float(gn_raw)) if gn_raw is not None else 2
+                except (TypeError, ValueError):
+                    gn = 2
+                grade = {4: 1.0, 3: 0.67, 2: 0.33, 1: 0.0}.get(gn, 0.33)
+                nat2 = min(_safe_float(race_row.get(f"boat{bn}_national_2rate")) or 0.0, 1.0)
+                return (grade + nat2) / 2.0
+
+            def _lucky_maezuke(bn):
+                ac_raw = race_row.get(f"boat{bn}_actual_course")
+                try:
+                    ac = int(ac_raw) if ac_raw is not None else bn
+                except (TypeError, ValueError):
+                    ac = bn
+                return 1.0 if ac < bn else 0.0  # 前付けで内コースに進入 = ボーナス
 
             def _lucky2nd_score(bn):
-                ml = lucky_ml.get(bn, 0.0) / (lucky_ml_max or 1.0)
-                et = lucky_et_ranks.get(bn, 0.5)
-                st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                prob  = cond_2nd.get(bn, 0.0) / (max_2nd or 1.0)
+                et    = lucky_et_ranks.get(bn, 0.5)
+                gr    = _lucky_grade(bn)
+                st    = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
                 st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
-                return ml * 0.60 + et * 0.30 + st_sc * 0.10
+                mz    = _lucky_maezuke(bn)
+                return prob * 0.40 + gr * 0.20 + et * 0.20 + st_sc * 0.15 + mz * 0.05
 
-            ranked_lucky = sorted(non_first_lucky, key=_lucky2nd_score, reverse=True)
+            def _lucky3rd_score(bn):
+                prob  = cond_3rd.get(bn, 0.0) / (max_3rd or 1.0)
+                et    = lucky_et_ranks.get(bn, 0.5)
+                gr    = _lucky_grade(bn)
+                st    = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
+                mz    = _lucky_maezuke(bn)
+                return prob * 0.40 + gr * 0.20 + et * 0.20 + st_sc * 0.15 + mz * 0.05
 
-            if len(ranked_lucky) >= 2:
-                ace_a = ranked_lucky[0]
-                ace_b = ranked_lucky[1]
+            ranked_2nd = sorted(non_first_lucky, key=_lucky2nd_score, reverse=True)
+
+            if len(ranked_2nd) >= 2:
+                ace_a = ranked_2nd[0]
+                ace_b = ranked_2nd[1]
                 rem_c = [b for b in non_first_lucky if b not in {ace_a, ace_b}]
-                ace_c = max(rem_c, key=lambda b: _calc_threat_score(b, race_row)) if rem_c else None
+                ace_c = max(rem_c, key=_lucky3rd_score) if rem_c else None
 
                 lucky_second = sorted({ace_a, ace_b})
                 lucky_third = sorted(set(lucky_second) | ({ace_c} if ace_c else set()))
-                for b in ranked_lucky:
+                for b in ranked_2nd:
                     if len(lucky_third) >= 3:
                         break
                     if b not in set(lucky_third):
