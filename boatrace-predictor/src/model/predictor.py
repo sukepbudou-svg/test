@@ -349,6 +349,74 @@ def _calc_boat1_risk(race_row: pd.Series) -> str:
     return " / ".join(flags) if flags else "-"
 
 
+def _calc_boat1_weakness(race_row: pd.Series, weather: dict = None) -> tuple[int, list[str]]:
+    """
+    1号艇が弱くなる条件を8項目でカウントする。
+    3個以上で「弱イン」ラベルを付与する判断に使う。
+    Returns: (count, [条件フラグリスト])
+    """
+    count = 0
+    flags = []
+
+    # 展示ST遅い（0.18以上）
+    st1 = _safe_float(race_row.get("boat1_exhibition_st"))
+    if st1 is not None and st1 >= 0.18:
+        count += 1
+        flags.append(f"展示ST{st1:.2f}")
+
+    # 今節平均ST遅い（0.17以上）
+    meet_st1 = _safe_float(race_row.get("boat1_meet_avg_st"))
+    if meet_st1 is not None and meet_st1 >= 0.17:
+        count += 1
+        flags.append(f"節ST{meet_st1:.2f}")
+
+    # モーター2連率低い（0.35未満）
+    m1 = _safe_float(race_row.get("boat1_motor_2rate"))
+    if m1 is not None and m1 < 0.35:
+        count += 1
+        flags.append(f"M{m1:.0%}")
+
+    # B級選手（grade_num≤2）
+    g1 = _safe_float(race_row.get("boat1_grade_num"))
+    if g1 is not None and g1 <= 2:
+        count += 1
+        flags.append("B級")
+
+    # 全国2連率低い（0.40未満）
+    n2_1 = _safe_float(race_row.get("boat1_national_2rate"))
+    if n2_1 is not None and n2_1 < 0.40:
+        count += 1
+        flags.append(f"2率{n2_1:.0%}")
+
+    # 今節平均着順不振（4.0以上、2R以上出走）
+    meet_avg_rank1 = _safe_float(race_row.get("boat1_meet_avg_rank"))
+    meet_races1 = int(race_row.get("boat1_meet_races", 0) or 0)
+    if meet_avg_rank1 is not None and meet_races1 >= 2 and meet_avg_rank1 >= 4.0:
+        count += 1
+        flags.append(f"今節{meet_avg_rank1:.1f}着")
+
+    # 展示タイム全艇中最遅
+    et_vals = {}
+    for bn in range(1, 7):
+        v = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
+        if v and v > 0:
+            et_vals[bn] = v
+    if len(et_vals) >= 4 and 1 in et_vals:
+        if max(et_vals, key=lambda b: et_vals[b]) == 1:
+            count += 1
+            flags.append(f"展示最遅({et_vals[1]:.2f}s)")
+
+    # 風速5m以上（強風はインに不利）
+    wind = _safe_float((weather or {}).get("wind_speed"))
+    if wind and wind >= 5:
+        count += 1
+        wind_dir = (weather or {}).get("wind_direction", "")
+        dir_suffix = {"tail": "追", "head": "向", "side": "横"}.get(wind_dir, "")
+        flags.append(f"風速{int(wind)}m{dir_suffix}")
+
+    return count, flags
+
+
 def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.DataFrame | None" = None) -> tuple[int, list[str]]:
     """
     荒れ条件スコアを計算する。
@@ -889,6 +957,12 @@ def get_recommendations(
             print(f"  [荒れ対象外] {venue_name_log} {race_no}R スコア{arare_score}/{ARARE_MIN_SCORE}"
                   + (f" 条件:[{', '.join(arare_reasons)}]" if arare_reasons else ""))
 
+        # 1号艇弱体チェック（荒れPTと独立した弱イン判定）
+        boat1_weak_count, boat1_weak_flags = _calc_boat1_weakness(race_row, weather)
+        weak_in = boat1_weak_count >= 3
+        if weak_in:
+            print(f"  [弱イン検出] {venue_name_log} {race_no}R {boat1_weak_count}条件:[{', '.join(boat1_weak_flags)}]")
+
         def pick_by_edge(pool, tier_name, n=2, min_odds=0, max_odds=None,
                          hot_threshold=2.0, fire_threshold=3.0, exclude_boats=None,
                          min_prob=None, exclude_first_boats=None, sort_by="edge"):
@@ -1032,6 +1106,8 @@ def get_recommendations(
                 confidence, bet_label = "★☆☆☆", "熊熱"
             else:
                 confidence, bet_label = "★☆☆☆", "見送り"
+            if weak_in:
+                bet_label += "(弱イン)"
             src = rec.get("odds_source", "history")
             edge_val = round(float(rec["prob"]) * float(rec["odds_value"]), 2)
             combo = rec["combination"]
@@ -1057,6 +1133,8 @@ def get_recommendations(
             lucky_label = ("神熱" if arare_ok else
                            "灼熱" if arare_score >= ARARE_MIN_SCORE else
                            "熊熱" if arare_score == 1 else "見送り")
+            if weak_in:
+                lucky_label += "(弱イン)"
             all_recommendations.append({
                 "date":          race_row.get("date", ""),
                 "venue_name":    race_row.get("venue_name", ""),
@@ -1112,7 +1190,7 @@ def get_recommendations(
                 "confidence":    "熊フォメ",
                 "odds_source":   nigerate_str,
                 "tier":          "熊フォメ",
-                "bet_label":     "神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り"),
+                "bet_label":     ("神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り")) + ("(弱イン)" if weak_in else ""),
                 "edge":          "-",
                 "arare_score":   arare_score,
                 "arare_reasons": " / ".join(arare_reasons),
@@ -1211,6 +1289,8 @@ def get_recommendations(
                     nc_label = ("神熱" if arare_ok else
                                 "灼熱" if arare_score >= ARARE_MIN_SCORE else
                                 "熊熱" if arare_score == 1 else "見送り")
+                    if weak_in:
+                        nc_label += "(弱イン)"
                     all_recommendations.append({
                         "date":          race_row.get("date", ""),
                         "venue_name":    race_row.get("venue_name", ""),
@@ -1386,6 +1466,8 @@ def get_recommendations(
                                 perry_label = "ペリー来航★"
                             else:
                                 perry_label = "見送り"
+                            if weak_in:
+                                perry_label += "(弱イン)"
                             tier_label  = f"ペリー舟券({data_label})"
 
                             all_recommendations.append({
