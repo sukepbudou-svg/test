@@ -349,12 +349,13 @@ def _calc_boat1_risk(race_row: pd.Series) -> str:
     return " / ".join(flags) if flags else "-"
 
 
-def _calc_arare_score(race_row: pd.Series, weather: dict = None) -> tuple[int, list[str]]:
+def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.DataFrame | None" = None) -> tuple[int, list[str]]:
     """
     荒れ条件スコアを計算する。
     2点条件: 1号艇の展示ST遅い / モーター不良 / B級 / 外艇展示タイム上位 / 前付け
     1点条件: 1号艇の全国2連率低い / 今節不調 / 展示最遅 / 外艇A1選手 / 外艇ST速い(複数可) /
-             風速強 / 追い風 / 波高 / 荒れ会場 / 一般戦
+             風速強 / 追い風 / 波高 / 荒れ会場 / 一般戦 /
+             外艇MLシェア高 / 1号艇-外艇ST相対差大
     Returns: (score, [条件説明リスト])
     """
     score = 0
@@ -467,6 +468,33 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None) -> tuple[int, l
         elif ac <= 3 and ac != bn: # 4-6号艇が3コースに進入
             score += 1
             reasons.append(f"{bn}号艇進入変更(→{ac}コース)")
+
+    # ── ML外艇シェア（モデル自身が荒れを示唆） ──
+    # 外艇(4-6号)の1着確率合計が高いほどモデルが荒れを予測している
+    if by_prob is not None and not by_prob.empty and "boat1" in by_prob.columns:
+        outer_ml_sum = float(by_prob[by_prob["boat1"].isin([4, 5, 6])]["prob"].sum())
+        if outer_ml_sum >= 0.40:
+            score += 2
+            reasons.append(f"外艇MLシェア{outer_ml_sum:.0%}(高)")
+        elif outer_ml_sum >= 0.30:
+            score += 1
+            reasons.append(f"外艇MLシェア{outer_ml_sum:.0%}(中)")
+
+    # ── 1号艇と外艇の展示ST相対差（インが相対的に遅い） ──
+    outer_st_vals = [
+        _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+        for bn in [4, 5, 6]
+    ]
+    outer_st_vals = [v for v in outer_st_vals if v is not None and v > 0]
+    if st1 is not None and st1 > 0 and outer_st_vals:
+        best_outer_st = min(outer_st_vals)  # 外艇最速ST（値が小さいほど速い）
+        st_gap = st1 - best_outer_st        # 正値 = インが遅い / 外が速い
+        if st_gap >= 0.08:
+            score += 2
+            reasons.append(f"ST差{st_gap:.2f}(1号遅/外速)")
+        elif st_gap >= 0.05:
+            score += 1
+            reasons.append(f"ST差{st_gap:.2f}(1号やや遅)")
 
     return score, reasons
 
@@ -843,8 +871,12 @@ def get_recommendations(
         # 1号艇逃げ推定率（J列表示用）
         nigerate_str = _calc_nigerate(race_row)
 
+        # ML予測を先に計算（荒れPTにML外艇シェアを使うため）
+        predictions = predict_race(model, race_row, payout_lookup, live_odds, weather, absent_boats)
+        by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
+
         # 荒れ条件チェック: スコア不足でも予想は生成するが見送りになる
-        arare_score, arare_reasons = _calc_arare_score(race_row, weather)
+        arare_score, arare_reasons = _calc_arare_score(race_row, weather, by_prob)
         # 神熱条件: 荒れPT7以上 かつ 追い風5m以上
         _wind_spd = _safe_float((weather or {}).get("wind_speed"))
         _wind_dir = (weather or {}).get("wind_direction", "")
@@ -856,9 +888,6 @@ def get_recommendations(
         else:
             print(f"  [荒れ対象外] {venue_name_log} {race_no}R スコア{arare_score}/{ARARE_MIN_SCORE}"
                   + (f" 条件:[{', '.join(arare_reasons)}]" if arare_reasons else ""))
-
-        predictions = predict_race(model, race_row, payout_lookup, live_odds, weather, absent_boats)
-        by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
 
         def pick_by_edge(pool, tier_name, n=2, min_odds=0, max_odds=None,
                          hot_threshold=2.0, fire_threshold=3.0, exclude_boats=None,
