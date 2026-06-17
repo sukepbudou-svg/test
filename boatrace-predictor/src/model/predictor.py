@@ -266,12 +266,12 @@ def _calc_threat_score(bn: int, race_row: pd.Series) -> float:
         except (TypeError, ValueError):
             pass
 
-    # グレード（A1=4→+0.6, A2=3→+0.3, B1/B2=0）
+    # グレード（A1=4→+0.8, A2=3→+0.4, B1/B2=0）
     gn_raw = race_row.get(f"boat{bn}_grade_num", 2)
     try:
         gn = int(float(gn_raw)) if gn_raw is not None else 2
         if gn >= 3:
-            score += (gn - 2) * 0.3
+            score += (gn - 2) * 0.4
     except (TypeError, ValueError):
         pass
 
