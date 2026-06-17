@@ -197,7 +197,7 @@ def _calc_nigerate(race_row: pd.Series) -> str:
     """
     1号艇のイン逃げ推定率を計算して "逃げ推定XX%" 文字列で返す。
 
-    会場ベース × レース番号補正 × 選手逃げ率補正 × 展示ST補正 × 2号艇差し圧力補正
+    会場ベース + 各補正の加算方式（乗算の連鎖による数値崩壊を防ぐ）
     """
     venue_code = str(race_row.get("venue_code", "")).zfill(2)
     race_no = int(race_row.get("race_no", 6) or 6)
@@ -205,36 +205,37 @@ def _calc_nigerate(race_row: pd.Series) -> str:
     base = _VENUE_INNER_ESCAPE.get(venue_code, 0.570)
     rn_factor = _RACE_NO_NIGERATE_FACTOR.get(race_no, 1.00)
 
-    # 一般戦は1号艇が弱くなりやすい → 微減
-    mg = _safe_float(race_row.get("meet_grade_num"))
-    series_factor = 0.97 if mg is not None and mg <= 1 else 1.00
+    nigerate = base * rn_factor  # 会場×レース番号は乗算（主軸）
 
-    # 選手1号艇の逃げ率実績補正
+    # 以降は加算補正（各±数%）
+    # 一般戦は微減
+    mg = _safe_float(race_row.get("meet_grade_num"))
+    if mg is not None and mg <= 1:
+        nigerate -= 0.02
+
+    # 選手1号艇の逃げ率実績補正（±8%上限）
     racer1_no = int(race_row.get("boat1_racer_no", 0) or 0)
     racer1_inner = _INNER_WIN_BASELINE
     if racer1_no in _RACER_STYLE:
         sd = _RACER_STYLE[racer1_no]
         if isinstance(sd, dict) and "inner_win_rate" in sd:
             racer1_inner = sd["inner_win_rate"]
-    inner_factor = np.clip(racer1_inner / _INNER_WIN_BASELINE, 0.65, 1.35)
+    nigerate += np.clip((racer1_inner - _INNER_WIN_BASELINE) * 0.5, -0.08, 0.08)
 
-    # 展示ST補正（速いほど逃げやすい）
+    # 展示ST補正（速いほど逃げやすい、±6%上限）
     st1 = _safe_float(race_row.get("boat1_exhibition_st"))
     if st1 and st1 > 0:
-        st_factor = np.clip(1.0 + (0.155 - st1) * 2.5, 0.70, 1.30)
-    else:
-        st_factor = 1.0
+        nigerate += np.clip((0.155 - st1) * 1.5, -0.06, 0.06)
 
-    # 2号艇の差し圧力補正（高いほど1号艇逃げ率が下がる）
+    # 2号艇の差し圧力補正（±4%上限）
     racer2_no = int(race_row.get("boat2_racer_no", 0) or 0)
     c2_pressure = _COURSE2_PRESSURE_BASELINE
     if racer2_no in _RACER_STYLE:
         sd = _RACER_STYLE[racer2_no]
         if isinstance(sd, dict) and "course2_pressure" in sd:
             c2_pressure = sd["course2_pressure"]
-    pressure_factor = np.clip(1.0 - 0.4 * (c2_pressure - _COURSE2_PRESSURE_BASELINE), 0.80, 1.10)
+    nigerate += np.clip(-(c2_pressure - _COURSE2_PRESSURE_BASELINE) * 0.2, -0.04, 0.04)
 
-    nigerate = base * rn_factor * series_factor * inner_factor * st_factor * pressure_factor
     nigerate = max(0.05, min(0.95, nigerate))
     return f"逃げ推定{int(round(nigerate * 100))}%"
 
