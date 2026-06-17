@@ -903,12 +903,16 @@ def get_recommendations(
             second_b2 = int(filtered.iloc[n]["boat2"]) if len(filtered) > n else None
             return topN.reset_index(drop=True), star_level, is_confident, second_b2
 
-        # 地熊目: 1号艇1着固定・2着3着をML70%+ET30%の複合スコアで上位2点選出
+        # 地熊目: 1号艇1着固定・形 1-AB-ABC（4点フォーメーション）
+        # 2着A/B: ML60%+ETランク30%+展示ST10%で上位2艇
+        # 3着C: 脅威スコアで追加1艇（A,B以外）→ 1-AB-ABC = 4点
+        lucky_str = None
         if not (absent_boats and 1 in absent_boats):
+            lucky_boats = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
+            non_first_lucky = [b for b in lucky_boats if b != 1]
+
             lucky_et_vals = {}
-            for b in range(1, 7):
-                if absent_boats and b in absent_boats:
-                    continue
+            for b in lucky_boats:
                 v = _safe_float(race_row.get(f"boat{b}_exhibition_time"))
                 if v and v > 0:
                     lucky_et_vals[b] = v
@@ -917,35 +921,43 @@ def get_recommendations(
                 sorted_lucky_et = sorted(lucky_et_vals.items(), key=lambda x: x[1])
                 n_let = len(sorted_lucky_et)
                 for rank_i, (b, _) in enumerate(sorted_lucky_et):
-                    lucky_et_ranks[b] = 1.0 - rank_i / (n_let - 1)  # 速い=1.0、遅い=0.0
+                    lucky_et_ranks[b] = 1.0 - rank_i / (n_let - 1)
 
-            by_prob_lucky = by_prob[by_prob["boat1"] == 1].copy()
-            by_prob_lucky["odds_value"] = pd.to_numeric(by_prob_lucky["odds_value"], errors="coerce")
-            by_prob_lucky = by_prob_lucky.dropna(subset=["odds_value"])
+            lucky_ml = {}
+            for b in lucky_boats:
+                _mask = by_prob["boat1"] == b
+                lucky_ml[b] = float(by_prob[_mask]["prob"].sum()) if _mask.any() else 0.0
+            lucky_ml_max = max(lucky_ml.values()) if lucky_ml else 1.0
 
-            if not by_prob_lucky.empty:
-                def _lucky_score(r):
-                    et2 = lucky_et_ranks.get(int(r["boat2"]), 0.5)
-                    et3 = lucky_et_ranks.get(int(r["boat3"]), 0.5)
-                    return float(r["prob"]) * 0.70 + (et2 + et3) / 2.0 * 0.30
+            def _lucky2nd_score(bn):
+                ml = lucky_ml.get(bn, 0.0) / (lucky_ml_max or 1.0)
+                et = lucky_et_ranks.get(bn, 0.5)
+                st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
+                return ml * 0.60 + et * 0.30 + st_sc * 0.10
 
-                by_prob_lucky["et_combo_score"] = by_prob_lucky.apply(_lucky_score, axis=1)
-                by_prob_lucky = by_prob_lucky.sort_values("et_combo_score", ascending=False).reset_index(drop=True)
-                by_prob_lucky["tier"] = "地熊目"
+            ranked_lucky = sorted(non_first_lucky, key=_lucky2nd_score, reverse=True)
 
-                lucky_rows = []
-                used_combos: set = set()
-                for _, row in by_prob_lucky.iterrows():
-                    if row["combination"] not in used_combos:
-                        used_combos.add(row["combination"])
-                        lucky_rows.append(row)
-                    if len(lucky_rows) >= 2:
+            if len(ranked_lucky) >= 2:
+                ace_a = ranked_lucky[0]
+                ace_b = ranked_lucky[1]
+                rem_c = [b for b in non_first_lucky if b not in {ace_a, ace_b}]
+                ace_c = max(rem_c, key=lambda b: _calc_threat_score(b, race_row)) if rem_c else None
+
+                lucky_second = sorted({ace_a, ace_b})
+                lucky_third = sorted(set(lucky_second) | ({ace_c} if ace_c else set()))
+                for b in ranked_lucky:
+                    if len(lucky_third) >= 3:
                         break
-                lucky_recs = pd.DataFrame(lucky_rows).reset_index(drop=True) if lucky_rows else pd.DataFrame()
-            else:
-                lucky_recs = pd.DataFrame()
-        else:
-            lucky_recs = pd.DataFrame()
+                    if b not in set(lucky_third):
+                        lucky_third = sorted(set(lucky_third) | {b})
+
+                if len(lucky_second) >= 2 and len(lucky_third) >= 2:
+                    lucky_str = (
+                        f"1-"
+                        f"{''.join(str(b) for b in lucky_second)}-"
+                        f"{''.join(str(b) for b in lucky_third)}"
+                    )
 
         def _make_row(rec, star_lv, second):
             if arare_ok:
@@ -977,9 +989,27 @@ def get_recommendations(
                 "boat1_risk": _calc_boat1_risk(race_row),
             }
 
-        if not lucky_recs.empty:
-            for _, rec in lucky_recs.iterrows():
-                all_recommendations.append(_make_row(rec, 0, None))
+        if lucky_str:
+            lucky_label = ("神熱" if arare_ok else
+                           "灼熱" if arare_score >= ARARE_MIN_SCORE else
+                           "熊熱" if arare_score == 1 else "見送り")
+            all_recommendations.append({
+                "date":          race_row.get("date", ""),
+                "venue_name":    race_row.get("venue_name", ""),
+                "race_no":       race_row.get("race_no", ""),
+                "combination":   lucky_str,
+                "prob":          "-",
+                "odds":          "-",
+                "expected_roi":  "-",
+                "confidence":    "地熊目",
+                "odds_source":   nigerate_str,
+                "tier":          "地熊目",
+                "bet_label":     lucky_label,
+                "edge":          "-",
+                "arare_score":   arare_score,
+                "arare_reasons": " / ".join(arare_reasons),
+                "boat1_risk":    _calc_boat1_risk(race_row),
+            })
 
         # 熊フォメ（全PT対象・ML確率上位2艇を1着、脅威スコアで2着・3着を拡張）
         kuma_wp = {}
