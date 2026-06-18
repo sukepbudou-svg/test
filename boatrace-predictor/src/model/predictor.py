@@ -1430,38 +1430,13 @@ def get_recommendations(
                                  else max(use_map, key=lambda b: use_map[b]))
                     perry_ace_st = p_st_map.get(perry_ace)
 
-                    # 全艇のML勝率・ETランクを事前計算（展開利スコアで使用）
-                    p_all_ml_wp = {}
-                    for _bn in available_perry:
-                        _mask = by_prob["boat1"] == _bn
-                        p_all_ml_wp[_bn] = float(by_prob[_mask]["prob"].sum()) if _mask.any() else 0.0
-                    p_all_ml_max = max(p_all_ml_wp.values()) if p_all_ml_wp else 1.0
-
-                    p_all_et_vals = {}
-                    for _bn in available_perry:
-                        _v = _safe_float(race_row.get(f"boat{_bn}_exhibition_time"))
-                        if _v and _v > 0:
-                            p_all_et_vals[_bn] = _v
-                    p_all_et_ranks = {}
-                    if len(p_all_et_vals) >= 2:
-                        _sorted_pet = sorted(p_all_et_vals.items(), key=lambda x: x[1])
-                        _n_pet = len(_sorted_pet)
-                        for _ri, (_b, _) in enumerate(_sorted_pet):
-                            p_all_et_ranks[_b] = 1.0 - _ri / (_n_pet - 1)
-
-                    # 2着・3着: 展開利重視スコア（展示ST35%+内側ポジ30%+ET15%+ML20%）
+                    # 2着・3着: 脅威スコア+展開位置ボーナスでフレキシブルに選出（1号艇含む）
                     def _perry_flex_score(b):
-                        st = _safe_float(race_row.get(f"boat{b}_exhibition_st"))
-                        st_score = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
-                        # 内側ポジション: 軸より内側=差し展開利、外側=低
-                        if b < perry_ace:
-                            d = perry_ace - b
-                            pos_score = 1.0 if d == 1 else 0.7 if d == 2 else 0.4
-                        else:
-                            pos_score = 0.2
-                        et = p_all_et_ranks.get(b, 0.5)
-                        ml = p_all_ml_wp.get(b, 0.0) / (p_all_ml_max or 1.0)
-                        return st_score * 0.35 + pos_score * 0.30 + et * 0.15 + ml * 0.20
+                        ts = _calc_threat_score(b, race_row)
+                        dist = abs(b - perry_ace)
+                        prox = 0.3 if dist == 1 else 0.15 if dist == 2 else 0.0
+                        b1_bonus = 0.2 if b == 1 else 0.0
+                        return ts * 0.6 + (prox + b1_bonus) * 0.4
 
                     all_except_ace = sorted(
                         [b for b in available_perry if b != perry_ace],
@@ -1607,18 +1582,13 @@ def get_recommendations(
                                             sorted(use_map.keys(), key=lambda b: use_map[b], reverse=True))
                             perry_ace2 = sorted_outer[1] if len(sorted_outer) >= 2 else None
                             if perry_ace2 is not None:
-                                # 2着・3着: perry_ace2基準の展開利重視スコア（展示ST35%+内側ポジ30%+ET15%+ML20%）
+                                # 2着・3着: perry_ace2基準のフレキシブルスコアで選出
                                 def _perry_flex_score2(b):
-                                    st = _safe_float(race_row.get(f"boat{b}_exhibition_st"))
-                                    st_score = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
-                                    if b < perry_ace2:
-                                        d = perry_ace2 - b
-                                        pos_score = 1.0 if d == 1 else 0.7 if d == 2 else 0.4
-                                    else:
-                                        pos_score = 0.2
-                                    et = p_all_et_ranks.get(b, 0.5)
-                                    ml = p_all_ml_wp.get(b, 0.0) / (p_all_ml_max or 1.0)
-                                    return st_score * 0.35 + pos_score * 0.30 + et * 0.15 + ml * 0.20
+                                    ts = _calc_threat_score(b, race_row)
+                                    dist = abs(b - perry_ace2)
+                                    prox = 0.3 if dist == 1 else 0.15 if dist == 2 else 0.0
+                                    b1_bonus = 0.2 if b == 1 else 0.0
+                                    return ts * 0.6 + (prox + b1_bonus) * 0.4
 
                                 all_except_ace2 = sorted(
                                     [b for b in available_perry if b != perry_ace2],
