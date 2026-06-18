@@ -576,7 +576,7 @@ def update_result_row(
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
         # フォーメーション: 展開して照合（実際の点数×100円で収支計算）
-        if tier in ("熊フォメ", "地熊2.0") or tier.startswith("ペリー舟券") or tier.startswith("ペリー改"):
+        if tier in ("地熊目", "熊フォメ", "地熊2.0") or tier.startswith("ペリー舟券") or tier.startswith("ペリー改"):
             form_combos = _expand_formation(combination)
             hit    = "○" if actual_combination in form_combos else "×"
             payout = actual_payout if hit == "○" else 0
@@ -690,7 +690,7 @@ def _compute_tier_stats(records: list, tier_check) -> dict:
             daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
         # フォーメーションは実際のcombo数×100円、それ以外は1票=100円
         tier_name = str(rec.get("狙い", ""))
-        if tier_name in ("熊フォメ", "地熊2.0") or tier_name.startswith("ペリー舟券") or tier_name.startswith("ペリー改"):
+        if tier_name in ("地熊目", "熊フォメ", "地熊2.0") or tier_name.startswith("ペリー舟券") or tier_name.startswith("ペリー改"):
             _fc = _expand_formation(str(combination))
             bet_amount = len(_fc) * 100 if _fc else 400
         else:
@@ -879,7 +879,7 @@ def update_summary_sheet(
             rn = str(rec.get("レース", ""))
             race_key = (d, v, rn)
             race_keys.add(race_key)
-            if tier_name in ("熊フォメ", "地熊2.0") or tier_val.startswith("ペリー舟券") or tier_val.startswith("ペリー改"):
+            if tier_name in ("地熊目", "熊フォメ", "地熊2.0") or tier_val.startswith("ペリー舟券") or tier_val.startswith("ペリー改"):
                 fc = _expand_formation(combo)
                 bet = len(fc) * 100 if fc else 400
             else:
