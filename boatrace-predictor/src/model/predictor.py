@@ -466,25 +466,19 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.Da
                 reasons.append(f"1号展示最遅({et_vals[1]:.2f}s)")
 
     # ── 補助条件（各1点） ──
-    n2_1 = _safe_float(race_row.get("boat1_national_2rate"))
-    if n2_1 is not None and n2_1 < 0.40:
-        score += 1
-        reasons.append(f"1号2率{n2_1:.0%}")
 
-    # 1号艇の今節成績が不振（2R以上出走かつ平均着順4.0以上）
-    meet_avg_rank1 = _safe_float(race_row.get("boat1_meet_avg_rank"))
-    meet_races1 = int(race_row.get("boat1_meet_races", 0) or 0)
-    if meet_avg_rank1 is not None and meet_races1 >= 2 and meet_avg_rank1 >= 4.0:
-        score += 1
-        reasons.append(f"1号今節{meet_avg_rank1:.1f}着平均")
-
-    # 外艇A1選手
-    for bn in [4, 5, 6]:
-        g = _safe_float(race_row.get(f"boat{bn}_grade_num"))
-        if g is not None and g >= 4:
-            score += 1
-            reasons.append(f"{bn}号A1")
-            break
+    # 外艇A1選手（1号艇B級 かつ 内側1〜3号にA1不在のとき）
+    inner_has_a1_arare = any(
+        (_safe_float(race_row.get(f"boat{bn}_grade_num")) or 0) >= 4
+        for bn in [1, 2, 3]
+    )
+    if g1 is not None and g1 <= 2 and not inner_has_a1_arare:
+        for bn in [4, 5, 6]:
+            g = _safe_float(race_row.get(f"boat{bn}_grade_num"))
+            if g is not None and g >= 4:
+                score += 1
+                reasons.append(f"{bn}号A1(内A1なし/1号B級)")
+                break
 
     # 外艇ST速い（複数艇カウント・上限2点）
     fast_st_count = 0
@@ -506,11 +500,6 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.Da
         # 追い風は外艇のまくりが決まりやすく荒れが増大する
         if wind_dir == "tail":
             score += 1
-
-    wave = _safe_float((weather or {}).get("wave_height"))
-    if wave and wave >= 15:
-        score += 1
-        reasons.append(f"波高{int(wave)}cm")
 
     vc = str(race_row.get("venue_code", "")).zfill(2)
     venue_pts = ARARE_VENUES.get(vc, 0)
@@ -536,17 +525,6 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.Da
         elif ac <= 3 and ac != bn: # 4-6号艇が3コースに進入
             score += 1
             reasons.append(f"{bn}号艇進入変更(→{ac}コース)")
-
-    # ── ML外艇シェア（モデル自身が荒れを示唆） ──
-    # 外艇(4-6号)の1着確率合計が高いほどモデルが荒れを予測している
-    if by_prob is not None and not by_prob.empty and "boat1" in by_prob.columns:
-        outer_ml_sum = float(by_prob[by_prob["boat1"].isin([4, 5, 6])]["prob"].sum())
-        if outer_ml_sum >= 0.40:
-            score += 2
-            reasons.append(f"外艇MLシェア{outer_ml_sum:.0%}(高)")
-        elif outer_ml_sum >= 0.30:
-            score += 1
-            reasons.append(f"外艇MLシェア{outer_ml_sum:.0%}(中)")
 
     # ── 1号艇と外艇の展示ST相対差（インが相対的に遅い） ──
     outer_st_vals = [
