@@ -950,24 +950,15 @@ def update_summary_sheet(
     rows.append(_r("■ ティア別グループ比較"))
     rows.append(_r("グループ", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
     for grp, tn, pf in [
-        ("地熊目   PT1-3",   "地熊目",   [1, 2, 3]),
-        ("地熊目   PT4-6",   "地熊目",   [4, 5, 6]),
-        ("地熊目   PT7以上",  "地熊目",   "7以上"),
-        ("熊フォメ  PT1-3",  "熊フォメ",  [1, 2, 3]),
-        ("熊フォメ  PT4-6",  "熊フォメ",  [4, 5, 6]),
-        ("熊フォメ  PT7以上", "熊フォメ",  "7以上"),
-        ("地熊2.0  PT1-3",  "地熊2.0",  [1, 2, 3]),
-        ("地熊2.0  PT4-6",  "地熊2.0",  [4, 5, 6]),
-        ("地熊2.0  PT7以上", "地熊2.0",  "7以上"),
-        ("ペリー舟券 PT1-3",  "ペリー舟券",  [1, 2, 3]),
-        ("ペリー舟券 PT4-6",  "ペリー舟券",  [4, 5, 6]),
-        ("ペリー舟券 PT7以上", "ペリー舟券",  "7以上"),
-        ("ペリー改1  PT1-3",  "ペリー改1",  [1, 2, 3]),
-        ("ペリー改1  PT4-6",  "ペリー改1",  [4, 5, 6]),
-        ("ペリー改1  PT7以上", "ペリー改1",  "7以上"),
-        ("ペリー改2  PT1-3",  "ペリー改2",  [1, 2, 3]),
-        ("ペリー改2  PT4-6",  "ペリー改2",  [4, 5, 6]),
-        ("ペリー改2  PT7以上", "ペリー改2",  "7以上"),
+        ("地熊目  PT1-3",  "地熊目",  [1, 2, 3]),
+        ("地熊目  PT4-6",  "地熊目",  [4, 5, 6]),
+        ("地熊目  PT7以上", "地熊目",  "7以上"),
+        ("ペリー1  PT1-3",  "ペリー1",  [1, 2, 3]),
+        ("ペリー1  PT4-6",  "ペリー1",  [4, 5, 6]),
+        ("ペリー1  PT7以上", "ペリー1",  "7以上"),
+        ("ペリー2  PT1-3",  "ペリー2",  [1, 2, 3]),
+        ("ペリー2  PT4-6",  "ペリー2",  [4, 5, 6]),
+        ("ペリー2  PT7以上", "ペリー2",  "7以上"),
     ]:
         s = _pt_tier_stats(tn, pf)
         rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
@@ -982,35 +973,19 @@ def update_summary_sheet(
         _write_pt_section(f"地熊目 {lbl}", _pt_tier_stats("地熊目", pt))
     rows.append(_r())
 
-    # ③ 熊フォメセクション
-    rows.append(_r("■ 熊フォメセクション（全PT）"))
+    # ③ ペリー1セクション
+    rows.append(_r("■ ペリー1セクション（全PT）"))
     for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
         lbl = f"{pt}PT" if isinstance(pt, int) else pt
-        _write_pt_section(f"熊フォメ {lbl}", _pt_tier_stats("熊フォメ", pt))
+        _write_pt_section(f"ペリー1 {lbl}", _pt_tier_stats("ペリー1", pt))
     rows.append(_r())
 
-    # ④ 地熊2.0セクション
-    rows.append(_r("■ 地熊2.0セクション（全PT）"))
+    # ④ ペリー2セクション
+    rows.append(_r("■ ペリー2セクション（全PT）"))
     for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
         lbl = f"{pt}PT" if isinstance(pt, int) else pt
-        _write_pt_section(f"地熊2.0 {lbl}", _pt_tier_stats("地熊2.0", pt))
+        _write_pt_section(f"ペリー2 {lbl}", _pt_tier_stats("ペリー2", pt))
     rows.append(_r())
-
-    # ⑤ ペリー舟券セクション
-    rows.append(_r("■ ペリー舟券セクション（全PT）"))
-    for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
-        lbl = f"{pt}PT" if isinstance(pt, int) else pt
-        _write_pt_section(f"ペリー舟券 {lbl}", _pt_tier_stats("ペリー舟券", pt))
-    rows.append(_r())
-
-    # ⑥ ペリー改セクション
-    rows.append(_r("■ ペリー改セクション（全PT）"))
-    for kai_tier in ["ペリー改1", "ペリー改2"]:
-        rows.append(_r(f"▼ {kai_tier}"))
-        for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
-            lbl = f"{pt}PT" if isinstance(pt, int) else pt
-            _write_pt_section(f"{kai_tier} {lbl}", _pt_tier_stats(kai_tier, pt))
-        rows.append(_r())
 
 
     # シートへ書き込み
@@ -1059,20 +1034,17 @@ def update_summary_sheet(
     except Exception as e:
         print(f"[WARN] 条件付き書式設定エラー: {e}")
 
-    jj_s    = _pt_tier_stats("地熊目")
-    kf_s    = _pt_tier_stats("熊フォメ")
-    nc_s    = _pt_tier_stats("地熊2.0")
-    perry_s = _pt_tier_stats("ペリー舟券")
-    jj_roi    = f"{jj_s['ret']/jj_s['bets']*100:.1f}%" if jj_s['bets'] > 0 else "0.0%"
-    kf_roi    = f"{kf_s['ret']/kf_s['bets']*100:.1f}%" if kf_s['bets'] > 0 else "0.0%"
-    nc_roi    = f"{nc_s['ret']/nc_s['bets']*100:.1f}%" if nc_s['bets'] > 0 else "0.0%"
-    perry_roi = f"{perry_s['ret']/perry_s['bets']*100:.1f}%" if perry_s['bets'] > 0 else "0.0%"
+    jj_s     = _pt_tier_stats("地熊目")
+    perry1_s = _pt_tier_stats("ペリー1")
+    perry2_s = _pt_tier_stats("ペリー2")
+    jj_roi     = f"{jj_s['ret']/jj_s['bets']*100:.1f}%" if jj_s['bets'] > 0 else "0.0%"
+    perry1_roi = f"{perry1_s['ret']/perry1_s['bets']*100:.1f}%" if perry1_s['bets'] > 0 else "0.0%"
+    perry2_roi = f"{perry2_s['ret']/perry2_s['bets']*100:.1f}%" if perry2_s['bets'] > 0 else "0.0%"
     print(
         f"[OK] {SUMMARY_SHEET}更新: "
         f"地熊目 {len(jj_s['race_keys'])}R ROI={jj_roi} / "
-        f"熊フォメ {len(kf_s['race_keys'])}R ROI={kf_roi} / "
-        f"地熊2.0 {len(nc_s['race_keys'])}R ROI={nc_roi} / "
-        f"ペリー舟券 {len(perry_s['race_keys'])}R ROI={perry_roi}"
+        f"ペリー1 {len(perry1_s['race_keys'])}R ROI={perry1_roi} / "
+        f"ペリー2 {len(perry2_s['race_keys'])}R ROI={perry2_roi}"
     )
 
 
