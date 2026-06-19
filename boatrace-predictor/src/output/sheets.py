@@ -373,7 +373,18 @@ def append_prediction_row(
                     }},
                     "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
                 }})
-            elif bet_label == "ペリー来航":
+            elif bet_label.startswith("ペリー来航★"):
+                reqs.append({"repeatCell": {
+                    "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
+                              "startColumnIndex": 8, "endColumnIndex": 9},
+                    "cell": {"userEnteredFormat": {
+                        "backgroundColor": {"red": 0.20, "green": 0.35, "blue": 0.65},
+                        "textFormat": {"bold": True,
+                                       "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
+                    }},
+                    "fields": "userEnteredFormat(backgroundColor,textFormat)",
+                }})
+            elif bet_label.startswith("ペリー来航"):
                 reqs.append({"repeatCell": {
                     "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
                               "startColumnIndex": 8, "endColumnIndex": 9},
@@ -384,14 +395,14 @@ def append_prediction_row(
                     }},
                     "fields": "userEnteredFormat(backgroundColor,textFormat)",
                 }})
-            elif bet_label == "ペリー来航★":
+            elif bet_label.startswith("ペリー出航"):
                 reqs.append({"repeatCell": {
                     "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
                               "startColumnIndex": 8, "endColumnIndex": 9},
                     "cell": {"userEnteredFormat": {
-                        "backgroundColor": {"red": 0.20, "green": 0.35, "blue": 0.65},
+                        "backgroundColor": {"red": 0.55, "green": 0.75, "blue": 0.90},
                         "textFormat": {"bold": True,
-                                       "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
+                                       "foregroundColor": {"red": 0.05, "green": 0.10, "blue": 0.30}},
                     }},
                     "fields": "userEnteredFormat(backgroundColor,textFormat)",
                 }})

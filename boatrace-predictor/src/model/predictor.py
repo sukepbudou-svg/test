@@ -1504,8 +1504,8 @@ def get_recommendations(
                             # ペリー来航: STベース（必須2条件 + 補強1条件以上）
                             st1 = _safe_float(race_row.get("boat1_exhibition_st"))
                             must_ok = (
-                                perry_ace_st is not None and perry_ace_st <= 0.10
-                                and st1 is not None and st1 >= 0.18
+                                perry_ace_st is not None and perry_ace_st <= 0.13
+                                and st1 is not None and st1 >= 0.16
                             )
                             m1_p = _safe_float(race_row.get("boat1_motor_2rate"))
                             g1_p = _safe_float(race_row.get("boat1_grade_num"))
@@ -1546,9 +1546,9 @@ def get_recommendations(
                                 or ace_et_best                                               # ET全艇最速
                                 or (ace_nst is not None and ace_nst <= 0.12)                # 節ST速い
                             )
-                            # グループC: レース全体が荒れやすい（どれか1つ）
+                            # グループC: 一定の荒れ環境（どれか1つ）
                             grp_c = (
-                                arare_score >= ARARE_MIN_SCORE
+                                arare_score >= 4
                                 or (_pw is not None and _pw >= 5 and _pwd == "tail")
                             )
 
@@ -1556,6 +1556,8 @@ def get_recommendations(
                                 perry_label = "ペリー来航"
                             elif grp_a and grp_b and grp_c:
                                 perry_label = "ペリー来航★"
+                            elif weak_in and outer_axis_scores.get(perry_ace, 0.0) >= 0.55:
+                                perry_label = "ペリー出航"
                             else:
                                 perry_label = "見送り"
                             if weak_in:
