@@ -1546,15 +1546,9 @@ def get_recommendations(
                                 or ace_et_best                                               # ET全艇最速
                                 or (ace_nst is not None and ace_nst <= 0.12)                # 節ST速い
                             )
-                            # グループC: 一定の荒れ環境（どれか1つ）
-                            grp_c = (
-                                arare_score >= 4
-                                or (_pw is not None and _pw >= 5 and _pwd == "tail")
-                            )
-
                             if must_ok and support_ok:
                                 perry_label = "ペリー来航"
-                            elif grp_a and grp_b and grp_c:
+                            elif grp_a and grp_b:
                                 perry_label = "ペリー来航★"
                             elif weak_in and outer_axis_scores.get(perry_ace, 0.0) >= 0.55:
                                 perry_label = "ペリー出航"
