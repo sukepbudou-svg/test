@@ -1166,18 +1166,6 @@ def get_recommendations(
                     perry_ace_st = _safe_float(race_row.get(f"boat{perry_ace}_exhibition_st"))
                     data_label   = "M+G+ST" if (b1_st_ax and perry_ace_st) else "M+G"
 
-                    # 条件付き確率: P(2着=b|1着=perry_ace), P(3着=b|1着=perry_ace)
-                    _perry_rows = by_prob[by_prob["boat1"] == perry_ace]
-                    perry_cond_2nd: dict = {}
-                    perry_cond_3rd: dict = {}
-                    for b in available_perry:
-                        if b == perry_ace:
-                            continue
-                        perry_cond_2nd[b] = float(_perry_rows[_perry_rows["boat2"] == b]["prob"].sum())
-                        perry_cond_3rd[b] = float(_perry_rows[_perry_rows["boat3"] == b]["prob"].sum())
-                    perry_max_2nd = max(perry_cond_2nd.values()) if perry_cond_2nd else 1.0
-                    perry_max_3rd = max(perry_cond_3rd.values()) if perry_cond_3rd else 1.0
-
                     # ETランク（全艇、速い=1.0）
                     perry_et_vals: dict = {}
                     for _b in available_perry:
@@ -1200,56 +1188,76 @@ def get_recommendations(
                         nat2 = min(_safe_float(race_row.get(f"boat{bn}_national_2rate")) or 0.0, 1.0)
                         return (grade + nat2) / 2.0
 
-                    def _perry_maezuke(bn):
-                        ac_raw = race_row.get(f"boat{bn}_actual_course")
-                        try:
-                            ac = int(ac_raw) if ac_raw is not None else bn
-                        except (TypeError, ValueError):
-                            ac = bn
-                        return 1.0 if ac < bn else 0.0
+                    def _calc_makuri_do(axis_bn):
+                        """まくり度スコア (0.0-1.0): 高いほど外艇有利な展開"""
+                        maku = 0.0
+                        if axis_bn >= 5:
+                            maku += 0.30
+                        elif axis_bn == 4:
+                            maku += 0.10
+                        if perry_et_vals and axis_bn in perry_et_vals:
+                            if min(perry_et_vals.values()) == perry_et_vals[axis_bn]:
+                                maku += 0.20
+                        _axis_st = _safe_float(race_row.get(f"boat{axis_bn}_exhibition_st"))
+                        if _axis_st and _axis_st <= 0.12:
+                            maku += 0.20
+                        _w_speed = _safe_float((weather or {}).get("wind_speed"))
+                        _w_dir   = (weather or {}).get("wind_direction", "")
+                        if _w_speed is not None and _w_speed >= 3 and _w_dir == "tail":
+                            maku += 0.15
+                        _st1_mk = _safe_float(race_row.get("boat1_exhibition_st"))
+                        if _st1_mk and _st1_mk >= 0.17:
+                            maku += 0.10
+                        return min(1.0, maku)
 
-                    def _perry_2nd_score(bn):
-                        prob  = perry_cond_2nd.get(bn, 0.0) / (perry_max_2nd or 1.0)
-                        gr    = _perry_grade(bn)
+                    def _perry_2nd_score_m(bn, axis_bn, makuri_do):
+                        """まくり度考慮2着スコア: 内外近接×展開 + ET + grade + ST"""
+                        if bn < axis_bn:
+                            pos_score = (1.0 / (axis_bn - bn)) * (1.0 - makuri_do)
+                        elif bn > axis_bn:
+                            pos_score = (1.0 / (bn - axis_bn)) * makuri_do
+                        else:
+                            pos_score = 0.0
+                        if bn == 1:
+                            m1 = _safe_float(race_row.get("boat1_motor_2rate")) or 0.0
+                            g1 = _safe_float(race_row.get("boat1_grade_num")) or 2.0
+                            boat1_str = min(1.0, m1) * 0.5 + min(1.0, (g1 - 1) / 3.0) * 0.5
+                            pos_score += boat1_str * 0.30
                         et    = perry_et_ranks.get(bn, 0.5)
+                        gr    = _perry_grade(bn)
                         st    = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
                         st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
-                        mz    = _perry_maezuke(bn)
-                        return prob * 0.40 + gr * 0.20 + et * 0.20 + st_sc * 0.15 + mz * 0.05
+                        return pos_score * 0.45 + et * 0.25 + gr * 0.15 + st_sc * 0.15
 
-                    def _perry_3rd_score(bn):
-                        prob  = perry_cond_3rd.get(bn, 0.0) / (perry_max_3rd or 1.0)
-                        gr    = _perry_grade(bn)
+                    def _perry_3rd_score_m(bn, axis_bn):
+                        """まくり度考慮3着スコア: 内外両方均等考慮 + 1号艇モーターボーナス"""
+                        if bn < axis_bn:
+                            pos_score = 0.5 / (axis_bn - bn)
+                        elif bn > axis_bn:
+                            pos_score = 0.5 / (bn - axis_bn)
+                        else:
+                            pos_score = 0.0
+                        if bn == 1:
+                            m1 = _safe_float(race_row.get("boat1_motor_2rate")) or 0.0
+                            pos_score += m1 * 0.35
                         et    = perry_et_ranks.get(bn, 0.5)
+                        gr    = _perry_grade(bn)
                         st    = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
                         st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
-                        mz    = _perry_maezuke(bn)
-                        return prob * 0.40 + gr * 0.20 + et * 0.20 + st_sc * 0.15 + mz * 0.05
+                        return pos_score * 0.50 + et * 0.20 + gr * 0.15 + st_sc * 0.15
 
+                    # ペリー1: まくり度を計算し、2着2艇選出
+                    makuri_do1 = _calc_makuri_do(perry_ace)
                     all_except_ace = sorted(
                         [b for b in available_perry if b != perry_ace],
-                        key=_perry_2nd_score, reverse=True
+                        key=lambda b: _perry_2nd_score_m(b, perry_ace, makuri_do1), reverse=True
                     )
                     inner2 = all_except_ace[:2]
 
                     if len(inner2) >= 2:
-                        # 3着: 2着2艇 + 1号艇必須 + スコア順補完で4艇確保
-                        third_set = set(inner2)
-                        if 1 in available_perry:
-                            third_set.add(1)
-                        for b in all_except_ace[2:]:
-                            if len(third_set) >= 4:
-                                break
-                            third_set.add(b)
-                        perry_third = sorted(third_set)
+                        perry_third = inner2  # ゲート用（実際の3着は各ティア内で計算）
 
                         if len(perry_third) >= 2:
-                            perry_str = (
-                                f"{perry_ace}-"
-                                f"{''.join(str(b) for b in inner2)}-"
-                                f"{''.join(str(b) for b in perry_third)}"
-                            )
-
                             # ペリー来航: STベース（必須2条件 + 補強1条件以上）
                             st1 = _safe_float(race_row.get("boat1_exhibition_st"))
                             must_ok = (
@@ -1308,16 +1316,11 @@ def get_recommendations(
                             tier_label  = f"ペリー舟券({data_label})"
 
                             # ペリー1（4点固定）: perry_ace-AB-CD（ABとCDが重複しない）
-                            # 3着はinner2(2着2艇)以外から選ぶことで確実に4点確保
+                            # 3着はinner2(2着2艇)以外からまくり度考慮スコア上位2艇
                             rem_kai1 = [b for b in available_perry if b not in {perry_ace} and b not in set(inner2)]
-                            third_kai1_list = []
-                            if 1 in rem_kai1:  # 1号艇を優先
-                                third_kai1_list.append(1)
-                            for b in sorted([x for x in rem_kai1 if x != 1], key=_perry_3rd_score, reverse=True):
-                                if len(third_kai1_list) >= 2:
-                                    break
-                                third_kai1_list.append(b)
-                            third_kai1 = sorted(third_kai1_list)
+                            third_kai1 = sorted(
+                                sorted(rem_kai1, key=lambda b: _perry_3rd_score_m(b, perry_ace), reverse=True)[:2]
+                            )
                             if len(inner2) >= 2 and len(third_kai1) >= 2:
                                 kai1_str = (
                                     f"{perry_ace}-"
@@ -1360,52 +1363,19 @@ def get_recommendations(
                             )
                             perry_ace2 = sorted_outer_by_score[1] if len(sorted_outer_by_score) >= 2 else None
                             if perry_ace2 is not None:
-                                # 条件付き確率: P(2着=b|1着=perry_ace2), P(3着=b|1着=perry_ace2)
-                                _perry_rows2 = by_prob[by_prob["boat1"] == perry_ace2]
-                                perry_cond_2nd2: dict = {}
-                                perry_cond_3rd2: dict = {}
-                                for b in available_perry:
-                                    if b == perry_ace2:
-                                        continue
-                                    perry_cond_2nd2[b] = float(_perry_rows2[_perry_rows2["boat2"] == b]["prob"].sum())
-                                    perry_cond_3rd2[b] = float(_perry_rows2[_perry_rows2["boat3"] == b]["prob"].sum())
-                                _pm2nd_max = max(perry_cond_2nd2.values()) if perry_cond_2nd2 else 1.0
-                                _pm3rd_max = max(perry_cond_3rd2.values()) if perry_cond_3rd2 else 1.0
-
-                                def _perry_2nd_score2(bn):
-                                    prob  = perry_cond_2nd2.get(bn, 0.0) / (_pm2nd_max or 1.0)
-                                    gr    = _perry_grade(bn)
-                                    et    = perry_et_ranks.get(bn, 0.5)
-                                    st    = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-                                    st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
-                                    mz    = _perry_maezuke(bn)
-                                    return prob * 0.40 + gr * 0.20 + et * 0.20 + st_sc * 0.15 + mz * 0.05
-
-                                def _perry_3rd_score2(bn):
-                                    prob  = perry_cond_3rd2.get(bn, 0.0) / (_pm3rd_max or 1.0)
-                                    gr    = _perry_grade(bn)
-                                    et    = perry_et_ranks.get(bn, 0.5)
-                                    st    = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-                                    st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
-                                    mz    = _perry_maezuke(bn)
-                                    return prob * 0.40 + gr * 0.20 + et * 0.20 + st_sc * 0.15 + mz * 0.05
-
+                                # まくり度ベース2着・3着選出（ペリー2用）
+                                makuri_do2 = _calc_makuri_do(perry_ace2)
                                 all_except_ace2 = sorted(
                                     [b for b in available_perry if b != perry_ace2],
-                                    key=_perry_2nd_score2, reverse=True
+                                    key=lambda b: _perry_2nd_score_m(b, perry_ace2, makuri_do2), reverse=True
                                 )
                                 kai2_second = all_except_ace2[0] if all_except_ace2 else None
                                 if kai2_second is not None:
-                                    # 3着（2点固定）: 2着(kai2_second)を除外した艇から2艇選ぶ
+                                    # 3着（2点固定）: 2着(kai2_second)を除外した艇からスコア上位2艇
                                     rem_kai2 = [b for b in available_perry if b not in {perry_ace2, kai2_second}]
-                                    third_kai2_list = []
-                                    if 1 in rem_kai2:  # 1号艇を優先
-                                        third_kai2_list.append(1)
-                                    for b in sorted([x for x in rem_kai2 if x != 1], key=_perry_3rd_score2, reverse=True):
-                                        if len(third_kai2_list) >= 2:
-                                            break
-                                        third_kai2_list.append(b)
-                                    third_kai2 = sorted(third_kai2_list)
+                                    third_kai2 = sorted(
+                                        sorted(rem_kai2, key=lambda b: _perry_3rd_score_m(b, perry_ace2), reverse=True)[:2]
+                                    )
                                     if len(third_kai2) >= 2:
                                         kai2_str = (
                                             f"{perry_ace2}-{kai2_second}-"
