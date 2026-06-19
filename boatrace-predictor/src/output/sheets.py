@@ -21,8 +21,33 @@ SCOPES = [
 RESULT_SHEET = "成績17"
 SUMMARY_SHEET = "サマリー17"
 
-_WIND_NOTE_LINE1 = "【風向き判断】向かい風3〜7m → 地熊目 積極的に勝負"
-_WIND_NOTE_LINE2 = "追い風5m以上 → ペリー1・ペリー2 積極的に勝負 or 見送り"
+# 24場 荒れやすさランキング（万舟率・コース特性ベース、1位=最も荒れやすい）
+_VENUE_RANKING = [
+    "1  ▲江戸川",
+    "2  ▲平和島",
+    "3  ▲戸田",
+    "4  ▲三国",
+    "5  　びわこ",
+    "6  ▲鳴門",
+    "7  ▲下関",
+    "8  　多摩川",
+    "9  　若松",
+    "10 　福岡",
+    "11 　唐津",
+    "12 ◎桐生",
+    "13 　尼崎",
+    "14 　芦屋",
+    "15 　津",
+    "16 　常滑",
+    "17 　徳山",
+    "18 ◎浜名湖",
+    "19 　児島",
+    "20 　丸亀",
+    "21 ◎蒲郡",
+    "22 ◎宮島",
+    "23 ◎住之江",
+    "24 ◎大村",
+]
 
 # 会場マーク: ▲=荒れやすい  ◎=イン強・荒れにくい
 _VENUE_MARK = {
@@ -104,25 +129,55 @@ _VENUE_BG_COLORS = {
 _DEFAULT_BG = {"red": 0.95, "green": 0.95, "blue": 0.95}  # 不明場所はグレー
 
 
-def _write_wind_notes(spreadsheet, sheet) -> None:
-    """日付別シートのM1・M2に風向き判断メモを固定書き込みする"""
+def _write_venue_ranking(spreadsheet, sheet) -> None:
+    """日付別シートのM1:M25に24場荒れランキングを書き込む"""
     try:
-        sheet.update("M1:M2", [[_WIND_NOTE_LINE1], [_WIND_NOTE_LINE2]],
-                     value_input_option="RAW")
+        header = [["【荒れランキング】"]]
+        rows = [[v] for v in _VENUE_RANKING]
+        sheet.update("M1", header + rows, value_input_option="RAW")
         sid = sheet.id
-        note_bg = {"red": 0.85, "green": 0.93, "blue": 1.0}
-        spreadsheet.batch_update({"requests": [
-            {"repeatCell": {
-                "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 2,
-                          "startColumnIndex": 12, "endColumnIndex": 13},
-                "cell": {"userEnteredFormat": {
-                    "backgroundColor": note_bg,
-                    "textFormat": {"bold": True, "fontSize": 10},
-                    "wrapStrategy": "WRAP",
-                }},
-                "fields": "userEnteredFormat(backgroundColor,textFormat,wrapStrategy)",
+        reqs = []
+        # ヘッダー行: 薄グレー+太字
+        reqs.append({"repeatCell": {
+            "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1,
+                      "startColumnIndex": 12, "endColumnIndex": 13},
+            "cell": {"userEnteredFormat": {
+                "backgroundColor": {"red": 0.85, "green": 0.85, "blue": 0.85},
+                "textFormat": {"bold": True, "fontSize": 9},
             }},
-        ]})
+            "fields": "userEnteredFormat(backgroundColor,textFormat)",
+        }})
+        # 上位7場（荒れ色: 薄赤）
+        reqs.append({"repeatCell": {
+            "range": {"sheetId": sid, "startRowIndex": 1, "endRowIndex": 8,
+                      "startColumnIndex": 12, "endColumnIndex": 13},
+            "cell": {"userEnteredFormat": {
+                "backgroundColor": {"red": 1.0, "green": 0.88, "blue": 0.88},
+                "textFormat": {"fontSize": 9},
+            }},
+            "fields": "userEnteredFormat(backgroundColor,textFormat)",
+        }})
+        # 中位（8-20位: 白）
+        reqs.append({"repeatCell": {
+            "range": {"sheetId": sid, "startRowIndex": 8, "endRowIndex": 21,
+                      "startColumnIndex": 12, "endColumnIndex": 13},
+            "cell": {"userEnteredFormat": {
+                "backgroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0},
+                "textFormat": {"fontSize": 9},
+            }},
+            "fields": "userEnteredFormat(backgroundColor,textFormat)",
+        }})
+        # 下位5場（イン強: 薄緑）
+        reqs.append({"repeatCell": {
+            "range": {"sheetId": sid, "startRowIndex": 21, "endRowIndex": 25,
+                      "startColumnIndex": 12, "endColumnIndex": 13},
+            "cell": {"userEnteredFormat": {
+                "backgroundColor": {"red": 0.85, "green": 0.95, "blue": 0.85},
+                "textFormat": {"fontSize": 9},
+            }},
+            "fields": "userEnteredFormat(backgroundColor,textFormat)",
+        }})
+        spreadsheet.batch_update({"requests": reqs})
     except Exception:
         pass
 
@@ -275,7 +330,7 @@ def append_prediction_row(
                    "オッズ", "イン逃げ率", "本日レース数", "勝負推奨", "荒れPT", "荒れ条件", "1号艇状態"]
         sheet.update("A1", [headers])
         _format_header(spreadsheet, sheet, num_cols=12)
-        _write_wind_notes(spreadsheet, sheet)
+        _write_venue_ranking(spreadsheet, sheet)
 
     cols = ["date", "venue_name", "race_no", "tier", "combination",
             "odds", "odds_source"]
