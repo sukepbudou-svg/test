@@ -1375,7 +1375,7 @@ def get_recommendations(
                                     "boat1_risk":    _calc_boat1_risk(race_row),
                                 })
 
-                            # ペリー改2（2点）: 軸スコア2位の外艇が軸
+                            # ペリー2（2点）: 軸スコア2位の外艇が軸
                             sorted_outer_by_score = sorted(
                                 outer_axis_scores.keys(),
                                 key=lambda b: outer_axis_scores[b], reverse=True
