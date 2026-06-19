@@ -174,67 +174,73 @@ def _pick_condition_based_ana(
 
 
 
-# 各会場のイン逃げ率（全国統計ベース）
+# 各会場のイン逃げ率（1コース逃げ率・実績ベース統計値）
 _VENUE_INNER_ESCAPE = {
-    "01": 0.580, "02": 0.520, "03": 0.420, "04": 0.510, "05": 0.560,
-    "06": 0.590, "07": 0.590, "08": 0.570, "09": 0.570, "10": 0.530,
-    "11": 0.590, "12": 0.600, "13": 0.590, "14": 0.540, "15": 0.580,
-    "16": 0.580, "17": 0.600, "18": 0.590, "19": 0.540, "20": 0.590,
-    "21": 0.580, "22": 0.560, "23": 0.590, "24": 0.570,
+    "01": 0.580,  # 桐生
+    "02": 0.450,  # 戸田
+    "03": 0.370,  # 江戸川（特殊コース・全国最低）
+    "04": 0.460,  # 平和島
+    "05": 0.560,  # 多摩川
+    "06": 0.570,  # 浜名湖
+    "07": 0.640,  # 蒲郡
+    "08": 0.550,  # 常滑
+    "09": 0.540,  # 津
+    "10": 0.500,  # 三国
+    "11": 0.500,  # びわこ
+    "12": 0.610,  # 住之江
+    "13": 0.560,  # 尼崎
+    "14": 0.480,  # 鳴門
+    "15": 0.550,  # 丸亀
+    "16": 0.520,  # 児島
+    "17": 0.600,  # 宮島
+    "18": 0.500,  # 徳山
+    "19": 0.480,  # 下関
+    "20": 0.530,  # 若松
+    "21": 0.540,  # 芦屋
+    "22": 0.530,  # 福岡
+    "23": 0.520,  # 唐津
+    "24": 0.670,  # 大村（全国最高）
 }
-# レース番号補正（早いレースほど逃げやすい）
+# レース番号補正（早いレースほど逃げやすい傾向）
 _RACE_NO_NIGERATE_FACTOR = {
     1: 1.06, 2: 1.04, 3: 1.02, 4: 1.01, 5: 1.00, 6: 0.99,
     7: 0.98, 8: 0.97, 9: 0.96, 10: 0.95, 11: 0.94, 12: 0.93,
 }
-# 全国平均 コース1番逃げ率（選手個人データのベースライン）
-_INNER_WIN_BASELINE = 0.55
-# 全国平均 コース2番2着内率（差し圧力のベースライン）
-_COURSE2_PRESSURE_BASELINE = 0.45
 
 
 def _calc_nigerate(race_row: pd.Series) -> str:
     """
     1号艇のイン逃げ推定率を計算して "逃げ推定XX%" 文字列で返す。
-
-    会場ベース + 各補正の加算方式（乗算の連鎖による数値崩壊を防ぐ）
+    会場実績ベース率 × レース番号係数 + リアルタイム補正（ST・グレード）
     """
     venue_code = str(race_row.get("venue_code", "")).zfill(2)
     race_no = int(race_row.get("race_no", 6) or 6)
 
-    base = _VENUE_INNER_ESCAPE.get(venue_code, 0.570)
+    base = _VENUE_INNER_ESCAPE.get(venue_code, 0.540)
     rn_factor = _RACE_NO_NIGERATE_FACTOR.get(race_no, 1.00)
+    nigerate = base * rn_factor
 
-    nigerate = base * rn_factor  # 会場×レース番号は乗算（主軸）
+    # 1号艇の展示ST補正（最重要リアルタイム情報、±8%）
+    st1 = _safe_float(race_row.get("boat1_exhibition_st"))
+    if st1 and st1 > 0:
+        nigerate += np.clip((0.155 - st1) * 2.0, -0.08, 0.08)
 
-    # 以降は加算補正（各±数%）
+    # 2号艇のグレード補正（差し圧力）
+    g2 = _safe_float(race_row.get("boat2_grade_num")) or 2.0
+    if g2 >= 4:    # A1 → 差し来る可能性高い
+        nigerate -= 0.04
+    elif g2 >= 3:  # A2
+        nigerate -= 0.02
+
+    # 2号艇の展示ST補正（速いほど差しに来る）
+    st2 = _safe_float(race_row.get("boat2_exhibition_st"))
+    if st2 and st2 > 0:
+        nigerate += np.clip((st2 - 0.155) * 1.0, -0.03, 0.03)
+
     # 一般戦は微減
     mg = _safe_float(race_row.get("meet_grade_num"))
     if mg is not None and mg <= 1:
         nigerate -= 0.02
-
-    # 選手1号艇の逃げ率実績補正（±8%上限）
-    racer1_no = int(race_row.get("boat1_racer_no", 0) or 0)
-    racer1_inner = _INNER_WIN_BASELINE
-    if racer1_no in _RACER_STYLE:
-        sd = _RACER_STYLE[racer1_no]
-        if isinstance(sd, dict) and "inner_win_rate" in sd:
-            racer1_inner = sd["inner_win_rate"]
-    nigerate += np.clip((racer1_inner - _INNER_WIN_BASELINE) * 0.5, -0.08, 0.08)
-
-    # 展示ST補正（速いほど逃げやすい、±6%上限）
-    st1 = _safe_float(race_row.get("boat1_exhibition_st"))
-    if st1 and st1 > 0:
-        nigerate += np.clip((0.155 - st1) * 1.5, -0.06, 0.06)
-
-    # 2号艇の差し圧力補正（±4%上限）
-    racer2_no = int(race_row.get("boat2_racer_no", 0) or 0)
-    c2_pressure = _COURSE2_PRESSURE_BASELINE
-    if racer2_no in _RACER_STYLE:
-        sd = _RACER_STYLE[racer2_no]
-        if isinstance(sd, dict) and "course2_pressure" in sd:
-            c2_pressure = sd["course2_pressure"]
-    nigerate += np.clip(-(c2_pressure - _COURSE2_PRESSURE_BASELINE) * 0.2, -0.04, 0.04)
 
     nigerate = max(0.05, min(0.95, nigerate))
     return f"逃げ推定{int(round(nigerate * 100))}%"
