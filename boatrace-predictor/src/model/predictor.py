@@ -1159,235 +1159,6 @@ def get_recommendations(
                 "boat1_risk":    _calc_boat1_risk(race_row),
             })
 
-        # 熊フォメ（全PT対象・ML上位2艇を1着、条件付き確率ベースで2着・3着を選出）
-        # 地熊系と同じスコア式: 条件付き確率40% + グレード+2連率20% + ET20% + ST15% + 前付け5%
-        kuma_boats = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
-        kuma_wp = {}
-        for bn in kuma_boats:
-            mask = by_prob["boat1"] == bn
-            kuma_wp[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
-        kuma_ranked = sorted(kuma_wp, key=lambda b: kuma_wp[b], reverse=True)
-        if len(kuma_ranked) >= 3:
-            kuma_first = kuma_ranked[:2]   # ML上位2艇が1着候補
-
-            # ETランク（速い=1.0）
-            kuma_et_vals = {}
-            for b in kuma_boats:
-                v = _safe_float(race_row.get(f"boat{b}_exhibition_time"))
-                if v and v > 0:
-                    kuma_et_vals[b] = v
-            if kuma_et_vals:
-                _ket_sorted = sorted(kuma_et_vals.items(), key=lambda x: x[1])
-                kuma_et_ranks = {b: 1.0 - (i / max(len(_ket_sorted) - 1, 1))
-                                 for i, (b, _) in enumerate(_ket_sorted)}
-            else:
-                kuma_et_ranks = {}
-
-            def _kuma_grade(bn):
-                grade = _safe_float(race_row.get(f"boat{bn}_grade_num")) or 2.0
-                nat2  = _safe_float(race_row.get(f"boat{bn}_national_2rate")) or 0.35
-                return max(0.0, min(1.0, (grade + nat2 * 10) / 14.0))
-
-            def _kuma_maezuke(bn):
-                ac_raw = race_row.get(f"boat{bn}_actual_course")
-                try:
-                    ac = int(ac_raw) if ac_raw is not None else bn
-                except (TypeError, ValueError):
-                    ac = bn
-                return 1.0 if ac < bn else 0.0
-
-            # 条件付き確率を1着候補2艇で平均: P(2着=b|1着=A) / P(3着=b|1着=A)
-            non_first_kuma = [b for b in kuma_boats if b not in set(kuma_first)]
-            kuma_cond_2nd: dict = {}
-            kuma_cond_3rd: dict = {}
-            for b in non_first_kuma:
-                s2 = s3 = 0.0
-                for a in kuma_first:
-                    rows_a = by_prob[by_prob["boat1"] == a]
-                    s2 += float(rows_a[rows_a["boat2"] == b]["prob"].sum())
-                    s3 += float(rows_a[rows_a["boat3"] == b]["prob"].sum())
-                kuma_cond_2nd[b] = s2 / len(kuma_first)
-                kuma_cond_3rd[b] = s3 / len(kuma_first)
-            kuma_max2 = max(kuma_cond_2nd.values()) if kuma_cond_2nd else 1.0
-            kuma_max3 = max(kuma_cond_3rd.values()) if kuma_cond_3rd else 1.0
-
-            def _kuma2nd_score(bn):
-                prob  = kuma_cond_2nd.get(bn, 0.0) / (kuma_max2 or 1.0)
-                gr    = _kuma_grade(bn)
-                et    = kuma_et_ranks.get(bn, 0.5)
-                st    = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-                st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
-                mz    = _kuma_maezuke(bn)
-                return prob * 0.40 + gr * 0.20 + et * 0.20 + st_sc * 0.15 + mz * 0.05
-
-            def _kuma3rd_score(bn):
-                prob  = kuma_cond_3rd.get(bn, 0.0) / (kuma_max3 or 1.0)
-                gr    = _kuma_grade(bn)
-                et    = kuma_et_ranks.get(bn, 0.5)
-                st    = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-                st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
-                mz    = _kuma_maezuke(bn)
-                return prob * 0.40 + gr * 0.20 + et * 0.20 + st_sc * 0.15 + mz * 0.05
-
-            # 2着: 1着2艇 + 条件付き確率スコア最高の1艇（計3艇）
-            kuma_threat_a = max(non_first_kuma, key=_kuma2nd_score) if non_first_kuma else None
-            kuma_second = sorted(set(kuma_first) | ({kuma_threat_a} if kuma_threat_a else set()))
-
-            # 3着: PT7以上は2着3艇+次位艇（12点）、それ以外は2着と同じ3艇（6点）
-            if arare_score >= 7:
-                rem_3rd = [b for b in non_first_kuma if b != kuma_threat_a]
-                kuma_threat_b = max(rem_3rd, key=_kuma3rd_score) if rem_3rd else None
-                kuma_third = sorted(set(kuma_second) | ({kuma_threat_b} if kuma_threat_b else set()))
-            else:
-                kuma_third = kuma_second
-
-            kuma_str = (
-                f"{''.join(str(b) for b in sorted(kuma_first))}-"
-                f"{''.join(str(b) for b in kuma_second)}-"
-                f"{''.join(str(b) for b in kuma_third)}"
-            )
-            # 熊フォメ点数確認ログ（PT<7=6点, PT>=7=12点が正常）
-            _kf1s = set(kuma_first)
-            _kf2s = set(kuma_second)
-            _kf3s = set(kuma_third)
-            _kuma_pts = sum(1 for a, b, c in permutations(range(1, 7), 3)
-                            if a in _kf1s and b in _kf2s and c in _kf3s)
-            print(f"  [熊フォメ] {venue_name_log} {race_no}R {kuma_str} ({_kuma_pts}点)")
-            all_recommendations.append({
-                "date":          race_row.get("date", ""),
-                "venue_name":    race_row.get("venue_name", ""),
-                "race_no":       race_row.get("race_no", ""),
-                "combination":   kuma_str,
-                "prob":          "-",
-                "odds":          "-",
-                "expected_roi":  "-",
-                "confidence":    "熊フォメ",
-                "odds_source":   nigerate_str,
-                "tier":          "熊フォメ",
-                "bet_label":     ("神熱" if arare_ok else ("灼熱" if arare_score >= ARARE_MIN_SCORE else "熊熱" if arare_score == 1 else "見送り")) + ("(弱イン)" if weak_in else ""),
-                "edge":          "-",
-                "arare_score":   arare_score,
-                "arare_reasons": " / ".join(arare_reasons),
-                "boat1_risk":    _calc_boat1_risk(race_row),
-            })
-
-        # 地熊2.0: 1号艇1着固定・形 1-AB-ABCD（6点）
-        # A選出: 条件付き2着確率35%+グレード20%+ET20%+ST15%+前付け5%+外側ボーナス5%
-        # B=Aの直外側、C=Bの直外側、D=スコア次点 → 外に広げて大配当狙い
-        available_nc = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
-        if 1 in available_nc and len(available_nc) >= 3:
-            # 条件付き2着確率: P(2着=b | 1着=1号)
-            by_prob_1st_nc = by_prob[by_prob["boat1"] == 1]
-            jk2_cond_2nd: dict = {}
-            for b in available_nc:
-                if b != 1:
-                    jk2_cond_2nd[b] = float(by_prob_1st_nc[by_prob_1st_nc["boat2"] == b]["prob"].sum())
-            jk2_max_2nd = max(jk2_cond_2nd.values()) if jk2_cond_2nd else 1.0
-
-            # ETランク（速い=1.0）
-            nc_et_vals = {}
-            for b in available_nc:
-                v = _safe_float(race_row.get(f"boat{b}_exhibition_time"))
-                if v and v > 0:
-                    nc_et_vals[b] = v
-            nc_et_ranks = {}
-            if len(nc_et_vals) >= 2:
-                sorted_nc_et = sorted(nc_et_vals.items(), key=lambda x: x[1])
-                n_nlet = len(sorted_nc_et)
-                for rank_i, (b, _) in enumerate(sorted_nc_et):
-                    nc_et_ranks[b] = 1.0 - rank_i / (n_nlet - 1)
-
-            def _jk2_score(bn):
-                prob = jk2_cond_2nd.get(bn, 0.0) / (jk2_max_2nd or 1.0)
-                gn_raw = race_row.get(f"boat{bn}_grade_num", 2)
-                try:
-                    gn = int(float(gn_raw)) if gn_raw is not None else 2
-                except (TypeError, ValueError):
-                    gn = 2
-                grade = {4: 1.0, 3: 0.67, 2: 0.33, 1: 0.0}.get(gn, 0.33)
-                nat2 = min(_safe_float(race_row.get(f"boat{bn}_national_2rate")) or 0.0, 1.0)
-                gr = (grade + nat2) / 2.0
-                et = nc_et_ranks.get(bn, 0.5)
-                st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-                st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
-                ac_raw = race_row.get(f"boat{bn}_actual_course")
-                try:
-                    ac = int(ac_raw) if ac_raw is not None else bn
-                except (TypeError, ValueError):
-                    ac = bn
-                mz = 1.0 if ac < bn else 0.0
-                # 外側ボーナス（地熊2.0独自: 外艇を選びやすくして大配当狙い）
-                outer_bonus = 0.0 if bn <= 2 else 0.5 if bn <= 4 else 1.0
-                return prob * 0.35 + gr * 0.20 + et * 0.20 + st_sc * 0.15 + mz * 0.05 + outer_bonus * 0.05
-
-            non_first = [b for b in available_nc if b != 1]
-            jk2_ranked = sorted(non_first, key=_jk2_score, reverse=True)
-
-            if len(jk2_ranked) >= 2:
-                # 2着A: スコア1位
-                ace_a = jk2_ranked[0]
-                # 2着B: Aの直外側 → なければスコア2位
-                outer_of_a = [b for b in available_nc if b > ace_a]
-                ace_b = min(outer_of_a) if outer_of_a else jk2_ranked[1]
-                jk2_second = sorted({ace_a, ace_b})
-
-                # 3着C: Bの直外側 → なければ次点
-                max_b = max(jk2_second)
-                outer_of_b = [b for b in available_nc if b > max_b]
-                if outer_of_b:
-                    ace_c = min(outer_of_b)
-                else:
-                    rem_c = [b for b in jk2_ranked if b not in set(jk2_second)]
-                    ace_c = rem_c[0] if rem_c else None
-
-                # 3着D: スコア次点（A,B,C,1号以外）
-                used_jk2 = set(jk2_second) | ({ace_c} if ace_c else set()) | {1}
-                rem_d = [b for b in jk2_ranked if b not in used_jk2]
-                ace_d = rem_d[0] if rem_d else None
-
-                jk2_third = sorted(set(jk2_second) | ({ace_c} if ace_c else set()) | ({ace_d} if ace_d else set()))
-
-                # 4艇未満なら残りから補完
-                for b in jk2_ranked:
-                    if len(jk2_third) >= 4:
-                        break
-                    if b not in set(jk2_third):
-                        jk2_third = sorted(set(jk2_third) | {b})
-
-                # 3着が3艇未満 = 4点未満フォーメーション → 生成しない
-                if len(jk2_second) >= 2 and len(jk2_third) >= 3:
-                    jk2_str = (
-                        f"1-"
-                        f"{''.join(str(b) for b in jk2_second)}-"
-                        f"{''.join(str(b) for b in jk2_third)}"
-                    )
-                    # 地熊2.0の点数確認ログ（2着2艇×3着4艇 - 2点 = 6点が正常）
-                    _jk2_pts = len(jk2_second) * len(jk2_third) - len(jk2_second)
-                    print(f"  [地熊2.0] {venue_name_log} {race_no}R {jk2_str} ({_jk2_pts}点)")
-                    nc_label = ("神熱" if arare_ok else
-                                "灼熱" if arare_score >= ARARE_MIN_SCORE else
-                                "熊熱" if arare_score == 1 else "見送り")
-                    if weak_in:
-                        nc_label += "(注意:弱イン)"
-                    all_recommendations.append({
-                        "date":          race_row.get("date", ""),
-                        "venue_name":    race_row.get("venue_name", ""),
-                        "race_no":       race_row.get("race_no", ""),
-                        "combination":   jk2_str,
-                        "prob":          "-",
-                        "odds":          "-",
-                        "expected_roi":  "-",
-                        "confidence":    "地熊2.0",
-                        "odds_source":   nigerate_str,
-                        "tier":          "地熊2.0",
-                        "bet_label":     nc_label,
-                        "edge":          "-",
-                        "arare_score":   arare_score,
-                        "arare_reasons": " / ".join(arare_reasons),
-                        "boat1_risk":    _calc_boat1_risk(race_row),
-                    })
-
-
         # ペリー舟券（全PT対象）
         # 外艇の展示STで軸（1着）を決め、その内側2艇を2着、1号艇＋内側＋外側で3着
         if True:
@@ -1558,25 +1329,7 @@ def get_recommendations(
                                 perry_label += "(弱イン)"
                             tier_label  = f"ペリー舟券({data_label})"
 
-                            all_recommendations.append({
-                                "date":          race_row.get("date", ""),
-                                "venue_name":    race_row.get("venue_name", ""),
-                                "race_no":       race_row.get("race_no", ""),
-                                "combination":   perry_str,
-                                "prob":          "-",
-                                "odds":          "-",
-                                "expected_roi":  "-",
-                                "confidence":    tier_label,
-                                "odds_source":   nigerate_str,
-                                "tier":          tier_label,
-                                "bet_label":     perry_label,
-                                "edge":          "-",
-                                "arare_score":   arare_score,
-                                "arare_reasons": " / ".join(arare_reasons),
-                                "boat1_risk":    _calc_boat1_risk(race_row),
-                            })
-
-                            # ペリー改1（4点固定）: perry_ace-AB-CD（ABとCDが重複しない）
+                            # ペリー1（4点固定）: perry_ace-AB-CD（ABとCDが重複しない）
                             # 3着はinner2(2着2艇)以外から選ぶことで確実に4点確保
                             rem_kai1 = [b for b in available_perry if b not in {perry_ace} and b not in set(inner2)]
                             third_kai1_list = []
@@ -1593,6 +1346,17 @@ def get_recommendations(
                                     f"{''.join(str(b) for b in inner2)}-"
                                     f"{''.join(str(b) for b in third_kai1)}"
                                 )
+                                # ET評価（全艇中のランク）
+                                if perry_ace in perry_et_vals:
+                                    _et_ranked = sorted(perry_et_vals.keys(), key=lambda b: perry_et_vals[b])
+                                    _et_rank = _et_ranked.index(perry_ace) + 1
+                                    _et_mark = "◎" if _et_rank == 1 else ("○" if _et_rank <= 3 else "△")
+                                else:
+                                    _et_mark = "?"
+                                # ML評価（perry_aceの1着確率）
+                                _perry_ace_ml = float(by_prob[by_prob["boat1"] == perry_ace]["prob"].sum())
+                                _ml_mark = "高" if _perry_ace_ml >= 0.20 else ("中" if _perry_ace_ml >= 0.10 else "低")
+                                _kai1_label = f"ペリー1(軸:{perry_ace}号-ET{_et_mark}-ML{_ml_mark})"
                                 all_recommendations.append({
                                     "date":          race_row.get("date", ""),
                                     "venue_name":    race_row.get("venue_name", ""),
@@ -1601,9 +1365,9 @@ def get_recommendations(
                                     "prob":          "-",
                                     "odds":          "-",
                                     "expected_roi":  "-",
-                                    "confidence":    "ペリー改1",
+                                    "confidence":    _kai1_label,
                                     "odds_source":   nigerate_str,
-                                    "tier":          "ペリー改1",
+                                    "tier":          _kai1_label,
                                     "bet_label":     perry_label,
                                     "edge":          "-",
                                     "arare_score":   arare_score,
@@ -1678,9 +1442,9 @@ def get_recommendations(
                                             "prob":          "-",
                                             "odds":          "-",
                                             "expected_roi":  "-",
-                                            "confidence":    "ペリー改2",
+                                            "confidence":    "ペリー2",
                                             "odds_source":   nigerate_str,
-                                            "tier":          "ペリー改2",
+                                            "tier":          "ペリー2",
                                             "bet_label":     perry_label,
                                             "edge":          "-",
                                             "arare_score":   arare_score,

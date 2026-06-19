@@ -18,11 +18,11 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-RESULT_SHEET = "成績16"
-SUMMARY_SHEET = "サマリー16"
+RESULT_SHEET = "成績17"
+SUMMARY_SHEET = "サマリー17"
 
-_WIND_NOTE_LINE1 = "【風向き判断】向かい風3〜7m → 地熊目・熊フォメ 積極的に勝負"
-_WIND_NOTE_LINE2 = "追い風5m以上 → ペリー舟券・穴系に切り替え or 見送り"
+_WIND_NOTE_LINE1 = "【風向き判断】向かい風3〜7m → 地熊目 積極的に勝負"
+_WIND_NOTE_LINE2 = "追い風5m以上 → ペリー1・ペリー2 積極的に勝負 or 見送り"
 
 # 会場マーク: ▲=荒れやすい  ◎=イン強・荒れにくい
 _VENUE_MARK = {
@@ -587,7 +587,7 @@ def update_result_row(
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
         # フォーメーション: 展開して照合（実際の点数×100円で収支計算）
-        if tier in ("地熊目", "熊フォメ", "地熊2.0") or tier.startswith("ペリー舟券") or tier.startswith("ペリー改"):
+        if tier == "地熊目" or tier.startswith("ペリー1") or tier.startswith("ペリー2"):
             form_combos = _expand_formation(combination)
             hit    = "○" if actual_combination in form_combos else "×"
             payout = actual_payout if hit == "○" else 0
@@ -701,7 +701,7 @@ def _compute_tier_stats(records: list, tier_check) -> dict:
             daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
         # フォーメーションは実際のcombo数×100円、それ以外は1票=100円
         tier_name = str(rec.get("狙い", ""))
-        if tier_name in ("地熊目", "熊フォメ", "地熊2.0") or tier_name.startswith("ペリー舟券") or tier_name.startswith("ペリー改"):
+        if tier_name == "地熊目" or tier_name.startswith("ペリー1") or tier_name.startswith("ペリー2"):
             _fc = _expand_formation(str(combination))
             bet_amount = len(_fc) * 100 if _fc else 400
         else:
@@ -863,8 +863,8 @@ def update_summary_sheet(
         daily: dict = {}
         for rec in records:
             tier_val = str(rec.get("狙い", ""))
-            if tier_name == "ペリー舟券":
-                if not tier_val.startswith("ペリー舟券"):
+            if tier_name.startswith("ペリー"):
+                if not tier_val.startswith(tier_name):
                     continue
             elif tier_val != tier_name:
                 continue
@@ -890,7 +890,7 @@ def update_summary_sheet(
             rn = str(rec.get("レース", ""))
             race_key = (d, v, rn)
             race_keys.add(race_key)
-            if tier_name in ("地熊目", "熊フォメ", "地熊2.0") or tier_val.startswith("ペリー舟券") or tier_val.startswith("ペリー改"):
+            if tier_name == "地熊目" or tier_val.startswith("ペリー1") or tier_val.startswith("ペリー2"):
                 fc = _expand_formation(combo)
                 bet = len(fc) * 100 if fc else 400
             else:
