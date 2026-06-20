@@ -1378,6 +1378,114 @@ def get_recommendations(
                                     "boat1_risk":    _calc_boat1_risk(race_row),
                                 })
 
+                # ペリー差し: 2号艇展示ST全艇最速 + 弱イン条件
+                # 差し展開での2号艇軸フォーメーション（2-XYZ-XYZ 6点）
+                if weak_in and 2 in available_perry:
+                    _all_sts_sa: dict = {}
+                    for _b in available_perry:
+                        _sv = _safe_float(race_row.get(f"boat{_b}_exhibition_st"))
+                        if _sv and _sv > 0:
+                            _all_sts_sa[_b] = _sv
+                    _b2_st_sa = _all_sts_sa.get(2)
+                    sashi_axis_ok = (
+                        _b2_st_sa is not None
+                        and len(_all_sts_sa) >= 3
+                        and _b2_st_sa == min(_all_sts_sa.values())
+                    )
+                    if sashi_axis_ok:
+                        sashi_cands = [b for b in available_perry if b != 2]
+
+                        # 展示タイムランク（全艇・速い艇=1.0）
+                        _sa_et_vals: dict = {}
+                        for _b in available_perry:
+                            _ev = _safe_float(race_row.get(f"boat{_b}_exhibition_time"))
+                            if _ev and _ev > 0:
+                                _sa_et_vals[_b] = _ev
+                        _sa_et_ranks: dict = {}
+                        if len(_sa_et_vals) >= 2:
+                            _sa_et_sorted = sorted(_sa_et_vals.items(), key=lambda x: x[1])
+                            _sa_et_ranks = {b: 1.0 - i / max(len(_sa_et_sorted) - 1, 1)
+                                            for i, (b, _) in enumerate(_sa_et_sorted)}
+
+                        # ポジションスコア（差し展開特性 + 偶数艇連鎖考慮）
+                        # 1号艇(0.75): 差されたが位置は最も近く2/3着に残りやすい
+                        # 3号艇(0.68): 差しアクション直外、競り合いに直接絡む
+                        # 4号艇(0.55): 偶数艇連鎖で差しについてくる可能性
+                        # 5号艇(0.28): 距離があり絡みにくい
+                        # 6号艇(0.18): 最外も偶数連鎖わずかあり
+                        _sa_pos = {1: 0.75, 3: 0.68, 4: 0.55, 5: 0.28, 6: 0.18}
+
+                        def _sashi_cand_score(bn):
+                            pos  = _sa_pos.get(bn, 0.20)
+                            et   = _sa_et_ranks.get(bn, 0.5)
+                            gn_r = race_row.get(f"boat{bn}_grade_num", 2)
+                            try:
+                                gn = int(float(gn_r)) if gn_r is not None else 2
+                            except (TypeError, ValueError):
+                                gn = 2
+                            grade_sc = {4: 1.0, 3: 0.67, 2: 0.33, 1: 0.0}.get(gn, 0.33)
+                            nat2 = min(_safe_float(race_row.get(f"boat{bn}_national_2rate")) or 0.0, 1.0)
+                            gr   = (grade_sc + nat2) / 2.0
+                            st   = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                            st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
+                            return pos * 0.45 + et * 0.30 + gr * 0.15 + st_sc * 0.10
+
+                        _sa_ordered = sorted(sashi_cands, key=_sashi_cand_score, reverse=True)
+                        _sa_trio    = sorted(_sa_ordered[:3])
+
+                        if len(_sa_trio) >= 3:
+                            _sa_trio_str = ''.join(str(b) for b in _sa_trio)
+                            sashi_str    = f"2-{_sa_trio_str}-{_sa_trio_str}"
+
+                            # ラベル判定（強い根拠から順に判定）
+                            _b1_st_sa  = _safe_float(race_row.get("boat1_exhibition_st"))
+                            _m1_sa     = _safe_float(race_row.get("boat1_motor_2rate"))
+                            _g1_sa     = _safe_float(race_row.get("boat1_grade_num"))
+                            _g1_nst_sa = _safe_float(race_row.get("boat1_meet_avg_st"))
+
+                            # 来航: 2号艇STが圧倒的に速く、1号艇STが遅い
+                            if (_b2_st_sa <= 0.10
+                                    and _b1_st_sa is not None and _b1_st_sa >= 0.18):
+                                sashi_bet_label = "ペリー来航"
+                            # 来航★: 1号艇が構造的に弱い（モーター低い + B級or節ST遅い）
+                            elif (
+                                _m1_sa is not None and _m1_sa < 0.35
+                                and ((_g1_sa is not None and _g1_sa <= 2)
+                                     or (_g1_nst_sa is not None and _g1_nst_sa >= 0.17))
+                            ):
+                                sashi_bet_label = "ペリー来航★"
+                            # 出航: 2号艇STが十分速い
+                            elif _b2_st_sa <= 0.13:
+                                sashi_bet_label = "ペリー出航"
+                            else:
+                                sashi_bet_label = "見送り"
+                            sashi_bet_label += "(差し)"
+
+                            # 2号艇ET評価（全艇中ランク）
+                            if 2 in _sa_et_vals:
+                                _sa_rank2 = sorted(_sa_et_vals, key=lambda b: _sa_et_vals[b]).index(2) + 1
+                                _sa_et_mk = "◎" if _sa_rank2 == 1 else ("○" if _sa_rank2 <= 3 else "△")
+                            else:
+                                _sa_et_mk = "?"
+                            _sashi_tier = f"ペリー差し(軸:2号-ET{_sa_et_mk})"
+                            all_recommendations.append({
+                                "date":          race_row.get("date", ""),
+                                "venue_name":    race_row.get("venue_name", ""),
+                                "race_no":       race_row.get("race_no", ""),
+                                "combination":   sashi_str,
+                                "prob":          "-",
+                                "odds":          "-",
+                                "expected_roi":  "-",
+                                "confidence":    _sashi_tier,
+                                "odds_source":   nigerate_str,
+                                "tier":          _sashi_tier,
+                                "bet_label":     sashi_bet_label,
+                                "edge":          "-",
+                                "arare_score":   arare_score,
+                                "arare_reasons": " / ".join(arare_reasons),
+                                "boat1_risk":    _calc_boat1_risk(race_row),
+                            })
+
     return pd.DataFrame(all_recommendations)
 
 
