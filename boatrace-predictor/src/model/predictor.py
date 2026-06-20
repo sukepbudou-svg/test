@@ -1167,7 +1167,21 @@ def get_recommendations(
 
                 outer_axis_scores = {b: _perry_axis_score(b) for b in outer_boats_perry}
 
-                if outer_axis_scores:
+                # 差し優先フラグ: 2号艇ST最速+弱インが揃う場合は外艇ペリーを抑制
+                _sts_pre = {b: v for b, v in
+                            {b: _safe_float(race_row.get(f"boat{b}_exhibition_st"))
+                             for b in available_perry}.items()
+                            if v and v > 0}
+                _b2_st_pre = _sts_pre.get(2)
+                _sashi_active = (
+                    weak_in
+                    and 2 in available_perry
+                    and _b2_st_pre is not None
+                    and len(_sts_pre) >= 3
+                    and _b2_st_pre == min(_sts_pre.values())
+                )
+
+                if outer_axis_scores and not _sashi_active:
                     perry_ace    = max(outer_axis_scores, key=lambda b: outer_axis_scores[b])
                     perry_ace_st = _safe_float(race_row.get(f"boat{perry_ace}_exhibition_st"))
                     data_label   = "M+G+ST" if (b1_st_ax and perry_ace_st) else "M+G"
@@ -1378,9 +1392,8 @@ def get_recommendations(
                                     "boat1_risk":    _calc_boat1_risk(race_row),
                                 })
 
-                # ペリー差し: 2号艇展示ST全艇最速 + 弱イン条件
-                # 差し展開での2号艇軸フォーメーション（2-XYZ-XYZ 6点）
-                if weak_in and 2 in available_perry:
+                # ペリー差し: 差し優先フラグが立っている場合のみ実行（外艇ペリーと排他）
+                if _sashi_active:
                     _all_sts_sa: dict = {}
                     for _b in available_perry:
                         _sv = _safe_float(race_row.get(f"boat{_b}_exhibition_st"))
