@@ -999,15 +999,12 @@ def get_recommendations(
             lucky_boats = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             non_first_lucky = [b for b in lucky_boats if b != 1]
 
-            # 1号艇1着限定の条件付き2着・3着確率
+            # 1号艇1着限定の条件付きML 2着確率
             by_prob_1st = by_prob[by_prob["boat1"] == 1]
             cond_2nd: dict = {}
-            cond_3rd: dict = {}
             for b in non_first_lucky:
                 cond_2nd[b] = float(by_prob_1st[by_prob_1st["boat2"] == b]["prob"].sum())
-                cond_3rd[b] = float(by_prob_1st[by_prob_1st["boat3"] == b]["prob"].sum())
             max_2nd = max(cond_2nd.values()) if cond_2nd else 1.0
-            max_3rd = max(cond_3rd.values()) if cond_3rd else 1.0
 
             # ETランク（速い=1.0、データなし=0.5）
             lucky_et_vals = {}
@@ -1022,65 +1019,44 @@ def get_recommendations(
                 for rank_i, (b, _) in enumerate(sorted_lucky_et):
                     lucky_et_ranks[b] = 1.0 - rank_i / (n_let - 1)
 
-            def _lucky_grade(bn):
-                gn_raw = race_row.get(f"boat{bn}_grade_num", 2)
-                try:
-                    gn = int(float(gn_raw)) if gn_raw is not None else 2
-                except (TypeError, ValueError):
-                    gn = 2
-                grade = {4: 1.0, 3: 0.67, 2: 0.33, 1: 0.0}.get(gn, 0.33)
-                nat2 = min(_safe_float(race_row.get(f"boat{bn}_national_2rate")) or 0.0, 1.0)
-                return (grade + nat2) / 2.0
+            # 差し展開指標: 2号艇の展示STが全艇中top2かどうか
+            _boat2_st_ex = _safe_float(race_row.get("boat2_exhibition_st"))
+            _all_st_ex = sorted([
+                v for b in range(1, 7)
+                for v in [_safe_float(race_row.get(f"boat{b}_exhibition_st"))]
+                if v and v > 0
+            ])
+            _boat2_st_fast = (
+                bool(_boat2_st_ex) and len(_all_st_ex) >= 2
+                and _boat2_st_ex <= _all_st_ex[1]
+            )
 
-            def _lucky_maezuke(bn):
-                ac_raw = race_row.get(f"boat{bn}_actual_course")
-                try:
-                    ac = int(ac_raw) if ac_raw is not None else bn
-                except (TypeError, ValueError):
-                    ac = bn
-                return 1.0 if ac < bn else 0.0  # 前付けで内コースに進入 = ボーナス
+            # まくり展開指標: 外艇(3-5号)のETが全体top2に入るセット
+            _top2_et_boats: set = set()
+            if len(lucky_et_vals) >= 2:
+                _et_asc = sorted(lucky_et_vals.items(), key=lambda x: x[1])
+                _top2_et_boats = {_et_asc[0][0], _et_asc[1][0]}
+            _outer_et_top = {b for b in [3, 4, 5] if b in _top2_et_boats}
 
-            def _lucky2nd_score(bn):
+            def _lucky_abc_score(bn):
+                """差し・まくり展開を考慮した地熊目2・3着候補スコア"""
                 prob  = cond_2nd.get(bn, 0.0) / (max_2nd or 1.0)
                 et    = lucky_et_ranks.get(bn, 0.5)
-                gr    = _lucky_grade(bn)
+                pos   = 1.0 if bn == 2 else 0.0   # 2号艇の内側ポジション優位
                 st    = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
                 st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
-                mz    = _lucky_maezuke(bn)
-                return prob * 0.40 + gr * 0.20 + et * 0.20 + st_sc * 0.15 + mz * 0.05
+                score = prob * 0.45 + et * 0.30 + pos * 0.15 + st_sc * 0.10
+                if bn == 2 and _boat2_st_fast:
+                    score += 0.08  # 差し展開ボーナス
+                if bn in _outer_et_top:
+                    score += 0.06  # まくり展開ボーナス
+                return score
 
-            def _lucky3rd_score(bn):
-                prob  = cond_3rd.get(bn, 0.0) / (max_3rd or 1.0)
-                et    = lucky_et_ranks.get(bn, 0.5)
-                gr    = _lucky_grade(bn)
-                st    = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-                st_sc = max(0.0, min(1.0, (0.20 - st) / 0.10)) if (st and st > 0) else 0.5
-                mz    = _lucky_maezuke(bn)
-                return prob * 0.40 + gr * 0.20 + et * 0.20 + st_sc * 0.15 + mz * 0.05
-
-            ranked_2nd = sorted(non_first_lucky, key=_lucky2nd_score, reverse=True)
-
-            if len(ranked_2nd) >= 2:
-                ace_a = ranked_2nd[0]
-                ace_b = ranked_2nd[1]
-                rem_c = [b for b in non_first_lucky if b not in {ace_a, ace_b}]
-                ace_c = max(rem_c, key=_lucky3rd_score) if rem_c else None
-
-                lucky_second = sorted({ace_a, ace_b})
-                lucky_third = sorted(set(lucky_second) | ({ace_c} if ace_c else set()))
-                for b in ranked_2nd:
-                    if len(lucky_third) >= 3:
-                        break
-                    if b not in set(lucky_third):
-                        lucky_third = sorted(set(lucky_third) | {b})
-
-                # 3着が3艇未満 = 4点フォーメーション未満 → 生成しない
-                if len(lucky_second) >= 2 and len(lucky_third) >= 3:
-                    lucky_str = (
-                        f"1-"
-                        f"{''.join(str(b) for b in lucky_second)}-"
-                        f"{''.join(str(b) for b in lucky_third)}"
-                    )
+            ranked_abc = sorted(non_first_lucky, key=_lucky_abc_score, reverse=True)
+            if len(ranked_abc) >= 3:
+                lucky_trio = sorted(ranked_abc[:3])
+                _trio_str  = ''.join(str(b) for b in lucky_trio)
+                lucky_str  = f"1-{_trio_str}-{_trio_str}"
 
         def _make_row(rec, star_lv, second):
             if arare_ok:
@@ -1115,11 +1091,8 @@ def get_recommendations(
             }
 
         if lucky_str:
-            # 地熊目の点数確認ログ（2着2艇×3着3艇 - 2着=3着の2点 = 4点が正常）
-            _l2 = len(lucky_second) if 'lucky_second' in dir() else 0
-            _l3 = len(lucky_third)  if 'lucky_third'  in dir() else 0
-            _lucky_pts = _l2 * _l3 - _l2  # フォーメーション点数の理論値
-            print(f"  [地熊目] {venue_name_log} {race_no}R {lucky_str} ({_lucky_pts}点)")
+            # 地熊目: 1-ABC-ABC ボックス = 3×2 = 6点固定
+            print(f"  [地熊目] {venue_name_log} {race_no}R {lucky_str} (6点)")
             lucky_label = ("神熱" if arare_ok else
                            "灼熱" if arare_score >= ARARE_MIN_SCORE else
                            "熊熱" if arare_score == 1 else "見送り")

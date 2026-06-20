@@ -658,7 +658,7 @@ def update_result_row(
             form_combos = _expand_formation(combination)
             hit    = "○" if actual_combination in form_combos else "×"
             payout = actual_payout if hit == "○" else 0
-            ticket_count = len(form_combos) if form_combos else 4
+            ticket_count = len(form_combos) if form_combos else 6
             profit = payout - ticket_count * 100
         else:
             hit    = "○" if combination == actual_combination else "×"
@@ -770,7 +770,7 @@ def _compute_tier_stats(records: list, tier_check) -> dict:
         tier_name = str(rec.get("狙い", ""))
         if tier_name == "地熊目" or tier_name.startswith("ペリー"):
             _fc = _expand_formation(str(combination))
-            bet_amount = len(_fc) * 100 if _fc else 400
+            bet_amount = len(_fc) * 100 if _fc else 600
         else:
             bet_amount = 100
         total_bets += bet_amount
@@ -963,7 +963,7 @@ def update_summary_sheet(
             race_keys.add(race_key)
             if tier_name == "地熊目" or tier_val.startswith("ペリー"):
                 fc = _expand_formation(combo)
-                bet = len(fc) * 100 if fc else 400
+                bet = len(fc) * 100 if fc else 600
             else:
                 bet = 100
             total_bets += bet
@@ -1024,7 +1024,7 @@ def update_summary_sheet(
             race_key = (d, v, rn)
             race_keys.add(race_key)
             fc = _expand_formation(combo)
-            bet = len(fc) * 100 if fc else 400
+            bet = len(fc) * 100 if fc else 600
             total_bets += bet
             if d not in daily:
                 daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
