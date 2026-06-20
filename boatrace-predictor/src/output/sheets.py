@@ -501,7 +501,7 @@ def append_prediction_row(
 
 
 def _color_result_row(spreadsheet, sheet, row_no: int, venue_name: str, hit: str,
-                      num_cols: int = 12, hit_col_idx: int = 9) -> None:
+                      num_cols: int = 13, hit_col_idx: int = 8) -> None:
     """成績シートの1行に会場色＋的中色をリアルタイムで適用する"""
     try:
         sid = sheet.id
@@ -985,6 +985,10 @@ def update_summary_sheet(
                 continue
             bet_label = str(rec.get("勝負推奨", ""))
             if not bet_label.startswith(label_prefix):
+                continue
+            # "ペリー来航" が "ペリー来航★..." を誤って拾わないよう除外
+            _after = bet_label[len(label_prefix):]
+            if _after and _after[0] == "★":
                 continue
             combo = str(rec.get("予想買い目", ""))
             if combo in ("", "（予想なし）", "見送り", "-"):
