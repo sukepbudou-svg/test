@@ -243,7 +243,7 @@ def _calc_nigerate(race_row: pd.Series) -> str:
         nigerate -= 0.02
 
     nigerate = max(0.05, min(0.95, nigerate))
-    return f"逃げ推定{int(round(nigerate * 100))}%"
+    return f"逃げ{int(round(nigerate * 100))}%"
 
 
 def _calc_threat_score(bn: int, race_row: pd.Series) -> float:
@@ -1321,18 +1321,34 @@ def get_recommendations(
                                 perry_label += "(弱イン)"
                             tier_label  = f"ペリー舟券({data_label})"
 
-                            # ペリー1（4点固定）: perry_ace-AB-CD（ABとCDが重複しない）
-                            # 3着はinner2(2着2艇)以外からまくり度考慮スコア上位2艇
-                            rem_kai1 = [b for b in available_perry if b not in {perry_ace} and b not in set(inner2)]
-                            third_kai1 = sorted(
-                                sorted(rem_kai1, key=lambda b: _perry_3rd_score_m(b, perry_ace), reverse=True)[:2]
+                            # ペリー（6点固定）: perry_ace-XYZ-XYZ
+                            # 候補3艇: スコア1位 + 1号艇固定 + スコア2位(1号以外)
+                            _cands_ordered = sorted(
+                                [b for b in available_perry if b != perry_ace],
+                                key=lambda b: _perry_2nd_score_m(b, perry_ace, makuri_do1), reverse=True
                             )
-                            if len(inner2) >= 2 and len(third_kai1) >= 2:
-                                kai1_str = (
-                                    f"{perry_ace}-"
-                                    f"{''.join(str(b) for b in inner2)}-"
-                                    f"{''.join(str(b) for b in third_kai1)}"
-                                )
+                            _trio: list = []
+                            # スコア1位を追加
+                            if _cands_ordered:
+                                _trio.append(_cands_ordered[0])
+                            # 1号艇を固定追加（perry_ace以外かつ未追加の場合）
+                            if 1 in available_perry and 1 != perry_ace and 1 not in _trio:
+                                _trio.append(1)
+                            # スコア2位（上記未選出の艇から）を追加
+                            for _b in _cands_ordered[1:]:
+                                if _b not in _trio:
+                                    _trio.append(_b)
+                                    break
+                            # 足りなければ残りを補完
+                            for _b in _cands_ordered:
+                                if len(_trio) >= 3:
+                                    break
+                                if _b not in _trio:
+                                    _trio.append(_b)
+                            perry_trio = sorted(_trio[:3])
+                            if len(perry_trio) >= 3:
+                                _trio_str = ''.join(str(b) for b in perry_trio)
+                                kai1_str = f"{perry_ace}-{_trio_str}-{_trio_str}"
                                 # ET評価（全艇中のランク）
                                 if perry_ace in perry_et_vals:
                                     _et_ranked = sorted(perry_et_vals.keys(), key=lambda b: perry_et_vals[b])
@@ -1343,7 +1359,7 @@ def get_recommendations(
                                 # ML評価（perry_aceの1着確率）
                                 _perry_ace_ml = float(by_prob[by_prob["boat1"] == perry_ace]["prob"].sum())
                                 _ml_mark = "高" if _perry_ace_ml >= 0.20 else ("中" if _perry_ace_ml >= 0.10 else "低")
-                                _kai1_label = f"ペリー1(軸:{perry_ace}号-ET{_et_mark}-ML{_ml_mark})"
+                                _kai1_label = f"ペリー(軸:{perry_ace}号-ET{_et_mark}-ML{_ml_mark})"
                                 all_recommendations.append({
                                     "date":          race_row.get("date", ""),
                                     "venue_name":    race_row.get("venue_name", ""),
@@ -1361,50 +1377,6 @@ def get_recommendations(
                                     "arare_reasons": " / ".join(arare_reasons),
                                     "boat1_risk":    _calc_boat1_risk(race_row),
                                 })
-
-                            # ペリー2（2点）: 軸スコア2位の外艇が軸
-                            sorted_outer_by_score = sorted(
-                                outer_axis_scores.keys(),
-                                key=lambda b: outer_axis_scores[b], reverse=True
-                            )
-                            perry_ace2 = sorted_outer_by_score[1] if len(sorted_outer_by_score) >= 2 else None
-                            if perry_ace2 is not None:
-                                # まくり度ベース2着・3着選出（ペリー2用）
-                                makuri_do2 = _calc_makuri_do(perry_ace2)
-                                all_except_ace2 = sorted(
-                                    [b for b in available_perry if b != perry_ace2],
-                                    key=lambda b: _perry_2nd_score_m(b, perry_ace2, makuri_do2), reverse=True
-                                )
-                                kai2_second = all_except_ace2[0] if all_except_ace2 else None
-                                if kai2_second is not None:
-                                    # 3着（2点固定）: 2着(kai2_second)を除外した艇からスコア上位2艇
-                                    rem_kai2 = [b for b in available_perry if b not in {perry_ace2, kai2_second}]
-                                    third_kai2 = sorted(
-                                        sorted(rem_kai2, key=lambda b: _perry_3rd_score_m(b, perry_ace2), reverse=True)[:2]
-                                    )
-                                    if len(third_kai2) >= 2:
-                                        kai2_str = (
-                                            f"{perry_ace2}-{kai2_second}-"
-                                            f"{''.join(str(b) for b in third_kai2)}"
-                                        )
-                                        # 来航判定はペリー舟券の軸(perry_ace)基準のperry_labelをそのまま使用
-                                        all_recommendations.append({
-                                            "date":          race_row.get("date", ""),
-                                            "venue_name":    race_row.get("venue_name", ""),
-                                            "race_no":       race_row.get("race_no", ""),
-                                            "combination":   kai2_str,
-                                            "prob":          "-",
-                                            "odds":          "-",
-                                            "expected_roi":  "-",
-                                            "confidence":    "ペリー2",
-                                            "odds_source":   nigerate_str,
-                                            "tier":          "ペリー2",
-                                            "bet_label":     perry_label,
-                                            "edge":          "-",
-                                            "arare_score":   arare_score,
-                                            "arare_reasons": " / ".join(arare_reasons),
-                                            "boat1_risk":    _calc_boat1_risk(race_row),
-                                        })
 
     return pd.DataFrame(all_recommendations)
 

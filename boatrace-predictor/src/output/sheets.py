@@ -18,8 +18,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-RESULT_SHEET = "成績17"
-SUMMARY_SHEET = "サマリー17"
+RESULT_SHEET = "成績18"
+SUMMARY_SHEET = "サマリー18"
 
 # 24場 荒れやすさランキング（万舟率・コース特性ベース、1位=最も荒れやすい）
 _VENUE_RANKING = [
@@ -555,16 +555,16 @@ def update_result_row(
     spreadsheet = client.open_by_key(spreadsheet_id)
 
     RESULT_HEADERS = ["日付", "競艇場", "レース", "狙い", "予想買い目",
-                      "実際の結果", "実際の払戻", "的中", "収支（円）", "本日レース数", "勝負推奨", "荒れPT"]
+                      "実際の結果", "イン逃げ率", "実際の払戻", "的中", "収支（円）", "本日レース数", "勝負推奨", "荒れPT"]
     try:
         r_sheet = spreadsheet.worksheet(RESULT_SHEET)
         if not r_sheet.get_all_values():
             r_sheet.update("A1", [RESULT_HEADERS])
-            _format_header(spreadsheet, r_sheet, num_cols=12)
+            _format_header(spreadsheet, r_sheet, num_cols=13)
     except gspread.WorksheetNotFound:
-        r_sheet = spreadsheet.add_worksheet(title=RESULT_SHEET, rows=2000, cols=12)
+        r_sheet = spreadsheet.add_worksheet(title=RESULT_SHEET, rows=2000, cols=13)
         r_sheet.update("A1", [RESULT_HEADERS])
-        _format_header(spreadsheet, r_sheet, num_cols=12)
+        _format_header(spreadsheet, r_sheet, num_cols=13)
 
     # メモリキャッシュ（auto_runner から渡された場合）を優先使用
     # → Google Sheets API 503 エラーを回避するため
@@ -629,11 +629,11 @@ def update_result_row(
     if not race_preds:
         r_sheet.append_row(
             [date, marked_venue, race_no, "-", "（予想なし）",
-             actual_combination, actual_payout, "-", 0, rc, "", ""],
+             actual_combination, "-", actual_payout, "-", 0, rc, "", ""],
             value_input_option="RAW"
         )
         _color_result_row(spreadsheet, r_sheet, len(r_sheet.get_all_values()), venue_name, "-",
-                          num_cols=12, hit_col_idx=7)
+                          num_cols=13, hit_col_idx=8)
         return
 
     for pred in race_preds:
@@ -641,8 +641,9 @@ def update_result_row(
         tier = pred.get("狙い", "-")
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
+        nigerate_val = pred.get("イン逃げ率", pred.get("オッズ", "-"))  # 日付シートからイン逃げ率取得
         # フォーメーション: 展開して照合（実際の点数×100円で収支計算）
-        if tier == "地熊目" or tier.startswith("ペリー1") or tier.startswith("ペリー2"):
+        if tier == "地熊目" or tier.startswith("ペリー"):
             form_combos = _expand_formation(combination)
             hit    = "○" if actual_combination in form_combos else "×"
             payout = actual_payout if hit == "○" else 0
@@ -655,11 +656,11 @@ def update_result_row(
 
         r_sheet.append_row(
             [date, marked_venue, race_no, tier, combination,
-             actual_combination, actual_payout, hit, profit, rc, bet_label, arare_pt],
+             actual_combination, nigerate_val, actual_payout, hit, profit, rc, bet_label, arare_pt],
             value_input_option="RAW"
         )
         _color_result_row(spreadsheet, r_sheet, len(r_sheet.get_all_values()), venue_name, hit,
-                          num_cols=12, hit_col_idx=7)
+                          num_cols=13, hit_col_idx=8)
 
     print(f"[OK] 成績記録: {venue_name} {race_no}R 結果={actual_combination} 払戻={actual_payout}円")
 
@@ -686,7 +687,7 @@ def apply_colors_to_results_sheet(
 
     for i, row in enumerate(all_rows[1:], start=2):
         venue_name = row[1] if len(row) > 1 else ""
-        hit = row[7] if len(row) > 7 else ""  # 成績13: 的中はindex7
+        hit = row[8] if len(row) > 8 else ""  # 成績18: 的中はindex8
 
         bg = _VENUE_BG_COLORS.get(venue_name, _DEFAULT_BG)
 
@@ -697,7 +698,7 @@ def apply_colors_to_results_sheet(
                     "startRowIndex": i - 1,
                     "endRowIndex": i,
                     "startColumnIndex": 0,
-                    "endColumnIndex": 12,
+                    "endColumnIndex": 13,
                 },
                 "cell": {"userEnteredFormat": {"backgroundColor": bg}},
                 "fields": "userEnteredFormat.backgroundColor",
@@ -715,8 +716,8 @@ def apply_colors_to_results_sheet(
                         "sheetId": sheet_id,
                         "startRowIndex": i - 1,
                         "endRowIndex": i,
-                        "startColumnIndex": 7,
-                        "endColumnIndex": 8,
+                        "startColumnIndex": 8,
+                        "endColumnIndex": 9,
                     },
                     "cell": {"userEnteredFormat": {
                         "backgroundColor": hit_bg,
@@ -756,7 +757,7 @@ def _compute_tier_stats(records: list, tier_check) -> dict:
             daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
         # フォーメーションは実際のcombo数×100円、それ以外は1票=100円
         tier_name = str(rec.get("狙い", ""))
-        if tier_name == "地熊目" or tier_name.startswith("ペリー1") or tier_name.startswith("ペリー2"):
+        if tier_name == "地熊目" or tier_name.startswith("ペリー"):
             _fc = _expand_formation(str(combination))
             bet_amount = len(_fc) * 100 if _fc else 400
         else:
@@ -920,7 +921,7 @@ def update_summary_sheet(
         for rec in records:
             tier_val = str(rec.get("狙い", ""))
             if tier_name == "ペリー全":
-                if not (tier_val.startswith("ペリー1") or tier_val.startswith("ペリー2")):
+                if not tier_val.startswith("ペリー"):
                     continue
             elif tier_name.startswith("ペリー"):
                 if not tier_val.startswith(tier_name):
@@ -949,7 +950,7 @@ def update_summary_sheet(
             rn = str(rec.get("レース", ""))
             race_key = (d, v, rn)
             race_keys.add(race_key)
-            if tier_name == "地熊目" or tier_val.startswith("ペリー1") or tier_val.startswith("ペリー2"):
+            if tier_name == "地熊目" or tier_val.startswith("ペリー"):
                 fc = _expand_formation(combo)
                 bet = len(fc) * 100 if fc else 400
             else:
@@ -980,7 +981,7 @@ def update_summary_sheet(
         daily: dict = {}
         for rec in records:
             tier_val = str(rec.get("狙い", ""))
-            if not (tier_val.startswith("ペリー1") or tier_val.startswith("ペリー2")):
+            if not tier_val.startswith("ペリー"):
                 continue
             bet_label = str(rec.get("勝負推奨", ""))
             if not bet_label.startswith(label_prefix):
@@ -1067,9 +1068,9 @@ def update_summary_sheet(
         ("地熊目   PT1-3",  "地熊目",   [1, 2, 3]),
         ("地熊目   PT4-6",  "地熊目",   [4, 5, 6]),
         ("地熊目   PT7以上", "地熊目",   "7以上"),
-        ("ペリー合算 PT1-3",  "ペリー全",  [1, 2, 3]),
-        ("ペリー合算 PT4-6",  "ペリー全",  [4, 5, 6]),
-        ("ペリー合算 PT7以上", "ペリー全",  "7以上"),
+        ("ペリー PT1-3",  "ペリー全",  [1, 2, 3]),
+        ("ペリー PT4-6",  "ペリー全",  [4, 5, 6]),
+        ("ペリー PT7以上", "ペリー全",  "7以上"),
     ]:
         s = _pt_tier_stats(tn, pf)
         rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
@@ -1084,11 +1085,11 @@ def update_summary_sheet(
         _write_pt_section(f"地熊目 {lbl}", _pt_tier_stats("地熊目", pt))
     rows.append(_r())
 
-    # ③ ペリーセクション（ペリー1+2合算）
-    rows.append(_r("■ ペリーセクション（ペリー1+2合算）"))
+    # ③ ペリーセクション
+    rows.append(_r("■ ペリーセクション"))
     for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
         lbl = f"{pt}PT" if isinstance(pt, int) else pt
-        _write_pt_section(f"ペリー合算 {lbl}", _pt_tier_stats("ペリー全", pt))
+        _write_pt_section(f"ペリー {lbl}", _pt_tier_stats("ペリー全", pt))
     rows.append(_r())
 
     # ④ ペリーラベル別集計
@@ -1166,7 +1167,7 @@ def update_summary_sheet(
     print(
         f"[OK] {SUMMARY_SHEET}更新: "
         f"地熊目 {len(jj_s['race_keys'])}R ROI={jj_roi} / "
-        f"ペリー合算 {len(perry_s['race_keys'])}R ROI={perry_roi}"
+        f"ペリー {len(perry_s['race_keys'])}R ROI={perry_roi}"
     )
 
 
