@@ -1229,6 +1229,12 @@ def get_recommendations(
                             g1 = _safe_float(race_row.get("boat1_grade_num")) or 2.0
                             boat1_str = min(1.0, m1) * 0.5 + min(1.0, (g1 - 1) / 3.0) * 0.5
                             pos_score += boat1_str * 0.30
+                        # 差し展開（軸=2号艇）: 偶数艇は同側ラインで追走しやすい
+                        if axis_bn == 2:
+                            if bn == 4:
+                                pos_score += 0.15
+                            elif bn == 6:
+                                pos_score += 0.10
                         et    = perry_et_ranks.get(bn, 0.5)
                         gr    = _perry_grade(bn)
                         st    = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
