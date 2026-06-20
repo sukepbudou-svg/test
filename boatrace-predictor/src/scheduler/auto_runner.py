@@ -388,6 +388,7 @@ def _predict_one_race(
             "的中確率": rec.get("prob", "-"),
             "期待回収率": rec.get("expected_roi", "-"),
             "信頼度": rec.get("confidence", "-"),
+            "イン逃げ率": rec.get("odds_source", "-"),
             "勝負推奨": label,
             "荒れPT": rec.get("arare_score", ""),
         })
