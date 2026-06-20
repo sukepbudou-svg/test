@@ -461,6 +461,17 @@ def append_prediction_row(
                     }},
                     "fields": "userEnteredFormat(backgroundColor,textFormat)",
                 }})
+            elif bet_label.startswith("ペリー予想"):
+                reqs.append({"repeatCell": {
+                    "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
+                              "startColumnIndex": 8, "endColumnIndex": 9},
+                    "cell": {"userEnteredFormat": {
+                        "backgroundColor": {"red": 0.50, "green": 0.20, "blue": 0.65},
+                        "textFormat": {"bold": True,
+                                       "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
+                    }},
+                    "fields": "userEnteredFormat(backgroundColor,textFormat)",
+                }})
 
 
         # イン逃げ率（G列=index6）: 65%以上で薄赤、50%未満で薄青
@@ -1103,6 +1114,7 @@ def update_summary_sheet(
         ("ペリー来航★", "ペリー来航★"),
         ("ペリー来航",  "ペリー来航"),
         ("ペリー出航",  "ペリー出航"),
+        ("ペリー予想",  "ペリー予想"),
         ("見送り",     "見送り"),
     ]:
         s = _label_stats(lbl_prefix)
@@ -1115,6 +1127,8 @@ def update_summary_sheet(
     _write_pt_section("ペリー来航", _label_stats("ペリー来航"))
     rows.append(_r("▼ ペリー出航 日付別"))
     _write_pt_section("ペリー出航", _label_stats("ペリー出航"))
+    rows.append(_r("▼ ペリー予想 日付別"))
+    _write_pt_section("ペリー予想", _label_stats("ペリー予想"))
     rows.append(_r())
 
 

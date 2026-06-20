@@ -1323,7 +1323,13 @@ def get_recommendations(
                             elif weak_in and outer_axis_scores.get(perry_ace, 0.0) >= 0.55:
                                 perry_label = "ペリー出航"
                             else:
-                                perry_label = "見送り"
+                                # 案C: 構造的証拠(弱イン等)なくても軸スコア+MLが高信頼なら賭ける
+                                _ace_axis_sc = outer_axis_scores.get(perry_ace, 0.0)
+                                _perry_ace_ml_c = float(by_prob[by_prob["boat1"] == perry_ace]["prob"].sum())
+                                if _ace_axis_sc >= 0.70 and _perry_ace_ml_c >= 0.22:
+                                    perry_label = "ペリー予想"
+                                else:
+                                    perry_label = "見送り"
                             if weak_in:
                                 perry_label += "(弱イン)"
                             tier_label  = f"ペリー舟券({data_label})"
