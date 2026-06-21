@@ -1151,7 +1151,12 @@ def get_recommendations(
                 outer_axis_scores = {b: _perry_axis_score(b) for b in outer_boats_perry}
 
                 if outer_axis_scores:
-                    perry_ace    = max(outer_axis_scores, key=lambda b: outer_axis_scores[b])
+                    # 軸選出: スコア差が0.10以内なら2番手を選ぶ（穴狙い）
+                    _sorted_axes = sorted(outer_axis_scores.items(), key=lambda x: x[1], reverse=True)
+                    if len(_sorted_axes) >= 2 and (_sorted_axes[0][1] - _sorted_axes[1][1]) <= 0.10:
+                        perry_ace = _sorted_axes[1][0]
+                    else:
+                        perry_ace = _sorted_axes[0][0]
                     perry_ace_st = _safe_float(race_row.get(f"boat{perry_ace}_exhibition_st"))
                     data_label   = ("M+G+ST+ET" if (b1_st_ax and perry_ace_st and b1_et_ax) else
                                     "M+G+ST"    if (b1_st_ax and perry_ace_st) else
@@ -1358,13 +1363,35 @@ def get_recommendations(
                                 _perry_ace_ml = float(by_prob[by_prob["boat1"] == perry_ace]["prob"].sum())
                                 _ml_mark = "高" if _perry_ace_ml >= 0.20 else ("中" if _perry_ace_ml >= 0.10 else "低")
                                 _kai1_label = f"ペリー(軸:{perry_ace}号-ET{_et_mark}-ML{_ml_mark})"
+                                # フォーメーション内の最低オッズを取得
+                                _min_odds_val = None
+                                _min_odds_src = None
+                                for _ox in perry_trio:
+                                    for _oy in perry_trio:
+                                        if _ox == _oy:
+                                            continue
+                                        _om = by_prob[
+                                            (by_prob["boat1"] == perry_ace) &
+                                            (by_prob["boat2"] == _ox) &
+                                            (by_prob["boat3"] == _oy)
+                                        ]
+                                        if not _om.empty and "odds_value" in _om.columns:
+                                            _ov = float(_om.iloc[0].get("odds_value", 0) or 0)
+                                            if _ov > 0 and (_min_odds_val is None or _ov < _min_odds_val):
+                                                _min_odds_val = _ov
+                                                _min_odds_src = str(_om.iloc[0].get("odds_source", ""))
+                                _perry_odds_str = (
+                                    f"{_min_odds_val:.1f}倍" if _min_odds_val and _min_odds_src == "live"
+                                    else f"{_min_odds_val:.1f}倍(履歴)" if _min_odds_val
+                                    else "-"
+                                )
                                 all_recommendations.append({
                                     "date":          race_row.get("date", ""),
                                     "venue_name":    race_row.get("venue_name", ""),
                                     "race_no":       race_row.get("race_no", ""),
                                     "combination":   kai1_str,
                                     "prob":          "-",
-                                    "odds":          "-",
+                                    "odds":          _perry_odds_str,
                                     "expected_roi":  "-",
                                     "confidence":    _kai1_label,
                                     "odds_source":   nigerate_str,
