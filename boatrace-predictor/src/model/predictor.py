@@ -1166,7 +1166,7 @@ def get_recommendations(
         else:
             _abare_label = "見送り"
 
-        # ── 小熊: 1号艇+外艇1艇が1着（外艇はニュートラルスコアで選出・選手スタイルで展開推定）──
+        # ── 小熊: 1号艇+1艇が1着（2〜6号艇からニュートラルスコアで選出・選手スタイルで展開推定）──
         koguma_str = None
         sashi_ace  = None
         if not (absent_boats and 1 in absent_boats) and len(outer_kuma) >= 1:
@@ -1185,7 +1185,7 @@ def get_recommendations(
                 _ko_ov, _ko_os = _kuma_min_odds(koguma_str)
                 _ko_odds_str   = _fmt_kuma_odds(_ko_ov, _ko_os)
                 _ko_tactic_jp  = {"sashi": "差し", "makuri": "まくり", "balanced": "バランス"}.get(sashi_tactic, "")
-                print(f"  [小熊] {venue_name_log} {race_no}R {koguma_str} (4点) 外軸:{sashi_ace}号({_ko_tactic_jp}展開)")
+                print(f"  [小熊] {venue_name_log} {race_no}R {koguma_str} (4点) 軸:{sashi_ace}号({_ko_tactic_jp}展開)")
                 all_recommendations.append({
                     "date":          race_row.get("date", ""),
                     "venue_name":    race_row.get("venue_name", ""),
@@ -1194,7 +1194,7 @@ def get_recommendations(
                     "prob":          "-",
                     "odds":          _ko_odds_str,
                     "expected_roi":  "-",
-                    "confidence":    f"小熊(外軸:{sashi_ace}号/{_ko_tactic_jp})[{_data_tag}]",
+                    "confidence":    f"小熊(軸:{sashi_ace}号/{_ko_tactic_jp})[{_data_tag}]",
                     "odds_source":   nigerate_str,
                     "tier":          "小熊",
                     "bet_label":     _abare_label,
