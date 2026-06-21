@@ -368,7 +368,7 @@ def append_prediction_row(
         return  # 色付けは諦めるがデータは書き込み済み
     try:
         sid = sheet.id
-        is_skip   = row.get("bet_label", "") in ("見送り", "熊熱")
+        is_skip   = row.get("bet_label", "") in ("見送り", "")
 
         if is_skip:
             row_bg = {"red": 0.91, "green": 0.91, "blue": 0.91}
@@ -383,81 +383,24 @@ def append_prediction_row(
         }}]
 
         if not is_skip:
-            # 勝負推奨（I列=index8）: 神熱=金、灼熱=オレンジ、熊熱=薄赤、激熱=深オレンジ
             bet_label = row.get("bet_label", "")
-            if bet_label == "神熱":
+            if bet_label == "小熊":
                 reqs.append({"repeatCell": {
                     "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
                               "startColumnIndex": 8, "endColumnIndex": 9},
                     "cell": {"userEnteredFormat": {
-                        "backgroundColor": {"red": 1.0, "green": 0.84, "blue": 0.0},
-                        "textFormat": {"bold": True,
-                                       "foregroundColor": {"red": 0.2, "green": 0.1, "blue": 0.0}},
+                        "backgroundColor": {"red": 0.13, "green": 0.55, "blue": 0.55},
+                        "textFormat": {"bold": True, "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
                     }},
                     "fields": "userEnteredFormat(backgroundColor,textFormat)",
                 }})
-            elif bet_label == "灼熱":
+            elif bet_label == "大熊":
                 reqs.append({"repeatCell": {
                     "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
                               "startColumnIndex": 8, "endColumnIndex": 9},
                     "cell": {"userEnteredFormat": {
-                        "backgroundColor": {"red": 1.0, "green": 0.55, "blue": 0.0},
-                        "textFormat": {"bold": True,
-                                       "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
-                    }},
-                    "fields": "userEnteredFormat(backgroundColor,textFormat)",
-                }})
-            elif bet_label == "激熱":
-                reqs.append({"repeatCell": {
-                    "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                              "startColumnIndex": 8, "endColumnIndex": 9},
-                    "cell": {"userEnteredFormat": {
-                        "backgroundColor": {"red": 1.0, "green": 0.75, "blue": 0.3},
-                        "textFormat": {"bold": True},
-                    }},
-                    "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
-                }})
-            elif bet_label.startswith("ペリー来航★"):
-                reqs.append({"repeatCell": {
-                    "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                              "startColumnIndex": 8, "endColumnIndex": 9},
-                    "cell": {"userEnteredFormat": {
-                        "backgroundColor": {"red": 0.20, "green": 0.35, "blue": 0.65},
-                        "textFormat": {"bold": True,
-                                       "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
-                    }},
-                    "fields": "userEnteredFormat(backgroundColor,textFormat)",
-                }})
-            elif bet_label.startswith("ペリー来航"):
-                reqs.append({"repeatCell": {
-                    "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                              "startColumnIndex": 8, "endColumnIndex": 9},
-                    "cell": {"userEnteredFormat": {
-                        "backgroundColor": {"red": 0.10, "green": 0.18, "blue": 0.50},
-                        "textFormat": {"bold": True,
-                                       "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
-                    }},
-                    "fields": "userEnteredFormat(backgroundColor,textFormat)",
-                }})
-            elif bet_label.startswith("ペリー出航"):
-                reqs.append({"repeatCell": {
-                    "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                              "startColumnIndex": 8, "endColumnIndex": 9},
-                    "cell": {"userEnteredFormat": {
-                        "backgroundColor": {"red": 0.55, "green": 0.75, "blue": 0.90},
-                        "textFormat": {"bold": True,
-                                       "foregroundColor": {"red": 0.05, "green": 0.10, "blue": 0.30}},
-                    }},
-                    "fields": "userEnteredFormat(backgroundColor,textFormat)",
-                }})
-            elif bet_label.startswith("ペリー予想"):
-                reqs.append({"repeatCell": {
-                    "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                              "startColumnIndex": 8, "endColumnIndex": 9},
-                    "cell": {"userEnteredFormat": {
-                        "backgroundColor": {"red": 0.50, "green": 0.20, "blue": 0.65},
-                        "textFormat": {"bold": True,
-                                       "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
+                        "backgroundColor": {"red": 0.55, "green": 0.27, "blue": 0.07},
+                        "textFormat": {"bold": True, "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
                     }},
                     "fields": "userEnteredFormat(backgroundColor,textFormat)",
                 }})
@@ -643,7 +586,7 @@ def update_result_row(
         arare_pt = pred.get("荒れPT", "")
         nigerate_val = pred.get("イン逃げ率", pred.get("オッズ", "-"))  # 日付シートからイン逃げ率取得
         # フォーメーション: 展開して照合（実際の点数×100円で収支計算）
-        if tier == "地熊目" or tier.startswith("ペリー"):
+        if tier in ("小熊", "大熊"):
             form_combos = _expand_formation(combination)
             hit    = "○" if actual_combination in form_combos else "×"
             payout = actual_payout if hit == "○" else 0
@@ -757,9 +700,9 @@ def _compute_tier_stats(records: list, tier_check) -> dict:
             daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
         # フォーメーションは実際のcombo数×100円、それ以外は1票=100円
         tier_name = str(rec.get("狙い", ""))
-        if tier_name == "地熊目" or tier_name.startswith("ペリー"):
+        if tier_name in ("小熊", "大熊"):
             _fc = _expand_formation(str(combination))
-            bet_amount = len(_fc) * 100 if _fc else 600
+            bet_amount = len(_fc) * 100 if _fc else 400
         else:
             bet_amount = 100
         total_bets += bet_amount
@@ -911,8 +854,7 @@ def update_summary_sheet(
         return lst + [""] * (NUM_COLS - len(lst))
 
     def _pt_tier_stats(tier_name, pt_filter=None):
-        """tier_name: 狙い列. pt_filter: None=全PT, int=指定PT, "7以上"=7以上, list=複数PT
-        tier_name="ペリー全" でペリー1+ペリー2合算"""
+        """tier_name: 狙い列. pt_filter: None=全PT, int=指定PT, "7以上"=7以上, list=複数PT"""
         race_keys: set = set()
         hit_race_keys: set = set()
         total_bets = 0
@@ -920,13 +862,7 @@ def update_summary_sheet(
         daily: dict = {}
         for rec in records:
             tier_val = str(rec.get("狙い", ""))
-            if tier_name == "ペリー全":
-                if not tier_val.startswith("ペリー"):
-                    continue
-            elif tier_name.startswith("ペリー"):
-                if not tier_val.startswith(tier_name):
-                    continue
-            elif tier_val != tier_name:
+            if tier_val != tier_name:
                 continue
             combo = str(rec.get("予想買い目", ""))
             if combo in ("", "（予想なし）", "見送り", "-"):
@@ -950,70 +886,11 @@ def update_summary_sheet(
             rn = str(rec.get("レース", ""))
             race_key = (d, v, rn)
             race_keys.add(race_key)
-            if tier_name == "地熊目" or tier_val.startswith("ペリー"):
+            if tier_name in ("小熊", "大熊"):
                 fc = _expand_formation(combo)
-                bet = len(fc) * 100 if fc else 600
+                bet = len(fc) * 100 if fc else 400
             else:
                 bet = 100
-            total_bets += bet
-            if d not in daily:
-                daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
-            daily[d]["bets"] += bet
-            daily[d]["race_keys"].add(race_key)
-            if rec.get("的中", "") == "○":
-                hit_race_keys.add(race_key)
-                daily[d]["hit_race_keys"].add(race_key)
-                try:
-                    pay = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
-                    total_ret += pay
-                    daily[d]["ret"] += pay
-                except (ValueError, TypeError):
-                    pass
-        return {"race_keys": race_keys, "hit_race_keys": hit_race_keys,
-                "bets": total_bets, "ret": total_ret, "daily": daily}
-
-    def _label_stats(label_prefix, pt_filter=None):
-        """勝負推奨ラベルでフィルタ（ペリー系ティアのみ対象）"""
-        race_keys: set = set()
-        hit_race_keys: set = set()
-        total_bets = 0
-        total_ret = 0
-        daily: dict = {}
-        for rec in records:
-            tier_val = str(rec.get("狙い", ""))
-            if not tier_val.startswith("ペリー"):
-                continue
-            bet_label = str(rec.get("勝負推奨", ""))
-            if not bet_label.startswith(label_prefix):
-                continue
-            # "ペリー来航" が "ペリー来航★..." を誤って拾わないよう除外
-            _after = bet_label[len(label_prefix):]
-            if _after and _after[0] == "★":
-                continue
-            combo = str(rec.get("予想買い目", ""))
-            if combo in ("", "（予想なし）", "見送り", "-"):
-                continue
-            try:
-                pt_val = int(float(str(rec.get("荒れPT", "0") or "0")))
-            except (ValueError, TypeError):
-                continue
-            if pt_filter is not None:
-                if isinstance(pt_filter, list):
-                    if pt_val not in pt_filter:
-                        continue
-                elif pt_filter == "7以上":
-                    if pt_val < 7:
-                        continue
-                else:
-                    if pt_val != pt_filter:
-                        continue
-            d  = str(rec.get("日付", ""))
-            v  = str(rec.get("競艇場", ""))
-            rn = str(rec.get("レース", ""))
-            race_key = (d, v, rn)
-            race_keys.add(race_key)
-            fc = _expand_formation(combo)
-            bet = len(fc) * 100 if fc else 600
             total_bets += bet
             if d not in daily:
                 daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
@@ -1065,16 +942,15 @@ def update_summary_sheet(
     rows.append(_r("集計日時", now))
     rows.append(_r())
 
-    # ① ティア別グループ比較
     rows.append(_r("■ ティア別グループ比較"))
     rows.append(_r("グループ", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
     for grp, tn, pf in [
-        ("地熊目   PT1-3",  "地熊目",   [1, 2, 3]),
-        ("地熊目   PT4-6",  "地熊目",   [4, 5, 6]),
-        ("地熊目   PT7以上", "地熊目",   "7以上"),
-        ("ペリー PT1-3",  "ペリー全",  [1, 2, 3]),
-        ("ペリー PT4-6",  "ペリー全",  [4, 5, 6]),
-        ("ペリー PT7以上", "ペリー全",  "7以上"),
+        ("小熊 PT1-3",   "小熊", [1, 2, 3]),
+        ("小熊 PT4-6",   "小熊", [4, 5, 6]),
+        ("小熊 PT7以上",  "小熊", "7以上"),
+        ("大熊 PT1-3",   "大熊", [1, 2, 3]),
+        ("大熊 PT4-6",   "大熊", [4, 5, 6]),
+        ("大熊 PT7以上",  "大熊", "7以上"),
     ]:
         s = _pt_tier_stats(tn, pf)
         rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
@@ -1082,42 +958,18 @@ def update_summary_sheet(
     rows.append(_r())
     rows.append(_r())
 
-    # ② 地熊目セクション
-    rows.append(_r("■ 地熊目セクション（全PT）"))
+    # ② 小熊セクション
+    rows.append(_r("■ 小熊セクション（全PT）"))
     for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
         lbl = f"{pt}PT" if isinstance(pt, int) else pt
-        _write_pt_section(f"地熊目 {lbl}", _pt_tier_stats("地熊目", pt))
+        _write_pt_section(f"小熊 {lbl}", _pt_tier_stats("小熊", pt))
     rows.append(_r())
 
-    # ③ ペリーセクション
-    rows.append(_r("■ ペリーセクション"))
+    # ③ 大熊セクション
+    rows.append(_r("■ 大熊セクション（全PT）"))
     for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
         lbl = f"{pt}PT" if isinstance(pt, int) else pt
-        _write_pt_section(f"ペリー {lbl}", _pt_tier_stats("ペリー全", pt))
-    rows.append(_r())
-
-    # ④ ペリーラベル別集計
-    rows.append(_r("■ ペリーラベル別集計"))
-    rows.append(_r("ラベル", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
-    for lbl_name, lbl_prefix in [
-        ("ペリー来航★", "ペリー来航★"),
-        ("ペリー来航",  "ペリー来航"),
-        ("ペリー出航",  "ペリー出航"),
-        ("ペリー予想",  "ペリー予想"),
-        ("見送り",     "見送り"),
-    ]:
-        s = _label_stats(lbl_prefix)
-        rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
-        rows.append(_r(lbl_name, rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
-    rows.append(_r())
-    rows.append(_r("▼ ペリー来航★ 日付別"))
-    _write_pt_section("ペリー来航★", _label_stats("ペリー来航★"))
-    rows.append(_r("▼ ペリー来航 日付別"))
-    _write_pt_section("ペリー来航", _label_stats("ペリー来航"))
-    rows.append(_r("▼ ペリー出航 日付別"))
-    _write_pt_section("ペリー出航", _label_stats("ペリー出航"))
-    rows.append(_r("▼ ペリー予想 日付別"))
-    _write_pt_section("ペリー予想", _label_stats("ペリー予想"))
+        _write_pt_section(f"大熊 {lbl}", _pt_tier_stats("大熊", pt))
     rows.append(_r())
 
 
@@ -1167,14 +1019,14 @@ def update_summary_sheet(
     except Exception as e:
         print(f"[WARN] 条件付き書式設定エラー: {e}")
 
-    jj_s      = _pt_tier_stats("地熊目")
-    perry_s   = _pt_tier_stats("ペリー全")
-    jj_roi    = f"{jj_s['ret']/jj_s['bets']*100:.1f}%" if jj_s['bets'] > 0 else "0.0%"
-    perry_roi = f"{perry_s['ret']/perry_s['bets']*100:.1f}%" if perry_s['bets'] > 0 else "0.0%"
+    ko_s   = _pt_tier_stats("小熊")
+    ok_s   = _pt_tier_stats("大熊")
+    ko_roi = f"{ko_s['ret']/ko_s['bets']*100:.1f}%" if ko_s['bets'] > 0 else "0.0%"
+    ok_roi = f"{ok_s['ret']/ok_s['bets']*100:.1f}%" if ok_s['bets'] > 0 else "0.0%"
     print(
         f"[OK] {SUMMARY_SHEET}更新: "
-        f"地熊目 {len(jj_s['race_keys'])}R ROI={jj_roi} / "
-        f"ペリー {len(perry_s['race_keys'])}R ROI={perry_roi}"
+        f"小熊 {len(ko_s['race_keys'])}R ROI={ko_roi} / "
+        f"大熊 {len(ok_s['race_keys'])}R ROI={ok_roi}"
     )
 
 
