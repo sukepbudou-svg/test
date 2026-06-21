@@ -332,10 +332,13 @@ def append_prediction_row(
         _format_header(spreadsheet, sheet, num_cols=12)
         _write_venue_ranking(spreadsheet, sheet)
 
-    cols = ["date", "venue_name", "race_no", "tier", "combination",
+    cols = ["date", "venue_name", "race_no", "confidence", "combination",
             "odds", "odds_source"]
     values = [row.get(c, "-") for c in cols]
     values[1] = _marked_venue(str(values[1]))
+    # confidence がない場合は tier にフォールバック
+    if not values[3] or values[3] == "-":
+        values[3] = row.get("tier", "-")
     values.append(race_count if race_count is not None else "-")
     values.append(row.get("bet_label", ""))
     values.append(row.get("arare_score", ""))
@@ -579,7 +582,9 @@ def update_result_row(
 
     for pred in race_preds:
         combination = pred.get("買い目（3連単）", "")
-        tier = pred.get("狙い", "-")
+        _tier_raw = str(pred.get("狙い", "-"))
+        # 狙い列は "小熊(外軸:3号/差し)[ET○ST○]" 形式の場合があるためベース名を抽出
+        tier = next((t for t in ("小熊", "大熊") if _tier_raw.startswith(t)), _tier_raw)
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
         nigerate_val = pred.get("イン逃げ率", pred.get("オッズ", "-"))  # 日付シートからイン逃げ率取得
