@@ -1036,13 +1036,15 @@ def get_recommendations(
             return 1.0
 
         def _infer_tactic(bn):
-            """選手スタイルから展開を推定 → 'sashi'(差し)/'makuri'(まくり)/'balanced'"""
-            agg = _get_aggression(bn)
-            if agg < 0.7:
-                return "sashi"
-            elif agg > 1.3:
-                return "makuri"
-            return "balanced"
+            """展開推定: 選手データがあれば利用、なければポジションで判断（balanced廃止）"""
+            racer_no = int(race_row.get(f"boat{bn}_racer_no", 0) or 0)
+            if racer_no in _RACER_STYLE:
+                agg = _get_aggression(bn)
+                if agg < 0.7:
+                    return "sashi"
+                elif agg > 1.3:
+                    return "makuri"
+            return "sashi" if bn <= 3 else "makuri"
 
         def _neutral_outer_score(bn):
             """ポジションバイアスなしの外艇スコア（1着候補選出用）"""
@@ -1208,8 +1210,18 @@ def get_recommendations(
 
         if len(makuri_cands) >= 2:
             ranked_maku  = sorted(makuri_cands, key=_neutral_outer_score, reverse=True)
-            okuma_first  = set(ranked_maku[:2])
-            top_maku_bn  = ranked_maku[0]
+            primary_maku = ranked_maku[0]
+            # 展開連動: 主役がまくりに行った場合、直外側の艇が有利（例: 4号→5号）
+            companion_maku = None
+            for _adj in range(primary_maku + 1, 7):
+                if _adj in makuri_cands:
+                    companion_maku = _adj
+                    break
+            if companion_maku is None:
+                _rem_maku = [b for b in ranked_maku if b != primary_maku]
+                companion_maku = _rem_maku[0] if _rem_maku else None
+            okuma_first  = {primary_maku, companion_maku} if companion_maku else {primary_maku}
+            top_maku_bn  = primary_maku
             okuma_tactic = _infer_tactic(top_maku_bn)
             rest_ok      = [b for b in available_kuma if b not in okuma_first]
 
