@@ -1211,15 +1211,17 @@ def get_recommendations(
         if len(makuri_cands) >= 2:
             ranked_maku  = sorted(makuri_cands, key=_neutral_outer_score, reverse=True)
             primary_maku = ranked_maku[0]
-            # 展開連動: 主役がまくりに行った場合、直外側の艇が有利（例: 4号→5号）
-            companion_maku = None
-            for _adj in range(primary_maku + 1, 7):
-                if _adj in makuri_cands:
-                    companion_maku = _adj
-                    break
-            if companion_maku is None:
-                _rem_maku = [b for b in ranked_maku if b != primary_maku]
-                companion_maku = _rem_maku[0] if _rem_maku else None
+            rem_maku     = [b for b in ranked_maku if b != primary_maku]
+            if rem_maku:
+                # 直外側候補（展開連動で有利になりやすい艇）
+                _adj_outside = next((x for x in range(primary_maku + 1, 7) if x in makuri_cands), None)
+                # ベーススコア + 展開連動ボーナス（直外側に+0.12加算）
+                # ただし他艇の実データ（ML/ST/ET）が大きく上回れば自然にそちらが選ばれる
+                def _companion_score(bn):
+                    return _neutral_outer_score(bn) + (0.12 if bn == _adj_outside else 0.0)
+                companion_maku = max(rem_maku, key=_companion_score)
+            else:
+                companion_maku = None
             okuma_first  = {primary_maku, companion_maku} if companion_maku else {primary_maku}
             top_maku_bn  = primary_maku
             okuma_tactic = _infer_tactic(top_maku_bn)
