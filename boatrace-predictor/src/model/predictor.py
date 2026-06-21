@@ -1020,6 +1020,13 @@ def get_recommendations(
 
         outer_kuma = [b for b in available_kuma if b != 1]
 
+        _et_count = len(et_vals_k)
+        _st_count = sum(
+            1 for _b in available_kuma
+            if (_safe_float(race_row.get(f"boat{_b}_exhibition_st")) or 0) > 0
+        )
+        _data_tag = ("ET○" if _et_count >= 4 else "ET×") + ("ST○" if _st_count >= 4 else "ST×")
+
         def _get_aggression(bn):
             """_RACER_STYLEから選手の積極性スコアを取得（データなし時は1.0=ニュートラル）"""
             racer_no = int(race_row.get(f"boat{bn}_racer_no", 0) or 0)
@@ -1187,7 +1194,7 @@ def get_recommendations(
                     "prob":          "-",
                     "odds":          _ko_odds_str,
                     "expected_roi":  "-",
-                    "confidence":    f"小熊(外軸:{sashi_ace}号/{_ko_tactic_jp}展開)",
+                    "confidence":    f"小熊(外軸:{sashi_ace}号/{_ko_tactic_jp})[{_data_tag}]",
                     "odds_source":   nigerate_str,
                     "tier":          "小熊",
                     "bet_label":     _abare_label,
@@ -1228,7 +1235,7 @@ def get_recommendations(
                     "prob":          "-",
                     "odds":          _ok_odds_str,
                     "expected_roi":  "-",
-                    "confidence":    f"大熊({maku_boats_str}/{_ok_tactic_jp}展開)",
+                    "confidence":    f"大熊({maku_boats_str}/{_ok_tactic_jp})[{_data_tag}]",
                     "odds_source":   nigerate_str,
                     "tier":          "大熊",
                     "bet_label":     _abare_label,
