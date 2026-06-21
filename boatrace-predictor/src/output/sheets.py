@@ -384,12 +384,20 @@ def append_prediction_row(
 
         if not is_skip:
             bet_label = row.get("bet_label", "")
-            if bet_label.startswith("暴れ熊"):
+            if bet_label == "暴れ熊(強)":
+                _ab_bg = {"red": 0.72, "green": 0.07, "blue": 0.07}  # 深紅
+            elif bet_label == "暴れ熊(中)":
+                _ab_bg = {"red": 0.85, "green": 0.33, "blue": 0.10}  # オレンジ赤
+            elif bet_label == "暴れ熊(弱)":
+                _ab_bg = {"red": 0.90, "green": 0.55, "blue": 0.30}  # 薄オレンジ
+            else:
+                _ab_bg = None
+            if _ab_bg:
                 reqs.append({"repeatCell": {
                     "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
                               "startColumnIndex": 8, "endColumnIndex": 9},
                     "cell": {"userEnteredFormat": {
-                        "backgroundColor": {"red": 0.75, "green": 0.10, "blue": 0.10},
+                        "backgroundColor": _ab_bg,
                         "textFormat": {"bold": True, "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
                     }},
                     "fields": "userEnteredFormat(backgroundColor,textFormat)",

@@ -1042,9 +1042,8 @@ def get_recommendations(
         _all_et_list = list(et_vals_k.values())
         _min_et_val  = min(_all_et_list) if _all_et_list else None
 
-        abare_kuma = False
-
-        # 条件1: ペリー来航（外艇ST≤0.13 かつ 1号艇ST≥0.16 かつ補強1条件）
+        # 条件1: ペリー来航（外艇ST≤0.13 かつ 1号艇ST≥0.16 かつ補強1条件）→ +2点
+        _cond1_st = False
         if (_best_outer_st_val is not None and _best_outer_st_val <= 0.13 and
                 _b1_st is not None and _b1_st >= 0.16):
             _support_ab = (
@@ -1052,50 +1051,65 @@ def get_recommendations(
                 (_b1_g is not None and _b1_g <= 2) or _tail_ab
             )
             if _support_ab:
-                abare_kuma = True
+                _cond1_st = True
 
-        # 条件2: ペリー来航★（STなし版: グループA+B+C全通過）
-        if not abare_kuma:
-            _grp_a_ab = ((_b1_m is not None and _b1_m < 0.35) and
-                         ((_b1_g is not None and _b1_g <= 2) or
-                          (_b1_nst is not None and _b1_nst >= 0.17)))
-            _ace_ab = _best_outer_st_bn or (
-                min(outer_kuma, key=lambda b: et_vals_k.get(b, 999)) if outer_kuma else None
+        # 条件2: ペリー来航★（グループA+B+C全通過）→ +3点
+        _cond2_nst = False
+        _grp_a_ab = ((_b1_m is not None and _b1_m < 0.35) and
+                     ((_b1_g is not None and _b1_g <= 2) or
+                      (_b1_nst is not None and _b1_nst >= 0.17)))
+        _ace_ab = _best_outer_st_bn or (
+            min(outer_kuma, key=lambda b: et_vals_k.get(b, 999)) if outer_kuma else None
+        )
+        if _ace_ab:
+            _ace_gn_ab  = _safe_float(race_row.get(f"boat{_ace_ab}_grade_num"))
+            _ace_nst_ab = _safe_float(race_row.get(f"boat{_ace_ab}_meet_avg_st"))
+            _inner_a1_ab = any(
+                (_safe_float(race_row.get(f"boat{b}_grade_num")) or 0) >= 4
+                for b in available_kuma if 2 <= b <= 3
             )
-            if _ace_ab:
-                _ace_gn_ab  = _safe_float(race_row.get(f"boat{_ace_ab}_grade_num"))
-                _ace_nst_ab = _safe_float(race_row.get(f"boat{_ace_ab}_meet_avg_st"))
-                _inner_a1_ab = any(
-                    (_safe_float(race_row.get(f"boat{b}_grade_num")) or 0) >= 4
-                    for b in available_kuma if 2 <= b <= 3
-                )
-                _ace_et_best_ab = (
-                    _min_et_val is not None and
-                    et_vals_k.get(_ace_ab, float("inf")) == _min_et_val
-                )
-                _grp_b_ab = (
-                    (_ace_gn_ab is not None and _ace_gn_ab >= 4 and not _inner_a1_ab) or
-                    _ace_et_best_ab or
-                    (_ace_nst_ab is not None and _ace_nst_ab <= 0.12)
-                )
-            else:
-                _grp_b_ab = False
-            _grp_c_ab = arare_score >= 7 or _tail_ab
-            if _grp_a_ab and _grp_b_ab and _grp_c_ab:
-                abare_kuma = True
+            _ace_et_best_ab = (
+                _min_et_val is not None and
+                et_vals_k.get(_ace_ab, float("inf")) == _min_et_val
+            )
+            _grp_b_ab = (
+                (_ace_gn_ab is not None and _ace_gn_ab >= 4 and not _inner_a1_ab) or
+                _ace_et_best_ab or
+                (_ace_nst_ab is not None and _ace_nst_ab <= 0.12)
+            )
+        else:
+            _grp_b_ab = False
+        _grp_c_ab = arare_score >= 7 or _tail_ab
+        if _grp_a_ab and _grp_b_ab and _grp_c_ab:
+            _cond2_nst = True
 
-        # 条件3: ペリー出航（弱イン）
-        if not abare_kuma and weak_in:
-            abare_kuma = True
+        # 条件3: 弱イン → +1点
+        _cond3_wi = weak_in
 
-        # 条件4: ペリー予想（外艇ML高信頼: 外艇合計ML≥45% かつ 最高外艇ML≥22%）
-        if not abare_kuma:
-            _outer_ml_best  = max((_kuma_ml_1st(b) for b in outer_kuma), default=0.0)
-            _outer_ml_total = sum(_kuma_ml_1st(b) for b in outer_kuma)
-            if _outer_ml_total >= 0.45 and _outer_ml_best >= 0.22:
-                abare_kuma = True
+        # 条件4: 外艇ML高信頼（外艇合計ML≥45% かつ 最高外艇ML≥22%）→ +1点
+        _cond4_ml = False
+        _outer_ml_best  = max((_kuma_ml_1st(b) for b in outer_kuma), default=0.0)
+        _outer_ml_total = sum(_kuma_ml_1st(b) for b in outer_kuma)
+        if _outer_ml_total >= 0.45 and _outer_ml_best >= 0.22:
+            _cond4_ml = True
 
-        _abare_label = "暴れ熊" + ("(弱イン)" if weak_in and abare_kuma else "")  if abare_kuma else "見送り"
+        abare_kuma = _cond1_st or _cond2_nst or _cond3_wi or _cond4_ml
+
+        if abare_kuma:
+            # 暴れ度スコア: 強い条件ほど高得点
+            _abare_pts = 0
+            if _cond2_nst: _abare_pts += 3  # 来航★: 複数グループ全通過
+            if _cond1_st:  _abare_pts += 2  # 来航: ST直接証拠
+            if _cond3_wi:  _abare_pts += 1  # 弱イン
+            if _cond4_ml:  _abare_pts += 1  # ML高信頼
+            # 来航★未該当のとき追い風・高荒れPTを追加点
+            if not _cond2_nst:
+                if _tail_ab:          _abare_pts += 1
+                if arare_score >= 7:  _abare_pts += 1
+            _strength = "強" if _abare_pts >= 5 else ("中" if _abare_pts >= 3 else "弱")
+            _abare_label = f"暴れ熊({_strength})"
+        else:
+            _abare_label = "見送り"
 
         # ── 小熊（差し展開型）: 1号艇+差し系外艇1艇が1着, 2着1艇×3着2艇 = 4点 ──
         koguma_str = None
