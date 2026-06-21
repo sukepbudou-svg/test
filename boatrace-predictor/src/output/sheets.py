@@ -588,7 +588,7 @@ def update_result_row(
             form_combos = _expand_formation(combination)
             hit    = "○" if actual_combination in form_combos else "×"
             payout = actual_payout if hit == "○" else 0
-            ticket_count = len(form_combos) if form_combos else 6
+            ticket_count = len(form_combos) if form_combos else 4
             profit = payout - ticket_count * 100
         else:
             hit    = "○" if combination == actual_combination else "×"
