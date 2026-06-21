@@ -368,8 +368,7 @@ def append_prediction_row(
         return  # 色付けは諦めるがデータは書き込み済み
     try:
         sid = sheet.id
-        is_skip   = row.get("bet_label", "") == "見送り"
-        is_kumane = row.get("bet_label", "") == "熊熱"
+        is_skip   = row.get("bet_label", "") in ("見送り", "熊熱")
 
         if is_skip:
             row_bg = {"red": 0.91, "green": 0.91, "blue": 0.91}
@@ -407,16 +406,6 @@ def append_prediction_row(
                                        "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
                     }},
                     "fields": "userEnteredFormat(backgroundColor,textFormat)",
-                }})
-            elif bet_label == "熊熱":
-                reqs.append({"repeatCell": {
-                    "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                              "startColumnIndex": 8, "endColumnIndex": 9},
-                    "cell": {"userEnteredFormat": {
-                        "backgroundColor": {"red": 1.0, "green": 0.78, "blue": 0.78},
-                        "textFormat": {"bold": True},
-                    }},
-                    "fields": "userEnteredFormat(backgroundColor,textFormat.bold)",
                 }})
             elif bet_label == "激熱":
                 reqs.append({"repeatCell": {
@@ -479,7 +468,7 @@ def append_prediction_row(
         m_nig = re.search(r'(\d+)%', str(nigerate_src))
         if m_nig:
             nig_val = int(m_nig.group(1))
-            if nig_val >= 65:
+            if nig_val > 57:
                 nig_bg = {"red": 1.0, "green": 0.80, "blue": 0.80}
             elif nig_val < 50:
                 nig_bg = {"red": 0.80, "green": 0.90, "blue": 1.0}

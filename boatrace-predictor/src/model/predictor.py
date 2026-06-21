@@ -1121,29 +1121,41 @@ def get_recommendations(
         if True:
             available_perry = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             if len(available_perry) >= 3:
-                # 外艇軸スコア: モーター差50%+グレード差30%+ST差20%（STなし時: モーター60%+グレード40%）
+                # 外艇軸スコア: モーター差35%+グレード差20%+ST差20%+ET差25%
                 b1_motor_ax = _safe_float(race_row.get("boat1_motor_2rate")) or 0.0
                 b1_grade_ax = _safe_float(race_row.get("boat1_grade_num")) or 2.0
                 b1_st_ax    = _safe_float(race_row.get("boat1_exhibition_st"))
+                b1_et_ax    = _safe_float(race_row.get("boat1_exhibition_time"))
                 outer_boats_perry = [b for b in [2, 3, 4, 5, 6] if b in available_perry]
 
                 def _perry_axis_score(bn):
-                    outer_m = _safe_float(race_row.get(f"boat{bn}_motor_2rate")) or 0.0
+                    outer_m  = _safe_float(race_row.get(f"boat{bn}_motor_2rate")) or 0.0
                     motor_sc = max(0.0, min(1.0, (outer_m - b1_motor_ax + 0.5) / 1.0))
                     outer_g  = _safe_float(race_row.get(f"boat{bn}_grade_num")) or 2.0
                     grade_sc = max(0.0, min(1.0, (outer_g - b1_grade_ax + 3.0) / 6.0))
                     outer_st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-                    if b1_st_ax and b1_st_ax > 0 and outer_st and outer_st > 0:
-                        st_sc = max(0.0, min(1.0, (b1_st_ax - outer_st + 0.15) / 0.30))
-                        return motor_sc * 0.50 + grade_sc * 0.30 + st_sc * 0.20
-                    return motor_sc * 0.60 + grade_sc * 0.40
+                    outer_et = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
+                    has_st = b1_st_ax and b1_st_ax > 0 and outer_st and outer_st > 0
+                    has_et = b1_et_ax and b1_et_ax > 0 and outer_et and outer_et > 0
+                    st_sc = max(0.0, min(1.0, (b1_st_ax - outer_st + 0.15) / 0.30)) if has_st else None
+                    et_sc = max(0.0, min(1.0, (b1_et_ax - outer_et + 0.30) / 0.60)) if has_et else None
+                    if has_st and has_et:
+                        return motor_sc * 0.35 + grade_sc * 0.20 + st_sc * 0.20 + et_sc * 0.25
+                    elif has_st:
+                        return motor_sc * 0.45 + grade_sc * 0.25 + st_sc * 0.30
+                    elif has_et:
+                        return motor_sc * 0.45 + grade_sc * 0.25 + et_sc * 0.30
+                    else:
+                        return motor_sc * 0.60 + grade_sc * 0.40
 
                 outer_axis_scores = {b: _perry_axis_score(b) for b in outer_boats_perry}
 
                 if outer_axis_scores:
                     perry_ace    = max(outer_axis_scores, key=lambda b: outer_axis_scores[b])
                     perry_ace_st = _safe_float(race_row.get(f"boat{perry_ace}_exhibition_st"))
-                    data_label   = "M+G+ST" if (b1_st_ax and perry_ace_st) else "M+G"
+                    data_label   = ("M+G+ST+ET" if (b1_st_ax and perry_ace_st and b1_et_ax) else
+                                    "M+G+ST"    if (b1_st_ax and perry_ace_st) else
+                                    "M+G+ET"    if b1_et_ax else "M+G")
 
                     # ETランク（全艇、速い=1.0）
                     perry_et_vals: dict = {}
