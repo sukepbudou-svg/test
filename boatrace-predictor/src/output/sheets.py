@@ -384,22 +384,12 @@ def append_prediction_row(
 
         if not is_skip:
             bet_label = row.get("bet_label", "")
-            if bet_label == "小熊":
+            if bet_label.startswith("暴れ熊"):
                 reqs.append({"repeatCell": {
                     "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
                               "startColumnIndex": 8, "endColumnIndex": 9},
                     "cell": {"userEnteredFormat": {
-                        "backgroundColor": {"red": 0.13, "green": 0.55, "blue": 0.55},
-                        "textFormat": {"bold": True, "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
-                    }},
-                    "fields": "userEnteredFormat(backgroundColor,textFormat)",
-                }})
-            elif bet_label == "大熊":
-                reqs.append({"repeatCell": {
-                    "range": {"sheetId": sid, "startRowIndex": last_row - 1, "endRowIndex": last_row,
-                              "startColumnIndex": 8, "endColumnIndex": 9},
-                    "cell": {"userEnteredFormat": {
-                        "backgroundColor": {"red": 0.55, "green": 0.27, "blue": 0.07},
+                        "backgroundColor": {"red": 0.75, "green": 0.10, "blue": 0.10},
                         "textFormat": {"bold": True, "foregroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0}},
                     }},
                     "fields": "userEnteredFormat(backgroundColor,textFormat)",
@@ -867,6 +857,10 @@ def update_summary_sheet(
             combo = str(rec.get("予想買い目", ""))
             if combo in ("", "（予想なし）", "見送り", "-"):
                 continue
+            # 見送りは賭けていないため集計しない
+            _bl = str(rec.get("勝負推奨", ""))
+            if _bl == "見送り":
+                continue
             try:
                 pt_val = int(float(str(rec.get("荒れPT", "0") or "0")))
             except (ValueError, TypeError):
@@ -970,6 +964,52 @@ def update_summary_sheet(
     for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
         lbl = f"{pt}PT" if isinstance(pt, int) else pt
         _write_pt_section(f"大熊 {lbl}", _pt_tier_stats("大熊", pt))
+    rows.append(_r())
+
+    # ④ 暴れ熊ラベル別集計（小熊+大熊合算）
+    rows.append(_r("■ 暴れ熊集計（小熊＋大熊）"))
+    rows.append(_r("ティア", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
+    for _tn in ("小熊", "大熊"):
+        def _abare_tier_stats(tn=_tn):
+            _rk: set = set()
+            _hrk: set = set()
+            _tb = 0
+            _tr = 0
+            _dl: dict = {}
+            for rec in records:
+                if str(rec.get("狙い", "")) != tn:
+                    continue
+                _bl = str(rec.get("勝負推奨", ""))
+                if not _bl.startswith("暴れ熊"):
+                    continue
+                combo = str(rec.get("予想買い目", ""))
+                if combo in ("", "（予想なし）", "見送り", "-"):
+                    continue
+                d = str(rec.get("日付", ""))
+                v = str(rec.get("競艇場", ""))
+                rn = str(rec.get("レース", ""))
+                rk = (d, v, rn)
+                _rk.add(rk)
+                if d not in _dl:
+                    _dl[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
+                fc = _expand_formation(combo)
+                bet = len(fc) * 100 if fc else 400
+                _tb += bet
+                _dl[d]["bets"] += bet
+                _dl[d]["race_keys"].add(rk)
+                if rec.get("的中", "") == "○":
+                    _hrk.add(rk)
+                    _dl[d]["hit_race_keys"].add(rk)
+                    try:
+                        pay = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+                        _tr += pay
+                        _dl[d]["ret"] += pay
+                    except (ValueError, TypeError):
+                        pass
+            return {"bets": _tb, "ret": _tr, "race_keys": _rk, "hit_race_keys": _hrk, "daily": _dl}
+        s = _abare_tier_stats()
+        rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
+        rows.append(_r(f"暴れ熊/{_tn}", rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
     rows.append(_r())
 
 

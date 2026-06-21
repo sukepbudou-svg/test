@@ -1020,6 +1020,83 @@ def get_recommendations(
 
         outer_kuma = [b for b in available_kuma if b != 1]
 
+        # ── 暴れ熊条件チェック（ペリー来航系と同等） ────────────────────
+        _b1_st   = _safe_float(race_row.get("boat1_exhibition_st"))
+        _b1_m    = _safe_float(race_row.get("boat1_motor_2rate"))
+        _b1_g    = _safe_float(race_row.get("boat1_grade_num"))
+        _b1_nst  = _safe_float(race_row.get("boat1_meet_avg_st"))
+        _wind_spd_ab = _safe_float((weather or {}).get("wind_speed"))
+        _wind_dir_ab = (weather or {}).get("wind_direction", "")
+        _tail_ab  = bool(_wind_spd_ab is not None and _wind_spd_ab >= 5 and _wind_dir_ab == "tail")
+
+        # 外艇ST最速
+        _outer_st_map: dict = {}
+        for _ab in outer_kuma:
+            _st_ab = _safe_float(race_row.get(f"boat{_ab}_exhibition_st"))
+            if _st_ab and _st_ab > 0:
+                _outer_st_map[_ab] = _st_ab
+        _best_outer_st_bn  = min(_outer_st_map, key=_outer_st_map.get) if _outer_st_map else None
+        _best_outer_st_val = _outer_st_map.get(_best_outer_st_bn) if _best_outer_st_bn else None
+
+        # ET最速が外艇かどうか
+        _all_et_list = list(et_vals_k.values())
+        _min_et_val  = min(_all_et_list) if _all_et_list else None
+
+        abare_kuma = False
+
+        # 条件1: ペリー来航（外艇ST≤0.13 かつ 1号艇ST≥0.16 かつ補強1条件）
+        if (_best_outer_st_val is not None and _best_outer_st_val <= 0.13 and
+                _b1_st is not None and _b1_st >= 0.16):
+            _support_ab = (
+                (_b1_m is not None and _b1_m < 0.35) or
+                (_b1_g is not None and _b1_g <= 2) or _tail_ab
+            )
+            if _support_ab:
+                abare_kuma = True
+
+        # 条件2: ペリー来航★（STなし版: グループA+B+C全通過）
+        if not abare_kuma:
+            _grp_a_ab = ((_b1_m is not None and _b1_m < 0.35) and
+                         ((_b1_g is not None and _b1_g <= 2) or
+                          (_b1_nst is not None and _b1_nst >= 0.17)))
+            _ace_ab = _best_outer_st_bn or (
+                min(outer_kuma, key=lambda b: et_vals_k.get(b, 999)) if outer_kuma else None
+            )
+            if _ace_ab:
+                _ace_gn_ab  = _safe_float(race_row.get(f"boat{_ace_ab}_grade_num"))
+                _ace_nst_ab = _safe_float(race_row.get(f"boat{_ace_ab}_meet_avg_st"))
+                _inner_a1_ab = any(
+                    (_safe_float(race_row.get(f"boat{b}_grade_num")) or 0) >= 4
+                    for b in available_kuma if 2 <= b <= 3
+                )
+                _ace_et_best_ab = (
+                    _min_et_val is not None and
+                    et_vals_k.get(_ace_ab, float("inf")) == _min_et_val
+                )
+                _grp_b_ab = (
+                    (_ace_gn_ab is not None and _ace_gn_ab >= 4 and not _inner_a1_ab) or
+                    _ace_et_best_ab or
+                    (_ace_nst_ab is not None and _ace_nst_ab <= 0.12)
+                )
+            else:
+                _grp_b_ab = False
+            _grp_c_ab = arare_score >= 7 or _tail_ab
+            if _grp_a_ab and _grp_b_ab and _grp_c_ab:
+                abare_kuma = True
+
+        # 条件3: ペリー出航（弱イン）
+        if not abare_kuma and weak_in:
+            abare_kuma = True
+
+        # 条件4: ペリー予想（外艇ML高信頼: 外艇合計ML≥45% かつ 最高外艇ML≥22%）
+        if not abare_kuma:
+            _outer_ml_best  = max((_kuma_ml_1st(b) for b in outer_kuma), default=0.0)
+            _outer_ml_total = sum(_kuma_ml_1st(b) for b in outer_kuma)
+            if _outer_ml_total >= 0.45 and _outer_ml_best >= 0.22:
+                abare_kuma = True
+
+        _abare_label = "暴れ熊" + ("(弱イン)" if weak_in and abare_kuma else "")  if abare_kuma else "見送り"
+
         # ── 小熊（差し展開型）: 1号艇+差し系外艇1艇が1着, 2着1艇×3着2艇 = 4点 ──
         koguma_str = None
         sashi_ace  = None
@@ -1056,7 +1133,7 @@ def get_recommendations(
                     "confidence":    f"小熊(差し軸:{sashi_ace}号)",
                     "odds_source":   nigerate_str,
                     "tier":          "小熊",
-                    "bet_label":     "小熊",
+                    "bet_label":     _abare_label,
                     "edge":          "-",
                     "arare_score":   arare_score,
                     "arare_reasons": " / ".join(arare_reasons),
@@ -1101,7 +1178,7 @@ def get_recommendations(
                     "confidence":    f"大熊(まくり:{maku_boats_str})",
                     "odds_source":   nigerate_str,
                     "tier":          "大熊",
-                    "bet_label":     "大熊",
+                    "bet_label":     _abare_label,
                     "edge":          "-",
                     "arare_score":   arare_score,
                     "arare_reasons": " / ".join(arare_reasons),
