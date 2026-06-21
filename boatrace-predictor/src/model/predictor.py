@@ -975,7 +975,15 @@ def get_recommendations(
             ]["prob"].sum())
             et   = et_ranks_k.get(bn, 0.5)
             st   = _kuma_st_sc(bn)
-            bonus = 0.05 if bn in (2, 3) else (0.03 if bn in (4, 5, 6) else 0.0)
+            # 1号艇: まくり展開でも逃げ残りパターンが多いため中程度のボーナス
+            if bn == 1:
+                b1_motor = _safe_float(race_row.get("boat1_motor_2rate")) or 0.0
+                b1_grade = _safe_float(race_row.get("boat1_grade_num")) or 2.0
+                bonus = 0.03 + min(0.02, b1_motor * 0.04) + (0.02 if b1_grade >= 3 else 0.0)
+            elif bn in (2, 3):
+                bonus = 0.05
+            else:
+                bonus = 0.03
             return prob * 0.45 + et * 0.25 + st * 0.20 + bonus * 0.10
 
         def _kuma_min_odds(formation_str):
