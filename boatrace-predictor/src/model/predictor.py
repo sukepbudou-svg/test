@@ -1080,154 +1080,76 @@ def get_recommendations(
             motor = _safe_float(race_row.get(f"boat{bn}_motor_2rate")) or 0.40
             return ml * 0.40 + et * 0.40 + motor * 0.20
 
-        # ── 暴れ熊条件チェック（ペリー来航系と同等） ────────────────────
-        _b1_st   = _safe_float(race_row.get("boat1_exhibition_st"))
-        _b1_m    = _safe_float(race_row.get("boat1_motor_2rate"))
-        _b1_g    = _safe_float(race_row.get("boat1_grade_num"))
-        _b1_nst  = _safe_float(race_row.get("boat1_meet_avg_st"))
-        _wind_spd_ab = _safe_float((weather or {}).get("wind_speed"))
-        _wind_dir_ab = (weather or {}).get("wind_direction", "")
-        _tail_ab  = bool(_wind_spd_ab is not None and _wind_spd_ab >= 5 and _wind_dir_ab == "tail")
+        # ── EV予想: 小熊(100-180倍)/大熊(200-350倍)/神熊(350-1000倍) 各ティアから個別選出 ──
+        _valid = by_prob[
+            (by_prob["odds_value"] > 0) &
+            (by_prob["prob"] > 0)
+        ].copy()
 
-        # 外艇ST最速
-        _outer_st_map: dict = {}
-        for _ab in outer_kuma:
-            _st_ab = _safe_float(race_row.get(f"boat{_ab}_exhibition_st"))
-            if _st_ab and _st_ab > 0:
-                _outer_st_map[_ab] = _st_ab
-        _best_outer_st_bn  = min(_outer_st_map, key=_outer_st_map.get) if _outer_st_map else None
-        _best_outer_st_val = _outer_st_map.get(_best_outer_st_bn) if _best_outer_st_bn else None
+        if not _valid.empty:
+            def _combo_ev(row):
+                """EVスコア = ML確率 × オッズ × 1着艇補正(ET・モーター)"""
+                ev_base = float(row["prob"]) * float(row["odds_value"])
+                f       = int(row["boat1"])
+                f_et    = et_ranks_k.get(f, 0.5)
+                f_motor = _safe_float(race_row.get(f"boat{f}_motor_2rate")) or 0.40
+                return ev_base * (0.80 + f_et * 0.12 + f_motor * 0.08)
 
-        # ET最速が外艇かどうか
-        _all_et_list = list(et_vals_k.values())
-        _min_et_val  = min(_all_et_list) if _all_et_list else None
+            _valid["ev"] = _valid.apply(_combo_ev, axis=1)
 
-        # 条件1: ペリー来航（外艇ST≤0.13 かつ 1号艇ST≥0.16 かつ補強1条件）→ +2点
-        _cond1_st = False
-        if (_best_outer_st_val is not None and _best_outer_st_val <= 0.13 and
-                _b1_st is not None and _b1_st >= 0.16):
-            _support_ab = (
-                (_b1_m is not None and _b1_m < 0.35) or
-                (_b1_g is not None and _b1_g <= 2) or _tail_ab
+            _df_ko = _valid[(_valid["odds_value"] >= 100) & (_valid["odds_value"] <= 180)]
+            _df_ok = _valid[(_valid["odds_value"] >  200) & (_valid["odds_value"] <= 350)]
+            _df_ka = _valid[(_valid["odds_value"] >  350) & (_valid["odds_value"] <= 1000)]
+
+            _max_ev = max(
+                float(_df_ko["ev"].max()) if not _df_ko.empty else 0.0,
+                float(_df_ok["ev"].max()) if not _df_ok.empty else 0.0,
+                float(_df_ka["ev"].max()) if not _df_ka.empty else 0.0,
             )
-            if _support_ab:
-                _cond1_st = True
 
-        # 条件2: ペリー来航★（グループA+B+C全通過）→ +3点
-        _cond2_nst = False
-        _grp_a_ab = ((_b1_m is not None and _b1_m < 0.35) and
-                     ((_b1_g is not None and _b1_g <= 2) or
-                      (_b1_nst is not None and _b1_nst >= 0.17)))
-        _ace_ab = _best_outer_st_bn or (
-            min(outer_kuma, key=lambda b: et_vals_k.get(b, 999)) if outer_kuma else None
-        )
-        if _ace_ab:
-            _ace_gn_ab  = _safe_float(race_row.get(f"boat{_ace_ab}_grade_num"))
-            _ace_nst_ab = _safe_float(race_row.get(f"boat{_ace_ab}_meet_avg_st"))
-            _inner_a1_ab = any(
-                (_safe_float(race_row.get(f"boat{b}_grade_num")) or 0) >= 4
-                for b in available_kuma if 2 <= b <= 3
-            )
-            _ace_et_best_ab = (
-                _min_et_val is not None and
-                et_vals_k.get(_ace_ab, float("inf")) == _min_et_val
-            )
-            _grp_b_ab = (
-                (_ace_gn_ab is not None and _ace_gn_ab >= 4 and not _inner_a1_ab) or
-                _ace_et_best_ab or
-                (_ace_nst_ab is not None and _ace_nst_ab <= 0.12)
-            )
-        else:
-            _grp_b_ab = False
-        _grp_c_ab = arare_score >= 7 or _tail_ab
-        if _grp_a_ab and _grp_b_ab and _grp_c_ab:
-            _cond2_nst = True
+            if _max_ev >= 2.5:
+                _bet_label = "暴れ熊(強)"
+            elif _max_ev >= 1.8:
+                _bet_label = "暴れ熊(中)"
+            elif _max_ev >= 1.2:
+                _bet_label = "暴れ熊(弱)"
+            else:
+                _bet_label = "見送り"
 
-        # 条件3: 弱イン → +1点
-        _cond3_wi = weak_in
+            def _add_rec(row, tier):
+                f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
+                combo    = f"{f}-{s}-{t}"
+                ev       = float(row["ev"])
+                odds_val = float(row["odds_value"])
+                src      = str(row.get("odds_source", ""))
+                odds_str = f"{odds_val:.0f}倍" if src == "live" else f"{odds_val:.0f}倍(履歴)"
+                print(f"  [{tier}] {venue_name_log} {race_no}R {combo} {odds_str} EV:{ev:.2f}")
+                all_recommendations.append({
+                    "date":          race_row.get("date", ""),
+                    "venue_name":    race_row.get("venue_name", ""),
+                    "race_no":       race_row.get("race_no", ""),
+                    "combination":   combo,
+                    "prob":          f"{float(row['prob']):.4f}",
+                    "odds":          odds_str,
+                    "expected_roi":  f"{ev:.2f}",
+                    "confidence":    f"{tier}(EV:{ev:.2f}/{odds_val:.0f}倍)",
+                    "odds_source":   src,
+                    "tier":          tier,
+                    "bet_label":     _bet_label,
+                    "edge":          f"{ev:.2f}",
+                    "arare_score":   arare_score,
+                    "arare_reasons": " / ".join(arare_reasons),
+                    "boat1_risk":    _calc_boat1_risk(race_row),
+                })
 
-        # 条件4: 外艇ML高信頼（外艇合計ML≥45% かつ 最高外艇ML≥22%）→ +1点
-        _cond4_ml = False
-        _outer_ml_best  = max((_kuma_ml_1st(b) for b in outer_kuma), default=0.0)
-        _outer_ml_total = sum(_kuma_ml_1st(b) for b in outer_kuma)
-        if _outer_ml_total >= 0.45 and _outer_ml_best >= 0.22:
-            _cond4_ml = True
+            for _, _r in _df_ko.nlargest(3, "ev").iterrows():
+                _add_rec(_r, "小熊")
 
-        abare_kuma = _cond1_st or _cond2_nst or _cond3_wi or _cond4_ml
+            if not _df_ok.empty:
+                _add_rec(_df_ok.nlargest(1, "ev").iloc[0], "大熊")
 
-        if abare_kuma:
-            # 暴れ度スコア: 強い条件ほど高得点
-            _abare_pts = 0
-            if _cond2_nst: _abare_pts += 3  # 来航★: 複数グループ全通過
-            if _cond1_st:  _abare_pts += 2  # 来航: ST直接証拠
-            if _cond3_wi:  _abare_pts += 1  # 弱イン
-            if _cond4_ml:  _abare_pts += 1  # ML高信頼
-            # 来航★未該当のとき追い風・高荒れPTを追加点
-            if not _cond2_nst:
-                if _tail_ab:          _abare_pts += 1
-                if arare_score >= 7:  _abare_pts += 1
-            _strength = "強" if _abare_pts >= 5 else ("中" if _abare_pts >= 3 else "弱")
-            _abare_label = f"暴れ熊({_strength})"
-        else:
-            _abare_label = "見送り"
-
-        # ── 大熊: AB-ABC-ABCDE形式（12点）────────────────────────────────
-        # 1着: {1号艇, B} / 2着: {1,B,C} / 3着: {1,B,C,D,E}
-        if not (absent_boats and 1 in absent_boats) and len(outer_kuma) >= 1:
-            # 1着B: コース別重み + 1号艇との相対ボーナスで最高スコア艇
-            okuma_B     = sorted(outer_kuma, key=_first_cand_score, reverse=True)[0]
-            okuma_first = {1, okuma_B}
-
-            # 2着C: 直外ボーナス付きスコアで選出（展開重視型）
-            rest_2nd = [b for b in available_kuma if b not in okuma_first]
-            if rest_2nd:
-                _adj_B  = okuma_B + 1 if (okuma_B + 1 in rest_2nd) else None
-                okuma_C = max(rest_2nd, key=lambda b: _second_cand_score(b, _adj_B))
-                okuma_2nd = okuma_first | {okuma_C}
-
-                # 3着D: 2着最外の直外（必須）/ 直外なければスコア上位
-                # 3着E: 残りからスコア最高
-                rest_3rd = [b for b in available_kuma if b not in okuma_2nd]
-                if len(rest_3rd) >= 2:
-                    max_2nd  = max(okuma_2nd)
-                    _adj_max = max_2nd + 1
-                    if max_2nd < 6 and _adj_max in rest_3rd:
-                        okuma_D    = _adj_max
-                        rest_for_E = [b for b in rest_3rd if b != okuma_D]
-                        okuma_E    = max(rest_for_E, key=_third_cand_score) if rest_for_E else None
-                    else:
-                        ranked_3rd = sorted(rest_3rd, key=_third_cand_score, reverse=True)
-                        okuma_D    = ranked_3rd[0]
-                        okuma_E    = ranked_3rd[1] if len(ranked_3rd) > 1 else None
-
-                    if okuma_D and okuma_E:
-                        okuma_3rd  = sorted(list(okuma_2nd) + [okuma_D, okuma_E])
-                        ab_str     = ''.join(str(b) for b in sorted(okuma_first))
-                        abc_str    = ''.join(str(b) for b in sorted(okuma_2nd))
-                        abcde_str  = ''.join(str(b) for b in okuma_3rd)
-                        okuma_str  = f"{ab_str}-{abc_str}-{abcde_str}"
-                        _ok_ov, _ok_os = _kuma_min_odds(okuma_str)
-                        _ok_odds_str   = _fmt_kuma_odds(_ok_ov, _ok_os)
-                        _b_tactic      = _infer_tactic(okuma_B)
-                        _tactic_disp   = {"sashi": "差し", "makuri": "まくり"}.get(_b_tactic, "")
-                        print(f"  [大熊] {venue_name_log} {race_no}R {okuma_str} (12点) B:{okuma_B}号/C:{okuma_C}号({_tactic_disp}展開)")
-                        all_recommendations.append({
-                            "date":          race_row.get("date", ""),
-                            "venue_name":    race_row.get("venue_name", ""),
-                            "race_no":       race_row.get("race_no", ""),
-                            "combination":   okuma_str,
-                            "prob":          "-",
-                            "odds":          _ok_odds_str,
-                            "expected_roi":  "-",
-                            "confidence":    f"大熊(B:{okuma_B}号/C:{okuma_C}号/{_tactic_disp})[{_data_tag}]",
-                            "odds_source":   nigerate_str,
-                            "tier":          "大熊",
-                            "bet_label":     _abare_label,
-                            "edge":          "-",
-                            "arare_score":   arare_score,
-                            "arare_reasons": " / ".join(arare_reasons),
-                            "boat1_risk":    _calc_boat1_risk(race_row),
-                        })
+            if not _df_ka.empty:
+                _add_rec(_df_ka.nlargest(1, "ev").iloc[0], "神熊")
 
     return pd.DataFrame(all_recommendations)
 

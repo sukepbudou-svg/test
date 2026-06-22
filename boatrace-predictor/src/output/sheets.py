@@ -584,21 +584,13 @@ def update_result_row(
         combination = pred.get("買い目（3連単）", "")
         _tier_raw = str(pred.get("狙い", "-"))
         # 狙い列は "小熊(外軸:3号/差し)[ET○ST○]" 形式の場合があるためベース名を抽出
-        tier = next((t for t in ("小熊", "大熊") if _tier_raw.startswith(t)), _tier_raw)
+        tier = next((t for t in ("小熊", "大熊", "神熊") if _tier_raw.startswith(t)), _tier_raw)
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
         nigerate_val = pred.get("イン逃げ率", pred.get("オッズ", "-"))  # 日付シートからイン逃げ率取得
-        # フォーメーション: 展開して照合（実際の点数×100円で収支計算）
-        if tier in ("小熊", "大熊"):
-            form_combos = _expand_formation(combination)
-            hit    = "○" if actual_combination in form_combos else "×"
-            payout = actual_payout if hit == "○" else 0
-            ticket_count = len(form_combos) if form_combos else 4
-            profit = payout - ticket_count * 100
-        else:
-            hit    = "○" if combination == actual_combination else "×"
-            payout = actual_payout if hit == "○" else 0
-            profit = payout - 100
+        hit    = "○" if combination == actual_combination else "×"
+        payout = actual_payout if hit == "○" else 0
+        profit = payout - 100
 
         r_sheet.append_row(
             [date, marked_venue, race_no, tier, combination,
@@ -701,13 +693,8 @@ def _compute_tier_stats(records: list, tier_check) -> dict:
 
         if d not in daily:
             daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
-        # フォーメーションは実際のcombo数×100円、それ以外は1票=100円
         tier_name = str(rec.get("狙い", ""))
-        if tier_name in ("小熊", "大熊"):
-            _fc = _expand_formation(str(combination))
-            bet_amount = len(_fc) * 100 if _fc else 400
-        else:
-            bet_amount = 100
+        bet_amount = 100
         total_bets += bet_amount
         daily[d]["bets"] += bet_amount
         daily[d]["race_keys"].add(race_key)
@@ -856,8 +843,8 @@ def update_summary_sheet(
         lst = list(args)
         return lst + [""] * (NUM_COLS - len(lst))
 
-    def _pt_tier_stats(tier_name, pt_filter=None):
-        """tier_name: 狙い列. pt_filter: None=全PT, int=指定PT, "7以上"=7以上, list=複数PT"""
+    def _pt_tier_stats(tier_name, pt_filter=None, label_filter=None):
+        """tier_name: 狙い列. label_filter: None=全, '弱'/'中'/'強'=暴れ熊ラベル絞り"""
         race_keys: set = set()
         hit_race_keys: set = set()
         total_bets = 0
@@ -870,34 +857,18 @@ def update_summary_sheet(
             combo = str(rec.get("予想買い目", ""))
             if combo in ("", "（予想なし）", "見送り", "-"):
                 continue
-            # 見送りは賭けていないため集計しない
             _bl = str(rec.get("勝負推奨", ""))
             if _bl == "見送り":
                 continue
-            try:
-                pt_val = int(float(str(rec.get("荒れPT", "0") or "0")))
-            except (ValueError, TypeError):
-                continue
-            if pt_filter is not None:
-                if isinstance(pt_filter, list):
-                    if pt_val not in pt_filter:
-                        continue
-                elif pt_filter == "7以上":
-                    if pt_val < 7:
-                        continue
-                else:
-                    if pt_val != pt_filter:
-                        continue
+            if label_filter is not None:
+                if _bl != f"暴れ熊({label_filter})":
+                    continue
             d  = str(rec.get("日付", ""))
             v  = str(rec.get("競艇場", ""))
             rn = str(rec.get("レース", ""))
             race_key = (d, v, rn)
             race_keys.add(race_key)
-            if tier_name in ("小熊", "大熊"):
-                fc = _expand_formation(combo)
-                bet = len(fc) * 100 if fc else 400
-            else:
-                bet = 100
+            bet = 100
             total_bets += bet
             if d not in daily:
                 daily[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
@@ -951,32 +922,33 @@ def update_summary_sheet(
 
     rows.append(_r("■ ティア別グループ比較"))
     rows.append(_r("グループ", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
-    for grp, tn, pf in [
-        ("小熊 PT1-3",   "小熊", [1, 2, 3]),
-        ("小熊 PT4-6",   "小熊", [4, 5, 6]),
-        ("小熊 PT7以上",  "小熊", "7以上"),
-        ("大熊 PT1-3",   "大熊", [1, 2, 3]),
-        ("大熊 PT4-6",   "大熊", [4, 5, 6]),
-        ("大熊 PT7以上",  "大熊", "7以上"),
+    for grp, tn, lf in [
+        ("小熊 弱", "小熊", "弱"), ("小熊 中", "小熊", "中"), ("小熊 強", "小熊", "強"),
+        ("大熊 弱", "大熊", "弱"), ("大熊 中", "大熊", "中"), ("大熊 強", "大熊", "強"),
+        ("神熊 弱", "神熊", "弱"), ("神熊 中", "神熊", "中"), ("神熊 強", "神熊", "強"),
     ]:
-        s = _pt_tier_stats(tn, pf)
+        s = _pt_tier_stats(tn, label_filter=lf)
         rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
         rows.append(_r(grp, rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
     rows.append(_r())
     rows.append(_r())
 
     # ② 小熊セクション
-    rows.append(_r("■ 小熊セクション（全PT）"))
-    for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
-        lbl = f"{pt}PT" if isinstance(pt, int) else pt
-        _write_pt_section(f"小熊 {lbl}", _pt_tier_stats("小熊", pt))
+    rows.append(_r("■ 小熊セクション（ラベル別）"))
+    for lbl in ["弱", "中", "強"]:
+        _write_pt_section(f"小熊 {lbl}", _pt_tier_stats("小熊", label_filter=lbl))
     rows.append(_r())
 
     # ③ 大熊セクション
-    rows.append(_r("■ 大熊セクション（全PT）"))
-    for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
-        lbl = f"{pt}PT" if isinstance(pt, int) else pt
-        _write_pt_section(f"大熊 {lbl}", _pt_tier_stats("大熊", pt))
+    rows.append(_r("■ 大熊セクション（ラベル別）"))
+    for lbl in ["弱", "中", "強"]:
+        _write_pt_section(f"大熊 {lbl}", _pt_tier_stats("大熊", label_filter=lbl))
+    rows.append(_r())
+
+    # ④ 神熊セクション
+    rows.append(_r("■ 神熊セクション（ラベル別）"))
+    for lbl in ["弱", "中", "強"]:
+        _write_pt_section(f"神熊 {lbl}", _pt_tier_stats("神熊", label_filter=lbl))
     rows.append(_r())
 
     # ④ 暴れ熊ラベル別集計（小熊+大熊合算）
@@ -1005,9 +977,7 @@ def update_summary_sheet(
                 _rk.add(rk)
                 if d not in _dl:
                     _dl[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
-                fc = _expand_formation(combo)
-                bet = len(fc) * 100 if fc else 400
-                _tb += bet
+                _tb += 100
                 _dl[d]["bets"] += bet
                 _dl[d]["race_keys"].add(rk)
                 if rec.get("的中", "") == "○":
