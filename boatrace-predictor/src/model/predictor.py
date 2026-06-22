@@ -1101,41 +1101,29 @@ def get_recommendations(
             _df_ok = _valid[(_valid["odds_value"] >  200) & (_valid["odds_value"] <= 350)]
             _df_ka = _valid[(_valid["odds_value"] >  350) & (_valid["odds_value"] <= 1000)]
 
-            # 暴れ熊ラベル: PTもMLも使わない2シグナルで判定
-            # 1. ライバル優位性: 最強ライバル艇のET×モーター複合スコア vs 1号艇（差0.08未満は無効）
-            # 2. 逃げ率の低さ: 50%未満のときのみ有効（それ以上は信号なし）
+            # 暴れ熊ラベル: 3つの独立バイナリ条件の組み合わせ
+            # 連続スコアは「必ず正になる」問題があるため廃止
 
-            # ── シグナル1: ライバル優位性（有意差0.08以上のみ有効） ──
-            _b1_et    = et_ranks_k.get(1, 0.5)
-            _b1_motor = _safe_float(race_row.get("boat1_motor_2rate")) or 0.40
-            _b1_score = _b1_et * 0.55 + _b1_motor * 0.45
-
-            _rivals = []
-            for _bn in range(2, 7):
-                _et    = et_ranks_k.get(_bn, 0.5)
-                _motor = _safe_float(race_row.get(f"boat{_bn}_motor_2rate")) or 0.40
-                _rivals.append(_et * 0.55 + _motor * 0.45)
-            _best_rival = max(_rivals) if _rivals else 0.0
-            _rival_adv  = max(0.0, (_best_rival - _b1_score) - 0.08)  # 差0.08未満は切り捨て
-
-            # ── シグナル2: 逃げ率の低さ（50%未満のみ有効） ──
             try:
                 _nig_val = float(str(nigerate_str).replace("逃げ推定", "").replace("%", "").strip())
             except Exception:
                 _nig_val = 65.0
-            _nig_factor = max(0.0, (50.0 - _nig_val) / 20.0)   # 50%以上=0, 30%以下=1
 
-            # ── 複合スコア ──
-            _upset_sig = _rival_adv * 0.55 + _nig_factor * 0.45
+            _cond_wind   = _tail_ok               # ①追い風5m以上
+            _cond_nigate = (_nig_val < 50.0)      # ②逃げ率50%未満（真に外艇有利）
+            _cond_b1weak = (boat1_weak_count >= 2) # ③1号艇が2条件以上で客観的に弱い
 
-            _raw_adv = _best_rival - _b1_score
-            print(f"  [暴れ熊診断] ライバル優位={_raw_adv:+.3f}(有効={_rival_adv:.3f}) 低逃げ={_nig_factor:.3f}(逃げ率{_nig_val:.0f}%) → 総合={_upset_sig:.3f} (参考PT={arare_score})")
+            _cond_count = sum([_cond_wind, _cond_nigate, _cond_b1weak])
 
-            if _upset_sig >= 0.32:
+            print(f"  [暴れ熊診断] ①追い風={_cond_wind} ②逃げ率低={_cond_nigate}({_nig_val:.0f}%) "
+                  f"③1号艇弱={_cond_b1weak}(弱{boat1_weak_count}条件) 条件数={_cond_count}")
+
+            if _cond_count >= 3:
                 _bet_label = "暴れ熊(強)"
-            elif _upset_sig >= 0.20:
+            elif _cond_count >= 2:
                 _bet_label = "暴れ熊(中)"
-            elif _upset_sig >= 0.11:
+            elif _cond_count == 1 and (_cond_wind or _cond_nigate):
+                # 1号艇弱さだけでは弱ラベルなし; 天候か逃げ率の独立要因が必要
                 _bet_label = "暴れ熊(弱)"
             else:
                 _bet_label = "見送り"
