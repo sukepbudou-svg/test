@@ -1101,17 +1101,22 @@ def get_recommendations(
             _df_ok = _valid[(_valid["odds_value"] >  200) & (_valid["odds_value"] <= 350)]
             _df_ka = _valid[(_valid["odds_value"] >  350) & (_valid["odds_value"] <= 1000)]
 
-            _max_ev = max(
+            # 対象帯(100-1000倍)内の中央値EVを基準に相対スコアで判断
+            # → MLキャリブレーション問題を回避（絶対値ではなく突出度で見る）
+            _df_target = _valid[(_valid["odds_value"] >= 100) & (_valid["odds_value"] <= 1000)]
+            _median_ev = float(_df_target["ev"].median()) if not _df_target.empty else 1.0
+            _best_ev   = max(
                 float(_df_ko["ev"].max()) if not _df_ko.empty else 0.0,
                 float(_df_ok["ev"].max()) if not _df_ok.empty else 0.0,
                 float(_df_ka["ev"].max()) if not _df_ka.empty else 0.0,
             )
+            _rel_score = _best_ev / max(_median_ev, 0.001)
 
-            if _max_ev >= 2.5:
+            if _rel_score >= 2.5:
                 _bet_label = "暴れ熊(強)"
-            elif _max_ev >= 1.8:
+            elif _rel_score >= 1.8:
                 _bet_label = "暴れ熊(中)"
-            elif _max_ev >= 1.2:
+            elif _rel_score >= 1.4:
                 _bet_label = "暴れ熊(弱)"
             else:
                 _bet_label = "見送り"
