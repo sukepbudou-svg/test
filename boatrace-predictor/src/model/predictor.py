@@ -1047,12 +1047,13 @@ def get_recommendations(
             return "sashi" if bn <= 3 else "makuri"
 
         def _first_cand_score(bn):
-            """1着2艇目スコア: コース別重み(内=ML重視/外=ET重視) + 1号艇との相対ボーナス"""
+            """1着2艇目スコア: コース別重み(内=ML重視/外=ET重視) + コース位置ボーナス + 1号艇との相対ボーナス"""
             ml    = _kuma_ml_1st(bn)
             et    = et_ranks_k.get(bn, 0.5)
             motor = _safe_float(race_row.get(f"boat{bn}_motor_2rate")) or 0.40
             grade = _safe_float(race_row.get(f"boat{bn}_grade_num")) or 2.0
-            g_bonus = 0.06 if grade >= 4 else (0.03 if grade >= 3 else 0.0)
+            g_bonus  = 0.06 if grade >= 4 else (0.03 if grade >= 3 else 0.0)
+            pos_bonus = {2: 0.08, 3: 0.04, 4: 0.03, 5: 0.01, 6: 0.0}.get(bn, 0.0)
             if bn <= 3:  # 差し展開: ML重め
                 base = ml * 0.45 + et * 0.30 + motor * 0.15 + g_bonus * 0.10
             else:        # まくり展開: ET重め
@@ -1062,7 +1063,7 @@ def get_recommendations(
             et_adv    = et - b1_et
             motor_adv = motor - b1_motor
             rel = max(-0.05, min(0.15, et_adv * 0.7 + motor_adv * 0.3))
-            return base + rel * 0.15
+            return base + pos_bonus + rel * 0.15
 
         def _second_cand_score(bn, adj_outside):
             """2着+1艇(C)スコア: ベーススコア + 直外展開ボーナス（展開重視型）"""
