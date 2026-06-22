@@ -1046,36 +1046,38 @@ def get_recommendations(
                     return "makuri"
             return "sashi" if bn <= 3 else "makuri"
 
-        def _neutral_outer_score(bn):
-            """ポジションバイアスなしの外艇スコア（1着候補選出用）"""
-            ml = _kuma_ml_1st(bn)
-            st = _kuma_st_sc(bn)
-            et = et_ranks_k.get(bn, 0.5)
-            return ml * 0.50 + st * 0.25 + et * 0.25
+        def _first_cand_score(bn):
+            """1着2艇目スコア: コース別重み(内=ML重視/外=ET重視) + 1号艇との相対ボーナス"""
+            ml    = _kuma_ml_1st(bn)
+            et    = et_ranks_k.get(bn, 0.5)
+            motor = _safe_float(race_row.get(f"boat{bn}_motor_2rate")) or 0.40
+            grade = _safe_float(race_row.get(f"boat{bn}_grade_num")) or 2.0
+            g_bonus = 0.06 if grade >= 4 else (0.03 if grade >= 3 else 0.0)
+            if bn <= 3:  # 差し展開: ML重め
+                base = ml * 0.45 + et * 0.30 + motor * 0.15 + g_bonus * 0.10
+            else:        # まくり展開: ET重め
+                base = ml * 0.30 + et * 0.45 + motor * 0.15 + g_bonus * 0.10
+            b1_et    = et_ranks_k.get(1, 0.5)
+            b1_motor = _safe_float(race_row.get("boat1_motor_2rate")) or 0.40
+            et_adv    = et - b1_et
+            motor_adv = motor - b1_motor
+            rel = max(-0.05, min(0.15, et_adv * 0.7 + motor_adv * 0.3))
+            return base + rel * 0.15
 
-        def _place_score_with_tactic(bn, first_set, tactic):
-            """2着・3着スコア: 推定展開に応じたボーナス付き（差し/まくり/バランス）"""
-            prob = float(by_prob[
-                (by_prob["boat1"].isin(list(first_set))) &
-                ((by_prob["boat2"] == bn) | (by_prob["boat3"] == bn))
-            ]["prob"].sum())
-            et = et_ranks_k.get(bn, 0.5)
-            st = _kuma_st_sc(bn)
-            if bn == 1:
-                b1_motor = _safe_float(race_row.get("boat1_motor_2rate")) or 0.0
-                b1_grade = _safe_float(race_row.get("boat1_grade_num")) or 2.0
-                base = 0.03 + min(0.02, b1_motor * 0.04) + (0.02 if b1_grade >= 3 else 0.0)
-                bonus = base + (0.05 if tactic == "makuri" else 0.0)
-            elif bn in (2, 3):
-                if tactic == "sashi":
-                    bonus = 0.07
-                elif tactic == "makuri":
-                    bonus = 0.02
-                else:
-                    bonus = 0.05
-            else:
-                bonus = 0.05 if tactic == "makuri" else 0.03
-            return prob * 0.45 + et * 0.25 + st * 0.20 + bonus * 0.10
+        def _second_cand_score(bn, adj_outside):
+            """2着+1艇(C)スコア: ベーススコア + 直外展開ボーナス（展開重視型）"""
+            ml    = _kuma_ml_1st(bn)
+            et    = et_ranks_k.get(bn, 0.5)
+            motor = _safe_float(race_row.get(f"boat{bn}_motor_2rate")) or 0.40
+            base  = ml * 0.40 + et * 0.40 + motor * 0.20
+            return base + (0.19 if bn == adj_outside else 0.0)
+
+        def _third_cand_score(bn):
+            """3着D/E選出スコア"""
+            ml    = _kuma_ml_1st(bn)
+            et    = et_ranks_k.get(bn, 0.5)
+            motor = _safe_float(race_row.get(f"boat{bn}_motor_2rate")) or 0.40
+            return ml * 0.40 + et * 0.40 + motor * 0.20
 
         # ── 暴れ熊条件チェック（ペリー来航系と同等） ────────────────────
         _b1_st   = _safe_float(race_row.get("boat1_exhibition_st"))
@@ -1168,92 +1170,63 @@ def get_recommendations(
         else:
             _abare_label = "見送り"
 
-        # ── 小熊: AB-ABC-ABC形式（1着2艇 + システム選出+1艇で2着・3着共有 = 4点）──
-        koguma_str = None
-        sashi_ace  = None
+        # ── 大熊: AB-ABC-ABCDE形式（12点）────────────────────────────────
+        # 1着: {1号艇, B} / 2着: {1,B,C} / 3着: {1,B,C,D,E}
         if not (absent_boats and 1 in absent_boats) and len(outer_kuma) >= 1:
-            sashi_ace    = sorted(outer_kuma, key=_neutral_outer_score, reverse=True)[0]
-            koguma_first = {1, sashi_ace}
-            sashi_tactic = _infer_tactic(sashi_ace)
-            rest_ko = [b for b in available_kuma if b not in koguma_first]
+            # 1着B: コース別重み + 1号艇との相対ボーナスで最高スコア艇
+            okuma_B     = sorted(outer_kuma, key=_first_cand_score, reverse=True)[0]
+            okuma_first = {1, okuma_B}
 
-            if len(rest_ko) >= 1:
-                ko_C    = sorted(rest_ko, key=lambda b: _place_score_with_tactic(b, koguma_first, sashi_tactic), reverse=True)[0]
-                ab_str  = ''.join(str(b) for b in sorted(koguma_first))
-                abc_str = ''.join(str(b) for b in sorted(list(koguma_first) + [ko_C]))
-                koguma_str   = f"{ab_str}-{abc_str}-{abc_str}"
-                _ko_ov, _ko_os = _kuma_min_odds(koguma_str)
-                _ko_odds_str   = _fmt_kuma_odds(_ko_ov, _ko_os)
-                _ko_tactic_jp  = {"sashi": "差し", "makuri": "まくり", "balanced": "バランス"}.get(sashi_tactic, "")
-                print(f"  [小熊] {venue_name_log} {race_no}R {koguma_str} (4点) 軸:{sashi_ace}号+C:{ko_C}号({_ko_tactic_jp}展開)")
-                all_recommendations.append({
-                    "date":          race_row.get("date", ""),
-                    "venue_name":    race_row.get("venue_name", ""),
-                    "race_no":       race_row.get("race_no", ""),
-                    "combination":   koguma_str,
-                    "prob":          "-",
-                    "odds":          _ko_odds_str,
-                    "expected_roi":  "-",
-                    "confidence":    f"小熊(軸:{sashi_ace}号+C:{ko_C}号/{_ko_tactic_jp})[{_data_tag}]",
-                    "odds_source":   nigerate_str,
-                    "tier":          "小熊",
-                    "bet_label":     _abare_label,
-                    "edge":          "-",
-                    "arare_score":   arare_score,
-                    "arare_reasons": " / ".join(arare_reasons),
-                    "boat1_risk":    _calc_boat1_risk(race_row),
-                })
+            # 2着C: 直外ボーナス付きスコアで選出（展開重視型）
+            rest_2nd = [b for b in available_kuma if b not in okuma_first]
+            if rest_2nd:
+                _adj_B  = okuma_B + 1 if (okuma_B + 1 in rest_2nd) else None
+                okuma_C = max(rest_2nd, key=lambda b: _second_cand_score(b, _adj_B))
+                okuma_2nd = okuma_first | {okuma_C}
 
-        # ── 大熊: AB-ABC-ABC形式（1着2艇 + システム選出+1艇で2着・3着共有 = 4点）──
-        # 小熊の軸(sashi_ace)を除外して1着が被らないよう差別化, +1艇には1号艇も候補に入る
-        makuri_cands = [b for b in outer_kuma if b != sashi_ace]
+                # 3着D: 2着最外の直外（必須）/ 直外なければスコア上位
+                # 3着E: 残りからスコア最高
+                rest_3rd = [b for b in available_kuma if b not in okuma_2nd]
+                if len(rest_3rd) >= 2:
+                    max_2nd  = max(okuma_2nd)
+                    _adj_max = max_2nd + 1
+                    if max_2nd < 6 and _adj_max in rest_3rd:
+                        okuma_D    = _adj_max
+                        rest_for_E = [b for b in rest_3rd if b != okuma_D]
+                        okuma_E    = max(rest_for_E, key=_third_cand_score) if rest_for_E else None
+                    else:
+                        ranked_3rd = sorted(rest_3rd, key=_third_cand_score, reverse=True)
+                        okuma_D    = ranked_3rd[0]
+                        okuma_E    = ranked_3rd[1] if len(ranked_3rd) > 1 else None
 
-        if len(makuri_cands) >= 2:
-            ranked_maku  = sorted(makuri_cands, key=_neutral_outer_score, reverse=True)
-            primary_maku = ranked_maku[0]
-            rem_maku     = [b for b in ranked_maku if b != primary_maku]
-            if rem_maku:
-                # 直外側候補（展開連動で有利になりやすい艇）
-                _adj_outside = next((x for x in range(primary_maku + 1, 7) if x in makuri_cands), None)
-                # ベーススコア + 展開連動ボーナス（直外側に+0.12加算）
-                # ただし他艇の実データ（ML/ST/ET）が大きく上回れば自然にそちらが選ばれる
-                def _companion_score(bn):
-                    return _neutral_outer_score(bn) + (0.12 if bn == _adj_outside else 0.0)
-                companion_maku = max(rem_maku, key=_companion_score)
-            else:
-                companion_maku = None
-            okuma_first  = {primary_maku, companion_maku} if companion_maku else {primary_maku}
-            top_maku_bn  = primary_maku
-            okuma_tactic = _infer_tactic(top_maku_bn)
-            rest_ok      = [b for b in available_kuma if b not in okuma_first]
-
-            if len(rest_ok) >= 1:
-                ok_C     = sorted(rest_ok, key=lambda b: _place_score_with_tactic(b, okuma_first, okuma_tactic), reverse=True)[0]
-                ab_str_ok  = ''.join(str(b) for b in sorted(okuma_first))
-                abc_str_ok = ''.join(str(b) for b in sorted(list(okuma_first) + [ok_C]))
-                okuma_str    = f"{ab_str_ok}-{abc_str_ok}-{abc_str_ok}"
-                _ok_ov, _ok_os = _kuma_min_odds(okuma_str)
-                _ok_odds_str   = _fmt_kuma_odds(_ok_ov, _ok_os)
-                maku_boats_str = ','.join(f"{b}号" for b in sorted(okuma_first))
-                _ok_tactic_jp  = {"sashi": "差し", "makuri": "まくり", "balanced": "バランス"}.get(okuma_tactic, "")
-                print(f"  [大熊] {venue_name_log} {race_no}R {okuma_str} (4点) 1着:{maku_boats_str}+C:{ok_C}号({_ok_tactic_jp}展開)")
-                all_recommendations.append({
-                    "date":          race_row.get("date", ""),
-                    "venue_name":    race_row.get("venue_name", ""),
-                    "race_no":       race_row.get("race_no", ""),
-                    "combination":   okuma_str,
-                    "prob":          "-",
-                    "odds":          _ok_odds_str,
-                    "expected_roi":  "-",
-                    "confidence":    f"大熊({maku_boats_str}+C:{ok_C}号/{_ok_tactic_jp})[{_data_tag}]",
-                    "odds_source":   nigerate_str,
-                    "tier":          "大熊",
-                    "bet_label":     _abare_label,
-                    "edge":          "-",
-                    "arare_score":   arare_score,
-                    "arare_reasons": " / ".join(arare_reasons),
-                    "boat1_risk":    _calc_boat1_risk(race_row),
-                })
+                    if okuma_D and okuma_E:
+                        okuma_3rd  = sorted(list(okuma_2nd) + [okuma_D, okuma_E])
+                        ab_str     = ''.join(str(b) for b in sorted(okuma_first))
+                        abc_str    = ''.join(str(b) for b in sorted(okuma_2nd))
+                        abcde_str  = ''.join(str(b) for b in okuma_3rd)
+                        okuma_str  = f"{ab_str}-{abc_str}-{abcde_str}"
+                        _ok_ov, _ok_os = _kuma_min_odds(okuma_str)
+                        _ok_odds_str   = _fmt_kuma_odds(_ok_ov, _ok_os)
+                        _b_tactic      = _infer_tactic(okuma_B)
+                        _tactic_disp   = {"sashi": "差し", "makuri": "まくり"}.get(_b_tactic, "")
+                        print(f"  [大熊] {venue_name_log} {race_no}R {okuma_str} (12点) B:{okuma_B}号/C:{okuma_C}号({_tactic_disp}展開)")
+                        all_recommendations.append({
+                            "date":          race_row.get("date", ""),
+                            "venue_name":    race_row.get("venue_name", ""),
+                            "race_no":       race_row.get("race_no", ""),
+                            "combination":   okuma_str,
+                            "prob":          "-",
+                            "odds":          _ok_odds_str,
+                            "expected_roi":  "-",
+                            "confidence":    f"大熊(B:{okuma_B}号/C:{okuma_C}号/{_tactic_disp})[{_data_tag}]",
+                            "odds_source":   nigerate_str,
+                            "tier":          "大熊",
+                            "bet_label":     _abare_label,
+                            "edge":          "-",
+                            "arare_score":   arare_score,
+                            "arare_reasons": " / ".join(arare_reasons),
+                            "boat1_risk":    _calc_boat1_risk(race_row),
+                        })
 
     return pd.DataFrame(all_recommendations)
 
