@@ -1101,42 +1101,30 @@ def get_recommendations(
             _df_ok = _valid[(_valid["odds_value"] >  200) & (_valid["odds_value"] <= 350)]
             _df_ka = _valid[(_valid["odds_value"] >  350) & (_valid["odds_value"] <= 1000)]
 
-            # 万舟シグナル: ML確率分布 + 1号艇弱さ + 逃げ率の複合スコアで判定
-            # outer_sigは荒れPTとほぼ同じ情報であり、低PTの万舟を取りこぼす
-            # → MLが100-1000倍帯に割り当てる確率集中度を主シグナルとして使う
+            # 暴れ熊ラベル: 小熊ティア(100-180倍)の最高EVのみで判定
+            # 大熊(200-350倍)・神熱(350-1000倍)はT=2.5温度スケーリングで
+            # ほぼ全レースで高EVとなり差別化不能。小熊はオッズが低い分T=2.5の
+            # 増幅効果が相対的に弱いため、高EVの場合は真の外艇有利シグナルになる。
 
-            # ML万舟帯確率集中度: オッズ付きコンボのうち100-1000倍帯の確率割合
-            _prob_total = float(_valid["prob"].sum()) or 1.0
-            _prob_manza = float(_valid[
-                (_valid["odds_value"] >= 100) &
-                (_valid["odds_value"] <= 1000)
-            ]["prob"].sum())
-            _ml_manz_sig = _prob_manza / max(_prob_total, 0.001)
-
-            # 1号艇の弱さ（_calc_boat1_weakness で得た条件数を0-1に正規化）
-            _b1_weak_sig = min(1.0, boat1_weak_count / 5.0)
-
-            # イン逃げ率（低逃げ率ほど外艇有利: 65%未満で効果あり）
-            try:
-                _nig_val = float(str(nigerate_str).replace("逃げ推定", "").replace("%", "").strip())
-            except Exception:
-                _nig_val = 60.0
-            _nig_sig = max(0.0, min(1.0, (65.0 - _nig_val) / 40.0))
-
-            # 荒れPTは主ゲートではなく補強加点のみ（PTが低くても万舟は出るため）
-            _pt_bonus = min(0.15, arare_score * 0.02)
-
-            _manza_score = _ml_manz_sig * 0.50 + _b1_weak_sig * 0.30 + _nig_sig * 0.20 + _pt_bonus
-            print(f"  [万舟診断] ML万舟帯={_ml_manz_sig:.3f} 1号艇弱={_b1_weak_sig:.2f}(弱{boat1_weak_count}条件) 低逃げ={_nig_sig:.2f} PTボーナス={_pt_bonus:.2f} → 総合={_manza_score:.3f}")
-
-            if _manza_score >= 0.50:
-                _bet_label = "暴れ熊(強)"
-            elif _manza_score >= 0.38:
-                _bet_label = "暴れ熊(中)"
-            elif _manza_score >= 0.25:
-                _bet_label = "暴れ熊(弱)"
-            else:
+            if _df_ko.empty:
                 _bet_label = "見送り"
+                _ko_top_ev   = 0.0
+                _ko_top_prob = 0.0
+            else:
+                _ko_top_row  = _df_ko.nlargest(1, "ev").iloc[0]
+                _ko_top_ev   = float(_ko_top_row["ev"])
+                _ko_top_prob = float(_ko_top_row["prob"])
+
+                if _ko_top_ev >= 11.0:
+                    _bet_label = "暴れ熊(強)"
+                elif _ko_top_ev >= 7.0:
+                    _bet_label = "暴れ熊(中)"
+                elif _ko_top_ev >= 4.0:
+                    _bet_label = "暴れ熊(弱)"
+                else:
+                    _bet_label = "見送り"
+
+            print(f"  [暴れ熊診断] 小熊最高EV={_ko_top_ev:.2f}(prob={_ko_top_prob:.4f}) → {_bet_label}")
 
             def _add_rec(row, tier):
                 f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
