@@ -1101,22 +1101,39 @@ def get_recommendations(
             _df_ok = _valid[(_valid["odds_value"] >  200) & (_valid["odds_value"] <= 350)]
             _df_ka = _valid[(_valid["odds_value"] >  350) & (_valid["odds_value"] <= 1000)]
 
-            # 外艇シグナル: 最強外艇(4-6号)の1着確率 vs 1号艇の1着確率の比で判定
-            # EV絶対値はT=2.5温度スケーリングで外艇確率が5-10倍に膨らむため使えない
-            # 比率なら膨らみが相殺され「このレースで外艇が特別に強いか」を正しく検出できる
-            _boat1_win_prob = float(by_prob[by_prob["boat1"] == 1]["prob"].sum())
-            _best_outer_win_prob = max(
-                float(by_prob[by_prob["boat1"] == bn]["prob"].sum())
-                for bn in [4, 5, 6]
-            )
-            _outer_sig = _best_outer_win_prob / max(_boat1_win_prob, 0.001)
-            print(f"  [暴れ熊診断] 外艇最高={_best_outer_win_prob:.3f} / 1号艇={_boat1_win_prob:.3f} = {_outer_sig:.3f}")
+            # 万舟シグナル: ML確率分布 + 1号艇弱さ + 逃げ率の複合スコアで判定
+            # outer_sigは荒れPTとほぼ同じ情報であり、低PTの万舟を取りこぼす
+            # → MLが100-1000倍帯に割り当てる確率集中度を主シグナルとして使う
 
-            if _outer_sig >= 0.85:
+            # ML万舟帯確率集中度: オッズ付きコンボのうち100-1000倍帯の確率割合
+            _prob_total = float(_valid["prob"].sum()) or 1.0
+            _prob_manza = float(_valid[
+                (_valid["odds_value"] >= 100) &
+                (_valid["odds_value"] <= 1000)
+            ]["prob"].sum())
+            _ml_manz_sig = _prob_manza / max(_prob_total, 0.001)
+
+            # 1号艇の弱さ（_calc_boat1_weakness で得た条件数を0-1に正規化）
+            _b1_weak_sig = min(1.0, boat1_weak_count / 5.0)
+
+            # イン逃げ率（低逃げ率ほど外艇有利: 65%未満で効果あり）
+            try:
+                _nig_val = float(str(nigerate_str).replace("逃げ推定", "").replace("%", "").strip())
+            except Exception:
+                _nig_val = 60.0
+            _nig_sig = max(0.0, min(1.0, (65.0 - _nig_val) / 40.0))
+
+            # 荒れPTは主ゲートではなく補強加点のみ（PTが低くても万舟は出るため）
+            _pt_bonus = min(0.15, arare_score * 0.02)
+
+            _manza_score = _ml_manz_sig * 0.50 + _b1_weak_sig * 0.30 + _nig_sig * 0.20 + _pt_bonus
+            print(f"  [万舟診断] ML万舟帯={_ml_manz_sig:.3f} 1号艇弱={_b1_weak_sig:.2f}(弱{boat1_weak_count}条件) 低逃げ={_nig_sig:.2f} PTボーナス={_pt_bonus:.2f} → 総合={_manza_score:.3f}")
+
+            if _manza_score >= 0.50:
                 _bet_label = "暴れ熊(強)"
-            elif _outer_sig >= 0.65:
+            elif _manza_score >= 0.38:
                 _bet_label = "暴れ熊(中)"
-            elif _outer_sig >= 0.50:
+            elif _manza_score >= 0.25:
                 _bet_label = "暴れ熊(弱)"
             else:
                 _bet_label = "見送り"
