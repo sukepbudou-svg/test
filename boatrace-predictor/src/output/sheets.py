@@ -18,8 +18,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-RESULT_SHEET = "成績18"
-SUMMARY_SHEET = "サマリー18"
+RESULT_SHEET = "成績19"
+SUMMARY_SHEET = "サマリー19"
 
 # 24場 荒れやすさランキング（万舟率・コース特性ベース、1位=最も荒れやすい）
 _VENUE_RANKING = [
@@ -915,11 +915,71 @@ def update_summary_sheet(
             rows.append(_r(d, drc, dhc, dh, f"¥{dr:,}", dp))
         rows.append(_r())
 
+    def _all_tier_stats(pt_filter=None, label_filter=None):
+        """全ティア合算. pt_filter: int/"7以上"/None. label_filter: 完全一致文字列/None."""
+        race_keys: set = set()
+        hit_race_keys: set = set()
+        total_bets = 0
+        total_ret = 0
+        for rec in records:
+            combo = str(rec.get("予想買い目", ""))
+            if combo in ("", "（予想なし）", "見送り", "-"):
+                continue
+            if pt_filter is not None:
+                try:
+                    pt_val = int(str(rec.get("荒れPT", "")).strip())
+                    if pt_filter == "7以上":
+                        if pt_val < 7:
+                            continue
+                    elif pt_val != pt_filter:
+                        continue
+                except (ValueError, TypeError):
+                    continue
+            if label_filter is not None:
+                if str(rec.get("勝負推奨", "")) != label_filter:
+                    continue
+            d  = str(rec.get("日付", ""))
+            v  = str(rec.get("競艇場", ""))
+            rn = str(rec.get("レース", ""))
+            rk = (d, v, rn)
+            race_keys.add(rk)
+            total_bets += 100
+            if rec.get("的中", "") == "○":
+                hit_race_keys.add(rk)
+                try:
+                    pay = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
+                    total_ret += pay
+                except (ValueError, TypeError):
+                    pass
+        return {"race_keys": race_keys, "hit_race_keys": hit_race_keys,
+                "bets": total_bets, "ret": total_ret, "daily": {}}
+
     rows: list = []
     rows.append(_r("【予想成績サマリー】"))
     rows.append(_r("集計日時", now))
     rows.append(_r())
 
+    # ① 全PT帯集計（全ティア合算）
+    rows.append(_r("■ 全PT帯集計（全ティア合算）"))
+    rows.append(_r("荒れPT", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
+    for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
+        s = _all_tier_stats(pt_filter=pt)
+        rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
+        rows.append(_r(f"PT{pt}", rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
+    rows.append(_r())
+    rows.append(_r())
+
+    # ② 暴れ熊ラベル別集計（全ティア合算）
+    rows.append(_r("■ 暴れ熊ラベル別集計（全ティア合算）"))
+    rows.append(_r("ラベル", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
+    for lbl in ["暴れ熊(弱)", "暴れ熊(中)", "暴れ熊(強)"]:
+        s = _all_tier_stats(label_filter=lbl)
+        rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
+        rows.append(_r(lbl, rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
+    rows.append(_r())
+    rows.append(_r())
+
+    # ③ ティア別グループ比較
     rows.append(_r("■ ティア別グループ比較"))
     rows.append(_r("グループ", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
     for grp, tn, lf in [
@@ -933,66 +993,22 @@ def update_summary_sheet(
     rows.append(_r())
     rows.append(_r())
 
-    # ② 小熊セクション
+    # ④ 小熊セクション
     rows.append(_r("■ 小熊セクション（ラベル別）"))
     for lbl in ["弱", "中", "強"]:
         _write_pt_section(f"小熊 {lbl}", _pt_tier_stats("小熊", label_filter=lbl))
     rows.append(_r())
 
-    # ③ 大熊セクション
+    # ⑤ 大熊セクション
     rows.append(_r("■ 大熊セクション（ラベル別）"))
     for lbl in ["弱", "中", "強"]:
         _write_pt_section(f"大熊 {lbl}", _pt_tier_stats("大熊", label_filter=lbl))
     rows.append(_r())
 
-    # ④ 神熊セクション
+    # ⑥ 神熊セクション
     rows.append(_r("■ 神熊セクション（ラベル別）"))
     for lbl in ["弱", "中", "強"]:
         _write_pt_section(f"神熊 {lbl}", _pt_tier_stats("神熊", label_filter=lbl))
-    rows.append(_r())
-
-    # ④ 暴れ熊ラベル別集計（小熊+大熊合算）
-    rows.append(_r("■ 暴れ熊集計（小熊＋大熊）"))
-    rows.append(_r("ティア", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
-    for _tn in ("小熊", "大熊"):
-        def _abare_tier_stats(tn=_tn):
-            _rk: set = set()
-            _hrk: set = set()
-            _tb = 0
-            _tr = 0
-            _dl: dict = {}
-            for rec in records:
-                if str(rec.get("狙い", "")) != tn:
-                    continue
-                _bl = str(rec.get("勝負推奨", ""))
-                if not _bl.startswith("暴れ熊"):
-                    continue
-                combo = str(rec.get("予想買い目", ""))
-                if combo in ("", "（予想なし）", "見送り", "-"):
-                    continue
-                d = str(rec.get("日付", ""))
-                v = str(rec.get("競艇場", ""))
-                rn = str(rec.get("レース", ""))
-                rk = (d, v, rn)
-                _rk.add(rk)
-                if d not in _dl:
-                    _dl[d] = {"bets": 0, "ret": 0, "race_keys": set(), "hit_race_keys": set()}
-                _tb += 100
-                _dl[d]["bets"] += bet
-                _dl[d]["race_keys"].add(rk)
-                if rec.get("的中", "") == "○":
-                    _hrk.add(rk)
-                    _dl[d]["hit_race_keys"].add(rk)
-                    try:
-                        pay = int(str(rec.get("実際の払戻", 0)).replace(",", ""))
-                        _tr += pay
-                        _dl[d]["ret"] += pay
-                    except (ValueError, TypeError):
-                        pass
-            return {"bets": _tb, "ret": _tr, "race_keys": _rk, "hit_race_keys": _hrk, "daily": _dl}
-        s = _abare_tier_stats()
-        rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
-        rows.append(_r(f"暴れ熊/{_tn}", rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
     rows.append(_r())
 
 
