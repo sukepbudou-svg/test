@@ -1101,26 +1101,43 @@ def get_recommendations(
             _df_ok = _valid[(_valid["odds_value"] >  200) & (_valid["odds_value"] <= 350)]
             _df_ka = _valid[(_valid["odds_value"] >  350) & (_valid["odds_value"] <= 1000)]
 
-            # 暴れ熊ラベル: 荒れPT + 追い風5m以上（1段アップグレード）+ 1号艇弱さ
-            # 追い風5m以上は荒れを促進する独立した要素として明示的に条件に含める
+            # 暴れ熊ラベル: PTもMLも使わない2シグナルで判定
+            # 1. ライバル優位性: 最強ライバル艇のET×モーター複合スコア vs 1号艇
+            # 2. 逃げ率の低さ: _calc_nigerate由来（会場・選手・展示ST総合）
 
-            if arare_score >= 7:
+            # ── シグナル1: ライバル優位性 ──
+            _b1_et    = et_ranks_k.get(1, 0.5)
+            _b1_motor = _safe_float(race_row.get("boat1_motor_2rate")) or 0.40
+            _b1_score = _b1_et * 0.55 + _b1_motor * 0.45
+
+            _rivals = []
+            for _bn in range(2, 7):
+                _et    = et_ranks_k.get(_bn, 0.5)
+                _motor = _safe_float(race_row.get(f"boat{_bn}_motor_2rate")) or 0.40
+                _rivals.append(_et * 0.55 + _motor * 0.45)
+            _best_rival = max(_rivals) if _rivals else 0.0
+            _rival_adv  = _best_rival - _b1_score   # 正 = ライバルが上回っている
+
+            # ── シグナル2: 逃げ率の低さ ──
+            try:
+                _nig_val = float(str(nigerate_str).replace("逃げ推定", "").replace("%", "").strip())
+            except Exception:
+                _nig_val = 65.0
+            _nig_factor = max(0.0, (62.0 - _nig_val) / 30.0)   # 62%以上=0, 32%以下=1
+
+            # ── 複合スコア ──
+            _upset_sig = _rival_adv * 0.55 + _nig_factor * 0.45
+
+            print(f"  [暴れ熊診断] ライバル優位={_rival_adv:+.3f} 低逃げ={_nig_factor:.3f}(逃げ率{_nig_val:.0f}%) → 総合={_upset_sig:.3f} (参考PT={arare_score})")
+
+            if _upset_sig >= 0.40:
                 _bet_label = "暴れ熊(強)"
-            elif arare_score >= 6:
-                _bet_label = "暴れ熊(強)" if _tail_ok else "暴れ熊(中)"
-            elif arare_score >= 5:
-                _bet_label = "暴れ熊(中)" if _tail_ok else "暴れ熊(弱)"
-            elif arare_score >= 4 and _tail_ok:
-                # PT=4でも追い風5m以上なら参戦
-                _bet_label = "暴れ熊(弱)"
-            elif boat1_weak_count >= 3:
-                # PTは低いが1号艇が展示ST・モーター・グレードなど3条件以上で弱い
+            elif _upset_sig >= 0.28:
+                _bet_label = "暴れ熊(中)"
+            elif _upset_sig >= 0.18:
                 _bet_label = "暴れ熊(弱)"
             else:
                 _bet_label = "見送り"
-
-            _tail_str = "追い風5m+" if _tail_ok else "-"
-            print(f"  [暴れ熊診断] 荒れPT={arare_score} 追い風={_tail_str} 1号艇弱={boat1_weak_count}条件 → {_bet_label}")
 
             def _add_rec(row, tier):
                 f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
