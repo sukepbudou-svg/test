@@ -1102,10 +1102,10 @@ def get_recommendations(
             _df_ka = _valid[(_valid["odds_value"] >  350) & (_valid["odds_value"] <= 1000)]
 
             # 暴れ熊ラベル: PTもMLも使わない2シグナルで判定
-            # 1. ライバル優位性: 最強ライバル艇のET×モーター複合スコア vs 1号艇
-            # 2. 逃げ率の低さ: _calc_nigerate由来（会場・選手・展示ST総合）
+            # 1. ライバル優位性: 最強ライバル艇のET×モーター複合スコア vs 1号艇（差0.08未満は無効）
+            # 2. 逃げ率の低さ: 50%未満のときのみ有効（それ以上は信号なし）
 
-            # ── シグナル1: ライバル優位性 ──
+            # ── シグナル1: ライバル優位性（有意差0.08以上のみ有効） ──
             _b1_et    = et_ranks_k.get(1, 0.5)
             _b1_motor = _safe_float(race_row.get("boat1_motor_2rate")) or 0.40
             _b1_score = _b1_et * 0.55 + _b1_motor * 0.45
@@ -1116,25 +1116,26 @@ def get_recommendations(
                 _motor = _safe_float(race_row.get(f"boat{_bn}_motor_2rate")) or 0.40
                 _rivals.append(_et * 0.55 + _motor * 0.45)
             _best_rival = max(_rivals) if _rivals else 0.0
-            _rival_adv  = _best_rival - _b1_score   # 正 = ライバルが上回っている
+            _rival_adv  = max(0.0, (_best_rival - _b1_score) - 0.08)  # 差0.08未満は切り捨て
 
-            # ── シグナル2: 逃げ率の低さ ──
+            # ── シグナル2: 逃げ率の低さ（50%未満のみ有効） ──
             try:
                 _nig_val = float(str(nigerate_str).replace("逃げ推定", "").replace("%", "").strip())
             except Exception:
                 _nig_val = 65.0
-            _nig_factor = max(0.0, (62.0 - _nig_val) / 30.0)   # 62%以上=0, 32%以下=1
+            _nig_factor = max(0.0, (50.0 - _nig_val) / 20.0)   # 50%以上=0, 30%以下=1
 
             # ── 複合スコア ──
             _upset_sig = _rival_adv * 0.55 + _nig_factor * 0.45
 
-            print(f"  [暴れ熊診断] ライバル優位={_rival_adv:+.3f} 低逃げ={_nig_factor:.3f}(逃げ率{_nig_val:.0f}%) → 総合={_upset_sig:.3f} (参考PT={arare_score})")
+            _raw_adv = _best_rival - _b1_score
+            print(f"  [暴れ熊診断] ライバル優位={_raw_adv:+.3f}(有効={_rival_adv:.3f}) 低逃げ={_nig_factor:.3f}(逃げ率{_nig_val:.0f}%) → 総合={_upset_sig:.3f} (参考PT={arare_score})")
 
-            if _upset_sig >= 0.40:
+            if _upset_sig >= 0.32:
                 _bet_label = "暴れ熊(強)"
-            elif _upset_sig >= 0.28:
+            elif _upset_sig >= 0.20:
                 _bet_label = "暴れ熊(中)"
-            elif _upset_sig >= 0.18:
+            elif _upset_sig >= 0.11:
                 _bet_label = "暴れ熊(弱)"
             else:
                 _bet_label = "見送り"
