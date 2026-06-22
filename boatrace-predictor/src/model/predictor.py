@@ -1101,14 +1101,17 @@ def get_recommendations(
             _df_ok = _valid[(_valid["odds_value"] >  200) & (_valid["odds_value"] <= 350)]
             _df_ka = _valid[(_valid["odds_value"] >  350) & (_valid["odds_value"] <= 1000)]
 
-            # 暴れ熊ラベル: 荒れPT（ルールベース）+ 1号艇弱さで判定
-            # MLベースシグナルはT=2.5で全レース均一化するため使用しない
+            # 暴れ熊ラベル: 荒れPT + 追い風5m以上（1段アップグレード）+ 1号艇弱さ
+            # 追い風5m以上は荒れを促進する独立した要素として明示的に条件に含める
 
             if arare_score >= 7:
                 _bet_label = "暴れ熊(強)"
             elif arare_score >= 6:
-                _bet_label = "暴れ熊(中)"
+                _bet_label = "暴れ熊(強)" if _tail_ok else "暴れ熊(中)"
             elif arare_score >= 5:
+                _bet_label = "暴れ熊(中)" if _tail_ok else "暴れ熊(弱)"
+            elif arare_score >= 4 and _tail_ok:
+                # PT=4でも追い風5m以上なら参戦
                 _bet_label = "暴れ熊(弱)"
             elif boat1_weak_count >= 3:
                 # PTは低いが1号艇が展示ST・モーター・グレードなど3条件以上で弱い
@@ -1116,7 +1119,8 @@ def get_recommendations(
             else:
                 _bet_label = "見送り"
 
-            print(f"  [暴れ熊診断] 荒れPT={arare_score} 1号艇弱={boat1_weak_count}条件 → {_bet_label}")
+            _tail_str = "追い風5m+" if _tail_ok else "-"
+            print(f"  [暴れ熊診断] 荒れPT={arare_score} 追い風={_tail_str} 1号艇弱={boat1_weak_count}条件 → {_bet_label}")
 
             def _add_rec(row, tier):
                 f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
