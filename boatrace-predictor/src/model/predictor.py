@@ -1120,10 +1120,11 @@ def get_recommendations(
 
             if _cond_count >= 3:
                 _bet_label = "暴れ熊(強)"
-            elif _cond_count >= 2:
+            elif _cond_wind and _cond_count >= 2:
+                # 追い風5m + もう1条件（逃げ率低 or 1号艇弱）
                 _bet_label = "暴れ熊(中)"
-            elif _cond_count == 1 and (_cond_wind or _cond_nigate):
-                # 1号艇弱さだけでは弱ラベルなし; 天候か逃げ率の独立要因が必要
+            elif _cond_nigate and _cond_b1weak:
+                # 逃げ率53%未満 + 1号艇弱2条件（追い風なし）
                 _bet_label = "暴れ熊(弱)"
             else:
                 _bet_label = "見送り"
