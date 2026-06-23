@@ -1125,18 +1125,26 @@ def get_recommendations(
                 # 追い風5m + もう1条件（逃げ率低 or 1号艇弱）
                 _bet_label = "暴れ熊(中)"
             elif _cond_nigate and _cond_b1weak:
-                # 逃げ率53%未満 + 1号艇弱2条件（追い風なし）
+                # 逃げ率50%以下 + 1号艇弱2条件（追い風なし）
                 _bet_label = "暴れ熊(弱)"
             else:
                 _bet_label = "見送り"
 
-            def _add_rec(row, tier):
+            # 白熊チャンスラベル: 暴れ熊見送り × 荒れPT3〜5 × 逃げ率55%以上
+            if _bet_label == "見送り" and 3 <= arare_score <= 5 and _nig_val >= 55:
+                _shirokuma_label = "白熊チャンス"
+            else:
+                _shirokuma_label = "見送り"
+            print(f"  [白熊チャンス診断] 荒れPT={arare_score} 逃げ率={_nig_val:.0f}% 暴れ熊={_bet_label} → {_shirokuma_label}")
+
+            def _add_rec(row, tier, label_override=None):
                 f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
                 combo    = f"{f}-{s}-{t}"
                 ev       = float(row["ev"])
                 odds_val = float(row["odds_value"])
                 src      = str(row.get("odds_source", ""))
                 odds_str = f"{odds_val:.0f}倍" if src == "live" else f"{odds_val:.0f}倍(履歴)"
+                bl       = label_override if label_override is not None else _bet_label
                 print(f"  [{tier}] {venue_name_log} {race_no}R {combo} {odds_str} EV:{ev:.2f}")
                 all_recommendations.append({
                     "date":          race_row.get("date", ""),
@@ -1150,7 +1158,7 @@ def get_recommendations(
                     "odds_source":   src,
                     "nigerate_str":  nigerate_str,
                     "tier":          tier,
-                    "bet_label":     _bet_label,
+                    "bet_label":     bl,
                     "edge":          f"{ev:.2f}",
                     "arare_score":   arare_score,
                     "arare_reasons": " / ".join(arare_reasons),
@@ -1158,7 +1166,7 @@ def get_recommendations(
                 })
 
             for _, _r in _df_mid.nlargest(3, "ev").iterrows():
-                _add_rec(_r, "白熊")
+                _add_rec(_r, "白熊", label_override=_shirokuma_label)
 
             for _, _r in _df_ko.nlargest(3, "ev").iterrows():
                 _add_rec(_r, "小熊")

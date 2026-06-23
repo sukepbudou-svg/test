@@ -374,8 +374,10 @@ def append_prediction_row(
         is_shirokuma = row.get("tier", "") == "白熊"
         is_skip = not is_shirokuma and row.get("bet_label", "") in ("見送り", "")
 
-        if is_shirokuma:
-            row_bg = {"red": 0.82, "green": 0.93, "blue": 1.0}   # 水色（白熊）
+        if is_shirokuma and row.get("bet_label", "") == "白熊チャンス":
+            row_bg = {"red": 0.60, "green": 0.82, "blue": 1.0}   # 濃い水色（白熊チャンス）
+        elif is_shirokuma:
+            row_bg = {"red": 0.82, "green": 0.93, "blue": 1.0}   # 薄い水色（白熊通常）
         elif is_skip:
             row_bg = {"red": 0.91, "green": 0.91, "blue": 0.91}
         else:
@@ -396,6 +398,8 @@ def append_prediction_row(
                 _ab_bg = {"red": 0.85, "green": 0.33, "blue": 0.10}  # オレンジ赤
             elif bet_label == "暴れ熊(弱)":
                 _ab_bg = {"red": 0.90, "green": 0.55, "blue": 0.30}  # 薄オレンジ
+            elif bet_label == "白熊チャンス":
+                _ab_bg = {"red": 0.07, "green": 0.43, "blue": 0.80}  # 青（白熊チャンス）
             else:
                 _ab_bg = None
             if _ab_bg:
@@ -846,8 +850,9 @@ def update_summary_sheet(
         lst = list(args)
         return lst + [""] * (NUM_COLS - len(lst))
 
-    def _pt_tier_stats(tier_name, pt_filter=None, label_filter=None, include_all_labels=False):
-        """tier_name: 狙い列. label_filter: None=全, '弱'/'中'/'強'=暴れ熊ラベル絞り.
+    def _pt_tier_stats(tier_name, pt_filter=None, label_filter=None, include_all_labels=False, exact_label=None):
+        """tier_name: 狙い列. label_filter: '弱'/'中'/'強'=暴れ熊ラベル絞り.
+        exact_label: ラベル完全一致絞り（白熊チャンス等）.
         include_all_labels=True: 見送り含む全ラベルを集計（白熊用）"""
         race_keys: set = set()
         hit_race_keys: set = set()
@@ -862,9 +867,12 @@ def update_summary_sheet(
             if combo in ("", "（予想なし）", "見送り", "-"):
                 continue
             _bl = str(rec.get("勝負推奨", ""))
-            if not include_all_labels and _bl == "見送り":
+            if exact_label is not None:
+                if _bl != exact_label:
+                    continue
+            elif not include_all_labels and _bl == "見送り":
                 continue
-            if label_filter is not None:
+            elif label_filter is not None:
                 if _bl != f"暴れ熊({label_filter})":
                     continue
             d  = str(rec.get("日付", ""))
@@ -986,10 +994,13 @@ def update_summary_sheet(
     # ③ ティア別グループ比較
     rows.append(_r("■ ティア別グループ比較"))
     rows.append(_r("グループ", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
-    # 白熊は全レース出力のためラベル問わず全集計
+    # 白熊: チャンス絞り込み + 全体の2行
+    s_shiro_c = _pt_tier_stats("白熊", exact_label="白熊チャンス")
+    rc, hc, hitr, ivl, ret, roi, pft = _fmt(s_shiro_c)
+    rows.append(_r("白熊 チャンス", rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
     s_shiro = _pt_tier_stats("白熊", include_all_labels=True)
     rc, hc, hitr, ivl, ret, roi, pft = _fmt(s_shiro)
-    rows.append(_r("白熊 全", rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
+    rows.append(_r("白熊 全体", rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
     for grp, tn, lf in [
         ("小熊 弱", "小熊", "弱"), ("小熊 中", "小熊", "中"), ("小熊 強", "小熊", "強"),
         ("大熊 弱", "大熊", "弱"), ("大熊 中", "大熊", "中"), ("大熊 強", "大熊", "強"),
@@ -1001,8 +1012,9 @@ def update_summary_sheet(
     rows.append(_r())
     rows.append(_r())
 
-    # ④ 白熊セクション（全レース出力・bet_label問わず全集計）
-    rows.append(_r("■ 白熊セクション（30〜80倍・全レース出力）"))
+    # ④ 白熊セクション
+    rows.append(_r("■ 白熊セクション（30〜80倍）"))
+    _write_pt_section("白熊 チャンス", _pt_tier_stats("白熊", exact_label="白熊チャンス"))
     _write_pt_section("白熊 全体", _pt_tier_stats("白熊", include_all_labels=True))
     rows.append(_r())
 
