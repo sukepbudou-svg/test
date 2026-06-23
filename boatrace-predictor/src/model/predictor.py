@@ -1145,7 +1145,7 @@ def get_recommendations(
                     "prob":          f"{float(row['prob']):.4f}",
                     "odds":          odds_str,
                     "expected_roi":  f"{ev:.2f}",
-                    "confidence":    f"{tier}(EV:{ev:.2f}/{odds_val:.0f}倍)",
+                    "confidence":    tier,
                     "odds_source":   src,
                     "nigerate_str":  nigerate_str,
                     "tier":          tier,
