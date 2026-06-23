@@ -333,7 +333,7 @@ def append_prediction_row(
         _write_venue_ranking(spreadsheet, sheet)
 
     cols = ["date", "venue_name", "race_no", "confidence", "combination",
-            "odds", "odds_source"]
+            "odds", "nigerate_str"]
     values = [row.get(c, "-") for c in cols]
     values[1] = _marked_venue(str(values[1]))
     # confidence がない場合は tier にフォールバック
@@ -407,8 +407,8 @@ def append_prediction_row(
                 }})
 
 
-        # イン逃げ率（G列=index6）: 65%以上で薄赤、50%未満で薄青
-        nigerate_src = row.get("odds_source", "")
+        # イン逃げ率（G列=index6）: 57%超で薄赤、50%未満で薄青
+        nigerate_src = row.get("nigerate_str", "")
         m_nig = re.search(r'(\d+)%', str(nigerate_src))
         if m_nig:
             nig_val = int(m_nig.group(1))
