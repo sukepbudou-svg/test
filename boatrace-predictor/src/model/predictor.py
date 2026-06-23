@@ -1097,9 +1097,10 @@ def get_recommendations(
 
             _valid["ev"] = _valid.apply(_combo_ev, axis=1)
 
-            _df_ko = _valid[(_valid["odds_value"] >= 100) & (_valid["odds_value"] <= 180)]
-            _df_ok = _valid[(_valid["odds_value"] >  200) & (_valid["odds_value"] <= 350)]
-            _df_ka = _valid[(_valid["odds_value"] >  350) & (_valid["odds_value"] <= 1000)]
+            _df_mid = _valid[(_valid["odds_value"] >= 30)  & (_valid["odds_value"] <= 80)]   # 白熊
+            _df_ko  = _valid[(_valid["odds_value"] >= 100) & (_valid["odds_value"] <= 180)]  # 小熊
+            _df_ok  = _valid[(_valid["odds_value"] >  200) & (_valid["odds_value"] <= 350)]  # 大熊
+            _df_ka  = _valid[(_valid["odds_value"] >  350) & (_valid["odds_value"] <= 1000)] # 神熊
 
             # 暴れ熊ラベル: 3つの独立バイナリ条件の組み合わせ
             # 連続スコアは「必ず正になる」問題があるため廃止
@@ -1155,6 +1156,9 @@ def get_recommendations(
                     "arare_reasons": " / ".join(arare_reasons),
                     "boat1_risk":    _calc_boat1_risk(race_row),
                 })
+
+            for _, _r in _df_mid.nlargest(3, "ev").iterrows():
+                _add_rec(_r, "白熊")
 
             for _, _r in _df_ko.nlargest(3, "ev").iterrows():
                 _add_rec(_r, "小熊")

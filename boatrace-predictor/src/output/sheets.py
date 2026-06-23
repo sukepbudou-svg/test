@@ -371,9 +371,12 @@ def append_prediction_row(
         return  # 色付けは諦めるがデータは書き込み済み
     try:
         sid = sheet.id
-        is_skip   = row.get("bet_label", "") in ("見送り", "")
+        is_shirokuma = row.get("tier", "") == "白熊"
+        is_skip = not is_shirokuma and row.get("bet_label", "") in ("見送り", "")
 
-        if is_skip:
+        if is_shirokuma:
+            row_bg = {"red": 0.82, "green": 0.93, "blue": 1.0}   # 水色（白熊）
+        elif is_skip:
             row_bg = {"red": 0.91, "green": 0.91, "blue": 0.91}
         else:
             row_bg = _VENUE_BG_COLORS.get(str(row.get("venue_name", "")), _DEFAULT_BG)
@@ -584,7 +587,7 @@ def update_result_row(
         combination = pred.get("買い目（3連単）", "")
         _tier_raw = str(pred.get("狙い", "-"))
         # 狙い列は "小熊(外軸:3号/差し)[ET○ST○]" 形式の場合があるためベース名を抽出
-        tier = next((t for t in ("小熊", "大熊", "神熊") if _tier_raw.startswith(t)), _tier_raw)
+        tier = next((t for t in ("白熊", "小熊", "大熊", "神熊") if _tier_raw.startswith(t)), _tier_raw)
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
         nigerate_val = pred.get("イン逃げ率", pred.get("オッズ", "-"))  # 日付シートからイン逃げ率取得
@@ -843,8 +846,9 @@ def update_summary_sheet(
         lst = list(args)
         return lst + [""] * (NUM_COLS - len(lst))
 
-    def _pt_tier_stats(tier_name, pt_filter=None, label_filter=None):
-        """tier_name: 狙い列. label_filter: None=全, '弱'/'中'/'強'=暴れ熊ラベル絞り"""
+    def _pt_tier_stats(tier_name, pt_filter=None, label_filter=None, include_all_labels=False):
+        """tier_name: 狙い列. label_filter: None=全, '弱'/'中'/'強'=暴れ熊ラベル絞り.
+        include_all_labels=True: 見送り含む全ラベルを集計（白熊用）"""
         race_keys: set = set()
         hit_race_keys: set = set()
         total_bets = 0
@@ -858,7 +862,7 @@ def update_summary_sheet(
             if combo in ("", "（予想なし）", "見送り", "-"):
                 continue
             _bl = str(rec.get("勝負推奨", ""))
-            if _bl == "見送り":
+            if not include_all_labels and _bl == "見送り":
                 continue
             if label_filter is not None:
                 if _bl != f"暴れ熊({label_filter})":
@@ -982,6 +986,10 @@ def update_summary_sheet(
     # ③ ティア別グループ比較
     rows.append(_r("■ ティア別グループ比較"))
     rows.append(_r("グループ", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
+    # 白熊は全レース出力のためラベル問わず全集計
+    s_shiro = _pt_tier_stats("白熊", include_all_labels=True)
+    rc, hc, hitr, ivl, ret, roi, pft = _fmt(s_shiro)
+    rows.append(_r("白熊 全", rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
     for grp, tn, lf in [
         ("小熊 弱", "小熊", "弱"), ("小熊 中", "小熊", "中"), ("小熊 強", "小熊", "強"),
         ("大熊 弱", "大熊", "弱"), ("大熊 中", "大熊", "中"), ("大熊 強", "大熊", "強"),
@@ -993,19 +1001,24 @@ def update_summary_sheet(
     rows.append(_r())
     rows.append(_r())
 
-    # ④ 小熊セクション
+    # ④ 白熊セクション（全レース出力・bet_label問わず全集計）
+    rows.append(_r("■ 白熊セクション（30〜80倍・全レース出力）"))
+    _write_pt_section("白熊 全体", _pt_tier_stats("白熊", include_all_labels=True))
+    rows.append(_r())
+
+    # ⑤ 小熊セクション
     rows.append(_r("■ 小熊セクション（ラベル別）"))
     for lbl in ["弱", "中", "強"]:
         _write_pt_section(f"小熊 {lbl}", _pt_tier_stats("小熊", label_filter=lbl))
     rows.append(_r())
 
-    # ⑤ 大熊セクション
+    # ⑥ 大熊セクション
     rows.append(_r("■ 大熊セクション（ラベル別）"))
     for lbl in ["弱", "中", "強"]:
         _write_pt_section(f"大熊 {lbl}", _pt_tier_stats("大熊", label_filter=lbl))
     rows.append(_r())
 
-    # ⑥ 神熊セクション
+    # ⑦ 神熊セクション
     rows.append(_r("■ 神熊セクション（ラベル別）"))
     for lbl in ["弱", "中", "強"]:
         _write_pt_section(f"神熊 {lbl}", _pt_tier_stats("神熊", label_filter=lbl))
@@ -1058,12 +1071,15 @@ def update_summary_sheet(
     except Exception as e:
         print(f"[WARN] 条件付き書式設定エラー: {e}")
 
-    ko_s   = _pt_tier_stats("小熊")
-    ok_s   = _pt_tier_stats("大熊")
-    ko_roi = f"{ko_s['ret']/ko_s['bets']*100:.1f}%" if ko_s['bets'] > 0 else "0.0%"
-    ok_roi = f"{ok_s['ret']/ok_s['bets']*100:.1f}%" if ok_s['bets'] > 0 else "0.0%"
+    shiro_s = _pt_tier_stats("白熊", include_all_labels=True)
+    ko_s    = _pt_tier_stats("小熊")
+    ok_s    = _pt_tier_stats("大熊")
+    shiro_roi = f"{shiro_s['ret']/shiro_s['bets']*100:.1f}%" if shiro_s['bets'] > 0 else "0.0%"
+    ko_roi    = f"{ko_s['ret']/ko_s['bets']*100:.1f}%" if ko_s['bets'] > 0 else "0.0%"
+    ok_roi    = f"{ok_s['ret']/ok_s['bets']*100:.1f}%" if ok_s['bets'] > 0 else "0.0%"
     print(
         f"[OK] {SUMMARY_SHEET}更新: "
+        f"白熊 {len(shiro_s['race_keys'])}R ROI={shiro_roi} / "
         f"小熊 {len(ko_s['race_keys'])}R ROI={ko_roi} / "
         f"大熊 {len(ok_s['race_keys'])}R ROI={ok_roi}"
     )
