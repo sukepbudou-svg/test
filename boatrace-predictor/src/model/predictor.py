@@ -1110,7 +1110,7 @@ def get_recommendations(
                 _nig_val = 65.0
 
             _cond_wind   = _tail_ok               # ①追い風5m以上
-            _cond_nigate = (_nig_val < 53.0)      # ②逃げ率53%未満
+            _cond_nigate = (_nig_val <= 50.0)     # ②逃げ率50%以下
             _cond_b1weak = (boat1_weak_count >= 2) # ③1号艇が2条件以上で客観的に弱い
 
             _cond_count = sum([_cond_wind, _cond_nigate, _cond_b1weak])
