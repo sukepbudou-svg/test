@@ -1105,7 +1105,7 @@ def get_recommendations(
             # 連続スコアは「必ず正になる」問題があるため廃止
 
             try:
-                _nig_val = float(str(nigerate_str).replace("逃げ推定", "").replace("%", "").strip())
+                _nig_val = float(str(nigerate_str).replace("逃げ推定", "").replace("逃げ", "").replace("%", "").strip())
             except Exception:
                 _nig_val = 65.0
 
