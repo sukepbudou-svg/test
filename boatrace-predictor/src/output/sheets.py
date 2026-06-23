@@ -371,13 +371,11 @@ def append_prediction_row(
         return  # 色付けは諦めるがデータは書き込み済み
     try:
         sid = sheet.id
-        is_shirokuma = row.get("tier", "") == "白熊"
-        is_skip = not is_shirokuma and row.get("bet_label", "") in ("見送り", "")
+        is_shirokuma_chance = (row.get("tier", "") == "白熊" and row.get("bet_label", "") == "白熊チャンス")
+        is_skip = row.get("bet_label", "") in ("見送り", "")
 
-        if is_shirokuma and row.get("bet_label", "") == "白熊チャンス":
+        if is_shirokuma_chance:
             row_bg = {"red": 0.60, "green": 0.82, "blue": 1.0}   # 濃い水色（白熊チャンス）
-        elif is_shirokuma:
-            row_bg = {"red": 0.82, "green": 0.93, "blue": 1.0}   # 薄い水色（白熊通常）
         elif is_skip:
             row_bg = {"red": 0.91, "green": 0.91, "blue": 0.91}
         else:
