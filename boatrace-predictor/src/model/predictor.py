@@ -1097,7 +1097,7 @@ def get_recommendations(
 
             _valid["ev"] = _valid.apply(_combo_ev, axis=1)
 
-            _df_mid = _valid[(_valid["odds_value"] >= 30)  & (_valid["odds_value"] <= 80)]   # 白熊
+            _df_mid = _valid[(_valid["odds_value"] >= 30)  & (_valid["odds_value"] <= 60)]   # 白熊
             _df_ko  = _valid[(_valid["odds_value"] >= 100) & (_valid["odds_value"] <= 180)]  # 小熊
             _df_ok  = _valid[(_valid["odds_value"] >  200) & (_valid["odds_value"] <= 350)]  # 大熊
             _df_ka  = _valid[(_valid["odds_value"] >  350) & (_valid["odds_value"] <= 1000)] # 神熊
