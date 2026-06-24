@@ -1130,13 +1130,6 @@ def get_recommendations(
             else:
                 _bet_label = "見送り"
 
-            # 白熊チャンスラベル: 暴れ熊見送り × 荒れPT3〜5 × 逃げ率55%以上
-            if _bet_label == "見送り" and 3 <= arare_score <= 5 and _nig_val >= 55:
-                _shirokuma_label = "白熊チャンス"
-            else:
-                _shirokuma_label = "見送り"
-            print(f"  [白熊チャンス診断] 荒れPT={arare_score} 逃げ率={_nig_val:.0f}% 暴れ熊={_bet_label} → {_shirokuma_label}")
-
             # 裏熊チャンスラベル: 暴れ熊見送り × 荒れPT3以下 × 逃げ率60%以上
             if _bet_label == "見送り" and arare_score <= 3 and _nig_val >= 60:
                 _urakuma_label = "裏熊チャンス"
@@ -1171,9 +1164,6 @@ def get_recommendations(
                     "arare_reasons": " / ".join(arare_reasons),
                     "boat1_risk":    _calc_boat1_risk(race_row),
                 })
-
-            for _, _r in _df_mid.nlargest(3, "ev").iterrows():
-                _add_rec(_r, "白熊", label_override=_shirokuma_label)
 
             # 裏熊: 1号艇1着固定の本命2点の2着・3着を入れ替え
             _df_b1 = _valid[_valid["boat1"] == 1].nlargest(2, "prob")
