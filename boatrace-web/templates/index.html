@@ -40,7 +40,6 @@
   header span { color: var(--muted); font-size: 12px; }
   .container { max-width: 1200px; margin: 0 auto; padding: 20px 16px; }
 
-  /* 条件バー */
   .conditions {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -54,7 +53,7 @@
   }
   .cond-group { display: flex; flex-direction: column; gap: 4px; }
   .cond-group label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
-  select, input[type=text], input[type=number] {
+  select, input[type=text], input[type=number], input[type=date] {
     background: var(--surface2);
     border: 1px solid var(--border);
     border-radius: 5px;
@@ -67,7 +66,6 @@
   select:focus, input:focus { border-color: var(--accent); }
   select { cursor: pointer; }
 
-  /* 貼付エリア */
   .paste-section {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -103,7 +101,6 @@
   }
   textarea.paste-area.open { display: block; }
 
-  /* ボートグリッド */
   .boats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -157,13 +154,8 @@
   .badge-6 { background: #adb5bd; color: #111; }
   .field-row { display: flex; flex-direction: column; margin-bottom: 6px; }
   .field-row label { font-size: 10px; color: var(--muted); margin-bottom: 2px; }
-  .field-row input, .field-row select {
-    width: 100%;
-    padding: 5px 8px;
-    font-size: 12px;
-  }
+  .field-row input, .field-row select { width: 100%; padding: 5px 8px; font-size: 12px; }
 
-  /* 予想結果 */
   .result-section {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -186,11 +178,7 @@
   .result-box.honmei .label { color: var(--honmei); }
   .result-box.taikou .label { color: var(--taikou); }
   .result-box.ana .label { color: var(--ana); }
-  .result-box .combo {
-    font-size: 24px;
-    font-weight: 900;
-    letter-spacing: 2px;
-  }
+  .result-box .combo { font-size: 24px; font-weight: 900; letter-spacing: 2px; }
   .result-box.honmei .combo { color: var(--honmei); }
   .result-box.taikou .combo { color: var(--taikou); }
   .result-box.ana .combo { color: var(--ana); }
@@ -218,7 +206,6 @@
   .p-makuri { background: #1a3a2e; color: #06d6a0; }
   .p-makuri-sashi { background: #3a2a1a; color: #ffd166; }
 
-  /* 予想ボタン */
   .btn-predict {
     width: 100%;
     padding: 14px;
@@ -235,7 +222,6 @@
   }
   .btn-predict:hover { opacity: .85; }
   .btn-predict:active { opacity: .7; }
-
   .loading { text-align: center; color: var(--muted); padding: 20px; display: none; }
 </style>
 </head>
@@ -269,16 +255,12 @@
       </select>
     </div>
     <div class="cond-group">
-      <label>風向き</label>
-      <select id="wind-dir">
-        {% for w in wind_directions %}
+      <label>風</label>
+      <select id="wind">
+        {% for w in wind_options %}
         <option value="{{ w }}">{{ w }}</option>
         {% endfor %}
       </select>
-    </div>
-    <div class="cond-group">
-      <label>風速 (m)</label>
-      <input type="number" id="wind-speed" value="0" min="0" max="20" step="1" style="width:70px">
     </div>
   </div>
 
@@ -297,14 +279,11 @@
   </div>
 
   <!-- ボート入力 -->
-  <div class="boats-grid" id="boats-grid">
-    <!-- JS で生成 -->
-  </div>
+  <div class="boats-grid" id="boats-grid"></div>
 
   <!-- 予想ボタン -->
   <button class="btn-predict" onclick="runPredict()">🏁 予想する</button>
 
-  <!-- ローディング -->
   <div class="loading" id="loading">予想計算中...</div>
 
   <!-- 結果 -->
@@ -343,10 +322,8 @@ const FIELDS = [
   { key: 'weight',       label: '体重 (kg)',  type: 'number', step:'0.1', placeholder:'52.0' },
 ];
 
-// 今日の日付をセット
 document.getElementById('race-date').value = new Date().toISOString().slice(0, 10);
 
-// ボートカード生成
 const grid = document.getElementById('boats-grid');
 for (let i = 1; i <= 6; i++) {
   const card = document.createElement('div');
@@ -361,7 +338,6 @@ for (let i = 1; i <= 6; i++) {
       f.step ? `step="${f.step}"` : '',
       f.placeholder ? `placeholder="${f.placeholder}"` : '',
     ].filter(Boolean).join(' ');
-    // コースのデフォルト値 = 号艇番号
     const defaultVal = f.key === 'course' ? i : '';
     html += `<div class="field-row">
       <label>${f.label}</label>
@@ -372,13 +348,12 @@ for (let i = 1; i <= 6; i++) {
   grid.appendChild(card);
 }
 
-// 貼付エリア
 let currentPasteType = null;
 const pasteTypeLabels = {
-  'avg-st': '平均STデータを貼り付け（例: 1号艇 0.18）',
+  'avg-st': '平均STデータを貼り付け（例: 0.18 0.20 ...）',
   'player': '選手成績データを貼り付け',
   'motor': 'モーターデータを貼り付け',
-  'exhibit': '展示タイムを貼り付け（例: 1着 6.78）',
+  'exhibit': '展示タイムを貼り付け（例: 6.78 6.82 ...）',
   'odds': 'オッズデータを貼り付け',
 };
 function openPaste(type) {
@@ -398,12 +373,10 @@ function openPaste(type) {
   area.focus();
 }
 
-// 貼付データの自動解析（展示タイム・平均ST）
 document.getElementById('paste-area').addEventListener('input', function() {
   const text = this.value;
   if (!currentPasteType) return;
   if (currentPasteType === 'exhibit') {
-    // 「6.78」のような数値を行順に1〜6号艇へ
     const nums = text.match(/\d\.\d{2}/g);
     if (nums) {
       for (let i = 0; i < Math.min(nums.length, 6); i++) {
@@ -420,7 +393,6 @@ document.getElementById('paste-area').addEventListener('input', function() {
   }
 });
 
-// 予想実行
 async function runPredict() {
   const boats = [];
   for (let i = 1; i <= 6; i++) {
@@ -447,7 +419,6 @@ async function runPredict() {
     document.getElementById('r-taikou').textContent = data.taikou || '-';
     document.getElementById('r-ana').textContent = data.ana || '-';
 
-    // パターン一覧
     const pl = document.getElementById('patterns-list');
     if (data.patterns && data.patterns.length) {
       pl.innerHTML = '<h3>展開パターン一覧</h3>';
