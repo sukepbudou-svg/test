@@ -533,6 +533,31 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
   background: linear-gradient(90deg, transparent, var(--border), transparent);
   margin: 10px 0;
 }
+
+/* ===== SLIT ===== */
+.slit-toggle { display:flex; gap:6px; margin-bottom:10px; }
+.slit-toggle button {
+  flex:1; padding:4px 0; font-size:11px; border-radius:6px; border:1px solid var(--border);
+  background:var(--surface2); color:var(--text-muted); cursor:pointer; transition:all .2s;
+}
+.slit-toggle button.active {
+  background:var(--accent3); color:#000; border-color:var(--accent3); font-weight:700;
+}
+.slit-row {
+  display:flex; align-items:center; gap:6px; margin-bottom:5px; font-size:12px;
+}
+.slit-label { width:52px; color:var(--text-muted); flex-shrink:0; }
+.slit-track { flex:1; position:relative; height:18px; background:var(--surface2); border-radius:4px; overflow:hidden; }
+.slit-bar {
+  position:absolute; right:0; top:0; height:100%; border-radius:4px 0 0 4px;
+  background:linear-gradient(90deg, var(--accent3), #0099bb);
+  transition:width .4s ease; display:flex; align-items:center; justify-content:flex-end; padding-right:4px;
+  font-size:10px; font-weight:700; color:#000;
+}
+.slit-bar.top1 { background:linear-gradient(90deg,#ffd740,#ff9800); }
+.slit-bar.st-na { background:var(--surface3); }
+.slit-st-val { width:38px; text-align:right; color:var(--text-muted); font-size:11px; flex-shrink:0; }
+.slit-note { font-size:10px; color:var(--text-muted); margin-top:6px; text-align:right; }
 </style>
 </head>
 <body>
@@ -664,6 +689,18 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
     <div class="card" id="venue-info-card" style="display:none;">
       <h2>会場情報</h2>
       <div id="venue-info-body"></div>
+    </div>
+
+    <!-- スリット隊形 -->
+    <div class="card" id="slit-card">
+      <h2>スリット隊形</h2>
+      <div class="slit-toggle">
+        <button id="slit-btn-avg" class="active" onclick="switchSlit('avg')">平均ST</button>
+        <button id="slit-btn-ex"  onclick="switchSlit('ex')">展示ST（当日）</button>
+      </div>
+      <div id="slit-body">
+        <div style="color:var(--text-muted);font-size:11px;text-align:center;">STを入力すると隊形が表示されます</div>
+      </div>
     </div>
 
     <div class="card">
@@ -808,10 +845,11 @@ function buildBoatCards() {
         <div class="input-row"><label>チルト</label><input type="number" id="b${i}_tilt" step="0.5" value="0"></div>
         <div class="input-row" style="flex-direction:row;align-items:flex-end;gap:4px;">
           <div style="flex:1;display:flex;flex-direction:column;">
-            <label>平均ST</label><input type="number" id="b${i}_avg_st" step="0.001" placeholder="0.150">
+            <label>平均ST</label><input type="number" id="b${i}_avg_st" step="0.001" placeholder="0.150" oninput="updateSlit()">
           </div>
           <button class="btn-f" id="b${i}_fbtn" onclick="toggleF(${i})">F持ち</button>
         </div>
+        <div class="input-row"><label>展示ST</label><input type="number" id="b${i}_exhibit_st" step="0.001" placeholder="0.150" oninput="updateSlit()"></div>
         <div class="input-row"><label>体重</label><input type="number" id="b${i}_weight" placeholder="52"></div>
         <div class="f-st-row" id="b${i}_frow">
           <label>F持ち時ST</label>
@@ -1150,6 +1188,67 @@ async function runPredict() {
   renderResult(data);
 }
 
+// ======== スリット隊形 ========
+let slitMode = 'avg'; // 'avg' or 'ex'
+
+function switchSlit(mode) {
+  slitMode = mode;
+  document.getElementById('slit-btn-avg').classList.toggle('active', mode === 'avg');
+  document.getElementById('slit-btn-ex').classList.toggle('active', mode === 'ex');
+  updateSlit();
+}
+
+function updateSlit() {
+  const body = document.getElementById('slit-body');
+  const rows = [];
+  for (let i = 1; i <= 6; i++) {
+    const course = parseInt(document.getElementById(`b${i}_course`)?.value) || i;
+    const avgSt  = parseFloat(document.getElementById(`b${i}_avg_st`)?.value);
+    const exSt   = parseFloat(document.getElementById(`b${i}_exhibit_st`)?.value);
+    const st = slitMode === 'ex' ? exSt : avgSt;
+    rows.push({ boat: i, course, st: isNaN(st) ? null : st });
+  }
+
+  const validSts = rows.filter(r => r.st !== null).map(r => r.st);
+  if (validSts.length === 0) {
+    body.innerHTML = '<div style="color:var(--text-muted);font-size:11px;text-align:center;">STを入力すると隊形が表示されます</div>';
+    return;
+  }
+
+  const minSt = Math.min(...validSts);
+  const maxSt = Math.max(...validSts);
+  const range = maxSt - minSt || 0.001;
+
+  // 最もSTが低い(前にいる)艇のインデックス
+  const topIdx = rows.reduce((best, r, i) => (r.st !== null && (best === -1 || r.st < rows[best].st)) ? i : best, -1);
+
+  let html = '';
+  rows.forEach((r, idx) => {
+    const label = `${r.boat}号艇<br><span style="font-size:10px;color:var(--text-muted)">${r.course}コース</span>`;
+    if (r.st === null) {
+      html += `<div class="slit-row">
+        <div class="slit-label">${label}</div>
+        <div class="slit-track"><div class="slit-bar st-na" style="width:15%"></div></div>
+        <div class="slit-st-val">-</div>
+      </div>`;
+    } else {
+      const pct = Math.round(((maxSt - r.st) / range) * 75 + 15);
+      const isTop = idx === topIdx;
+      html += `<div class="slit-row">
+        <div class="slit-label">${label}</div>
+        <div class="slit-track">
+          <div class="slit-bar${isTop ? ' top1' : ''}" style="width:${pct}%">${isTop ? '▶' : ''}</div>
+        </div>
+        <div class="slit-st-val">${r.st.toFixed(3)}</div>
+      </div>`;
+    }
+  });
+
+  const modeLabel = slitMode === 'ex' ? '展示ST（当日）' : '平均ST（過去実績）';
+  html += `<div class="slit-note">※ ${modeLabel}ベース　バーが長いほど前にいる</div>`;
+  body.innerHTML = html;
+}
+
 function renderResult(data) {
   const area = document.getElementById('result-area');
   const typeClass = { '本命': 'pred-honmei', '対抗': 'pred-taikou', '穴': 'pred-ana' };
@@ -1230,7 +1329,7 @@ function allClear() {
   document.getElementById('btn-save').style.display = 'none';
   document.getElementById('status-save').textContent = '';
   for (let i = 1; i <= 6; i++) {
-    ['exhibit_time','laps','mawariashi','avg_st','weight'].forEach(f => {
+    ['exhibit_time','laps','mawariashi','avg_st','exhibit_st','weight'].forEach(f => {
       const el = document.getElementById(`b${i}_${f}`); if (el) el.value = '';
     });
     document.getElementById(`b${i}_tilt`).value = '0';
@@ -1256,6 +1355,7 @@ function allClear() {
     document.getElementById(`mr-${i}`).textContent = '';
   }
   document.getElementById('result-area').innerHTML = '<div style="color:var(--text-muted);font-size:12px;margin-top:12px;text-align:center;letter-spacing:1px;">データを入力して予想するを押してください</div>';
+  updateSlit();
   ['avg-st','player','kimari','motor','exhibit','odds'].forEach(n => {
     const el = document.getElementById(`status-${n}`); if (el) el.textContent = '';
     const ta = document.getElementById(`paste-${n}`); if (ta) ta.value = '';
