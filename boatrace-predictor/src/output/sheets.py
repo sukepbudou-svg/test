@@ -372,10 +372,13 @@ def append_prediction_row(
     try:
         sid = sheet.id
         is_shirokuma_chance = (row.get("tier", "") == "白熊" and row.get("bet_label", "") == "白熊チャンス")
+        is_urakuma_chance   = (row.get("tier", "") == "裏熊" and row.get("bet_label", "") == "裏熊チャンス")
         is_skip = row.get("bet_label", "") in ("見送り", "")
 
         if is_shirokuma_chance:
             row_bg = {"red": 0.60, "green": 0.82, "blue": 1.0}   # 濃い水色（白熊チャンス）
+        elif is_urakuma_chance:
+            row_bg = {"red": 0.68, "green": 0.92, "blue": 0.72}  # 薄緑（裏熊チャンス）
         elif is_skip:
             row_bg = {"red": 0.91, "green": 0.91, "blue": 0.91}
         else:
@@ -398,6 +401,8 @@ def append_prediction_row(
                 _ab_bg = {"red": 0.90, "green": 0.55, "blue": 0.30}  # 薄オレンジ
             elif bet_label == "白熊チャンス":
                 _ab_bg = {"red": 0.07, "green": 0.43, "blue": 0.80}  # 青（白熊チャンス）
+            elif bet_label == "裏熊チャンス":
+                _ab_bg = {"red": 0.13, "green": 0.55, "blue": 0.13}  # 緑（裏熊チャンス）
             else:
                 _ab_bg = None
             if _ab_bg:
@@ -589,7 +594,7 @@ def update_result_row(
         combination = pred.get("買い目（3連単）", "")
         _tier_raw = str(pred.get("狙い", "-"))
         # 狙い列は "小熊(外軸:3号/差し)[ET○ST○]" 形式の場合があるためベース名を抽出
-        tier = next((t for t in ("白熊", "小熊", "大熊", "神熊") if _tier_raw.startswith(t)), _tier_raw)
+        tier = next((t for t in ("白熊", "裏熊", "小熊", "大熊", "神熊") if _tier_raw.startswith(t)), _tier_raw)
         bet_label = pred.get("勝負推奨", "")
         arare_pt = pred.get("荒れPT", "")
         nigerate_val = pred.get("イン逃げ率", pred.get("オッズ", "-"))  # 日付シートからイン逃げ率取得
@@ -999,6 +1004,13 @@ def update_summary_sheet(
     s_shiro = _pt_tier_stats("白熊", include_all_labels=True)
     rc, hc, hitr, ivl, ret, roi, pft = _fmt(s_shiro)
     rows.append(_r("白熊 全体", rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
+    # 裏熊: チャンス絞り込み + 全体の2行
+    s_ura_c = _pt_tier_stats("裏熊", exact_label="裏熊チャンス")
+    rc, hc, hitr, ivl, ret, roi, pft = _fmt(s_ura_c)
+    rows.append(_r("裏熊 チャンス", rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
+    s_ura = _pt_tier_stats("裏熊", include_all_labels=True)
+    rc, hc, hitr, ivl, ret, roi, pft = _fmt(s_ura)
+    rows.append(_r("裏熊 全体", rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
     for grp, tn, lf in [
         ("小熊 弱", "小熊", "弱"), ("小熊 中", "小熊", "中"), ("小熊 強", "小熊", "強"),
         ("大熊 弱", "大熊", "弱"), ("大熊 中", "大熊", "中"), ("大熊 強", "大熊", "強"),
@@ -1011,9 +1023,15 @@ def update_summary_sheet(
     rows.append(_r())
 
     # ④ 白熊セクション
-    rows.append(_r("■ 白熊セクション（30〜80倍）"))
+    rows.append(_r("■ 白熊セクション（30〜60倍）"))
     _write_pt_section("白熊 チャンス", _pt_tier_stats("白熊", exact_label="白熊チャンス"))
     _write_pt_section("白熊 全体", _pt_tier_stats("白熊", include_all_labels=True))
+    rows.append(_r())
+
+    # ④-2 裏熊セクション
+    rows.append(_r("■ 裏熊セクション（1号艇1着固定裏返し）"))
+    _write_pt_section("裏熊 チャンス", _pt_tier_stats("裏熊", exact_label="裏熊チャンス"))
+    _write_pt_section("裏熊 全体", _pt_tier_stats("裏熊", include_all_labels=True))
     rows.append(_r())
 
     # ⑤ 小熊セクション

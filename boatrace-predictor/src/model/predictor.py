@@ -1137,6 +1137,13 @@ def get_recommendations(
                 _shirokuma_label = "見送り"
             print(f"  [白熊チャンス診断] 荒れPT={arare_score} 逃げ率={_nig_val:.0f}% 暴れ熊={_bet_label} → {_shirokuma_label}")
 
+            # 裏熊チャンスラベル: 暴れ熊見送り × 荒れPT3以下 × 逃げ率60%以上
+            if _bet_label == "見送り" and arare_score <= 3 and _nig_val >= 60:
+                _urakuma_label = "裏熊チャンス"
+            else:
+                _urakuma_label = "見送り"
+            print(f"  [裏熊チャンス診断] 荒れPT={arare_score} 逃げ率={_nig_val:.0f}% 暴れ熊={_bet_label} → {_urakuma_label}")
+
             def _add_rec(row, tier, label_override=None):
                 f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
                 combo    = f"{f}-{s}-{t}"
@@ -1167,6 +1174,20 @@ def get_recommendations(
 
             for _, _r in _df_mid.nlargest(3, "ev").iterrows():
                 _add_rec(_r, "白熊", label_override=_shirokuma_label)
+
+            # 裏熊: 1号艇1着固定の本命2点の2着・3着を入れ替え
+            _df_b1 = _valid[_valid["boat1"] == 1].nlargest(2, "prob")
+            for _, _honmei_r in _df_b1.iterrows():
+                _b1 = int(_honmei_r["boat1"])
+                _b2 = int(_honmei_r["boat2"])
+                _b3 = int(_honmei_r["boat3"])
+                _ura = _valid[
+                    (_valid["boat1"] == _b1) &
+                    (_valid["boat2"] == _b3) &
+                    (_valid["boat3"] == _b2)
+                ]
+                if not _ura.empty:
+                    _add_rec(_ura.iloc[0], "裏熊", label_override=_urakuma_label)
 
             for _, _r in _df_ko.nlargest(2, "ev").iterrows():
                 _add_rec(_r, "小熊")
