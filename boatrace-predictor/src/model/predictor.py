@@ -1168,14 +1168,8 @@ def get_recommendations(
             for _, _r in _df_mid.nlargest(3, "ev").iterrows():
                 _add_rec(_r, "白熊", label_override=_shirokuma_label)
 
-            for _, _r in _df_ko.nlargest(3, "ev").iterrows():
+            for _, _r in _df_ko.nlargest(2, "ev").iterrows():
                 _add_rec(_r, "小熊")
-
-            if not _df_ok.empty:
-                _add_rec(_df_ok.nlargest(1, "ev").iloc[0], "大熊")
-
-            if not _df_ka.empty:
-                _add_rec(_df_ka.nlargest(1, "ev").iloc[0], "神熊")
 
     return pd.DataFrame(all_recommendations)
 
