@@ -380,6 +380,23 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
 
 .status-msg { font-size: 11px; color: var(--green); margin-top: 6px; min-height: 18px; }
 
+/* 会場情報 */
+.venue-stat { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.venue-stat-label { font-size: 11px; color: var(--text-muted); }
+.stars { display: flex; gap: 2px; }
+.star { width: 12px; height: 12px; border-radius: 2px; }
+.star.on-in   { background: var(--accent2); }
+.star.on-ara  { background: var(--accent); }
+.star.on-wind { background: var(--accent3); }
+.star.off { background: var(--surface3); border: 1px solid var(--border); }
+.venue-tag {
+  display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px;
+  border-radius: 4px; margin-top: 6px; letter-spacing: 1px;
+}
+.venue-tag-solid { background: rgba(0,230,118,0.15); color: var(--green); border: 1px solid rgba(0,230,118,0.3); }
+.venue-tag-wild  { background: rgba(233,69,96,0.15); color: var(--accent); border: 1px solid rgba(233,69,96,0.3); }
+.venue-tag-wind  { background: rgba(0,212,255,0.15); color: var(--accent3); border: 1px solid rgba(0,212,255,0.3); }
+
 /* ===== RESULT ===== */
 .result-area { margin-top: 12px; }
 
@@ -505,7 +522,7 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
 <div class="header">
   <h1>🐻㊙ 裏熊予想ツール</h1>
   <div class="race-info">
-    <select id="venue" onchange="allClear()">
+    <select id="venue" onchange="allClear();updateVenueInfo();">
       <option value="">会場</option>
       {% for v in venues %}<option value="{{ v }}">{{ v }}</option>{% endfor %}
     </select>
@@ -625,6 +642,12 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
   </div>
 
   <div class="right-panel">
+    <!-- 会場情報 -->
+    <div class="card" id="venue-info-card" style="display:none;">
+      <h2>会場情報</h2>
+      <div id="venue-info-body"></div>
+    </div>
+
     <div class="card">
       <h2>予想結果</h2>
       <button class="btn btn-predict" onclick="runPredict()">🎯 予想する</button>
@@ -655,6 +678,72 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
 </form>
 
 <script>
+// ======== 会場プロファイル ========
+const VENUE_PROFILES_JS = {
+  "桐生":  {in_rate:2, upset:1, wind:2, in_pct:"約55%"},
+  "戸田":  {in_rate:2, upset:2, wind:1, in_pct:"約52%"},
+  "江戸川":{in_rate:1, upset:5, wind:5, in_pct:"約43%"},
+  "平和島":{in_rate:2, upset:3, wind:2, in_pct:"約51%"},
+  "多摩川":{in_rate:3, upset:1, wind:1, in_pct:"約56%"},
+  "浜名湖":{in_rate:2, upset:3, wind:4, in_pct:"約52%"},
+  "蒲郡":  {in_rate:3, upset:1, wind:1, in_pct:"約57%"},
+  "常滑":  {in_rate:4, upset:1, wind:2, in_pct:"約60%"},
+  "津":    {in_rate:2, upset:2, wind:2, in_pct:"約53%"},
+  "三国":  {in_rate:2, upset:4, wind:4, in_pct:"約50%"},
+  "びわこ":{in_rate:2, upset:3, wind:3, in_pct:"約52%"},
+  "住之江":{in_rate:5, upset:1, wind:1, in_pct:"約63%"},
+  "尼崎":  {in_rate:4, upset:1, wind:1, in_pct:"約60%"},
+  "鳴門":  {in_rate:2, upset:2, wind:3, in_pct:"約53%"},
+  "丸亀":  {in_rate:2, upset:2, wind:3, in_pct:"約53%"},
+  "児島":  {in_rate:3, upset:2, wind:2, in_pct:"約55%"},
+  "宮島":  {in_rate:2, upset:3, wind:3, in_pct:"約52%"},
+  "徳山":  {in_rate:4, upset:1, wind:1, in_pct:"約59%"},
+  "下関":  {in_rate:3, upset:2, wind:2, in_pct:"約55%"},
+  "若松":  {in_rate:2, upset:3, wind:3, in_pct:"約52%"},
+  "芦屋":  {in_rate:4, upset:1, wind:1, in_pct:"約60%"},
+  "福岡":  {in_rate:3, upset:2, wind:2, in_pct:"約55%"},
+  "唐津":  {in_rate:2, upset:2, wind:3, in_pct:"約53%"},
+  "大村":  {in_rate:5, upset:0, wind:1, in_pct:"約67%"},
+};
+
+function updateVenueInfo() {
+  const venue = document.getElementById('venue').value;
+  const card  = document.getElementById('venue-info-card');
+  const body  = document.getElementById('venue-info-body');
+  if (!venue || !VENUE_PROFILES_JS[venue]) { card.style.display='none'; return; }
+  card.style.display='block';
+  const p = VENUE_PROFILES_JS[venue];
+
+  const stars = (count, max, cls) =>
+    Array.from({length: max}, (_,i) =>
+      `<div class="star ${i < count ? 'on-'+cls : 'off'}"></div>`
+    ).join('');
+
+  const tags = [];
+  if (p.in_rate >= 4) tags.push(`<span class="venue-tag venue-tag-solid">イン逃げ堅い</span>`);
+  if (p.upset >= 4)   tags.push(`<span class="venue-tag venue-tag-wild">荒れやすい</span>`);
+  if (p.wind >= 4)    tags.push(`<span class="venue-tag venue-tag-wind">風影響大</span>`);
+
+  body.innerHTML = `
+    <div class="venue-stat">
+      <span class="venue-stat-label">🏁 1コース勝率</span>
+      <span style="font-family:'Orbitron',monospace;font-size:12px;color:var(--accent2)">${p.in_pct}</span>
+    </div>
+    <div class="venue-stat">
+      <span class="venue-stat-label">イン有利度</span>
+      <div class="stars">${stars(p.in_rate, 5, 'in')}</div>
+    </div>
+    <div class="venue-stat">
+      <span class="venue-stat-label">荒れやすさ</span>
+      <div class="stars">${stars(p.upset, 5, 'ara')}</div>
+    </div>
+    <div class="venue-stat">
+      <span class="venue-stat-label">風影響度</span>
+      <div class="stars">${stars(p.wind, 5, 'wind')}</div>
+    </div>
+    <div style="margin-top:4px;">${tags.join(' ')}</div>`;
+}
+
 // ======== Global State ========
 let avgStStats  = null;
 let playerStats = null;
