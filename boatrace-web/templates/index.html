@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ボートレース予想ツール</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --accent: #4e9eff;
+    --accent2: #ff6b6b;
+    --accent3: #ffd166;
+    --text: #e2e8f0;
+    --muted: #8892a4;
+    --border: #2d3348;
+    --honmei: #4e9eff;
+    --taikou: #06d6a0;
+    --ana: #ff6b6b;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', 'Noto Sans JP', sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header h1 { font-size: 18px; font-weight: 700; color: var(--accent); }
+  header span { color: var(--muted); font-size: 12px; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px 16px; }
+
+  /* 条件バー */
+  .conditions {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 18px;
+  }
+  .cond-group { display: flex; flex-direction: column; gap: 4px; }
+  .cond-group label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  select, input[type=text], input[type=number] {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    padding: 6px 10px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  select:focus, input:focus { border-color: var(--accent); }
+  select { cursor: pointer; }
+
+  /* 貼付エリア */
+  .paste-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    margin-bottom: 18px;
+  }
+  .paste-section h3 { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .paste-row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .paste-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    padding: 7px 14px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background .2s, border-color .2s;
+  }
+  .paste-btn:hover { background: var(--border); border-color: var(--accent); color: var(--accent); }
+  textarea.paste-area {
+    width: 100%;
+    margin-top: 10px;
+    min-height: 80px;
+    background: var(--surface2);
+    border: 1px dashed var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    padding: 8px;
+    font-size: 12px;
+    resize: vertical;
+    display: none;
+  }
+  textarea.paste-area.open { display: block; }
+
+  /* ボートグリッド */
+  .boats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .boat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    position: relative;
+  }
+  .boat-card::before {
+    content: attr(data-num);
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    font-size: 22px;
+    font-weight: 900;
+    opacity: .15;
+  }
+  .boat-card[data-num="1"] { border-top: 3px solid #4e9eff; }
+  .boat-card[data-num="2"] { border-top: 3px solid #222; }
+  .boat-card[data-num="3"] { border-top: 3px solid #e63946; }
+  .boat-card[data-num="4"] { border-top: 3px solid #06d6a0; }
+  .boat-card[data-num="5"] { border-top: 3px solid #ffd166; }
+  .boat-card[data-num="6"] { border-top: 3px solid #adb5bd; }
+  .boat-num {
+    font-size: 16px;
+    font-weight: 800;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .boat-badge {
+    display: inline-block;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 22px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .badge-1 { background: #4e9eff; color: #fff; }
+  .badge-2 { background: #333; color: #fff; border: 1px solid #888; }
+  .badge-3 { background: #e63946; color: #fff; }
+  .badge-4 { background: #06d6a0; color: #111; }
+  .badge-5 { background: #ffd166; color: #111; }
+  .badge-6 { background: #adb5bd; color: #111; }
+  .field-row { display: flex; flex-direction: column; margin-bottom: 6px; }
+  .field-row label { font-size: 10px; color: var(--muted); margin-bottom: 2px; }
+  .field-row input, .field-row select {
+    width: 100%;
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+
+  /* 予想結果 */
+  .result-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 18px;
+  }
+  .result-section h2 { font-size: 14px; color: var(--muted); margin-bottom: 14px; letter-spacing: 1px; text-transform: uppercase; }
+  .result-grid { display: flex; gap: 14px; flex-wrap: wrap; }
+  .result-box {
+    flex: 1;
+    min-width: 120px;
+    background: var(--surface2);
+    border-radius: var(--radius);
+    padding: 14px;
+    text-align: center;
+    border: 1px solid var(--border);
+  }
+  .result-box .label { font-size: 11px; font-weight: 700; letter-spacing: 1px; margin-bottom: 8px; }
+  .result-box.honmei .label { color: var(--honmei); }
+  .result-box.taikou .label { color: var(--taikou); }
+  .result-box.ana .label { color: var(--ana); }
+  .result-box .combo {
+    font-size: 24px;
+    font-weight: 900;
+    letter-spacing: 2px;
+  }
+  .result-box.honmei .combo { color: var(--honmei); }
+  .result-box.taikou .combo { color: var(--taikou); }
+  .result-box.ana .combo { color: var(--ana); }
+  .result-box .sub { font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+  .patterns-list { margin-top: 14px; }
+  .patterns-list h3 { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .pattern-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .pattern-item:last-child { border-bottom: none; }
+  .pattern-badge {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .p-nige { background: #1a3a5e; color: #4e9eff; }
+  .p-makuri { background: #1a3a2e; color: #06d6a0; }
+  .p-makuri-sashi { background: #3a2a1a; color: #ffd166; }
+
+  /* 予想ボタン */
+  .btn-predict {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #1a4a8a, #4e9eff);
+    border: none;
+    border-radius: var(--radius);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 2px;
+    transition: opacity .2s;
+    margin-bottom: 18px;
+  }
+  .btn-predict:hover { opacity: .85; }
+  .btn-predict:active { opacity: .7; }
+
+  .loading { text-align: center; color: var(--muted); padding: 20px; display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⛵ ボートレース予想ツール</h1>
+  <span>3連単フォーメーション予想</span>
+</header>
+<div class="container">
+
+  <!-- 条件 -->
+  <div class="conditions">
+    <div class="cond-group">
+      <label>日付</label>
+      <input type="date" id="race-date" value="">
+    </div>
+    <div class="cond-group">
+      <label>開催場</label>
+      <select id="venue">
+        {% for v in venues %}
+        <option value="{{ v }}">{{ v }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="cond-group">
+      <label>レース</label>
+      <select id="race-no">
+        {% for i in range(1, 13) %}
+        <option value="{{ i }}">{{ i }}R</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="cond-group">
+      <label>風向き</label>
+      <select id="wind-dir">
+        {% for w in wind_directions %}
+        <option value="{{ w }}">{{ w }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="cond-group">
+      <label>風速 (m)</label>
+      <input type="number" id="wind-speed" value="0" min="0" max="20" step="1" style="width:70px">
+    </div>
+  </div>
+
+  <!-- データ貼付 -->
+  <div class="paste-section">
+    <h3>📋 データ貼り付け</h3>
+    <div class="paste-row">
+      <button class="paste-btn" onclick="openPaste('avg-st')">平均ST</button>
+      <button class="paste-btn" onclick="openPaste('player')">選手成績</button>
+      <button class="paste-btn" onclick="openPaste('motor')">モーター</button>
+      <button class="paste-btn" onclick="openPaste('exhibit')">展示タイム</button>
+      <button class="paste-btn" onclick="openPaste('odds')">オッズ</button>
+    </div>
+    <textarea class="paste-area" id="paste-area" placeholder="ここにデータを貼り付けてください..."></textarea>
+    <div id="paste-hint" style="font-size:11px;color:var(--muted);margin-top:6px;display:none"></div>
+  </div>
+
+  <!-- ボート入力 -->
+  <div class="boats-grid" id="boats-grid">
+    <!-- JS で生成 -->
+  </div>
+
+  <!-- 予想ボタン -->
+  <button class="btn-predict" onclick="runPredict()">🏁 予想する</button>
+
+  <!-- ローディング -->
+  <div class="loading" id="loading">予想計算中...</div>
+
+  <!-- 結果 -->
+  <div class="result-section" id="result-section" style="display:none">
+    <h2>予想結果</h2>
+    <div class="result-grid">
+      <div class="result-box honmei">
+        <div class="label">◎ 本命</div>
+        <div class="combo" id="r-honmei">-</div>
+        <div class="sub">3連単</div>
+      </div>
+      <div class="result-box taikou">
+        <div class="label">○ 対抗</div>
+        <div class="combo" id="r-taikou">-</div>
+        <div class="sub">3連単</div>
+      </div>
+      <div class="result-box ana">
+        <div class="label">▲ 穴</div>
+        <div class="combo" id="r-ana">-</div>
+        <div class="sub">3連単</div>
+      </div>
+    </div>
+    <div class="patterns-list" id="patterns-list"></div>
+  </div>
+
+</div>
+
+<script>
+const FIELDS = [
+  { key: 'course',       label: 'コース',     type: 'number', min:1, max:6 },
+  { key: 'exhibit_time', label: '展示タイム', type: 'number', step:'0.01', placeholder:'6.80' },
+  { key: 'laps',         label: '周回タイム', type: 'number', step:'0.01', placeholder:'38.0' },
+  { key: 'mawariashi',   label: '周り足',     type: 'number', step:'0.01', placeholder:'6.90' },
+  { key: 'tilt',         label: 'チルト',     type: 'number', step:'0.5', min:-3, max:3, placeholder:'0' },
+  { key: 'avg_st',       label: '平均ST',     type: 'number', step:'0.01', placeholder:'0.18' },
+  { key: 'weight',       label: '体重 (kg)',  type: 'number', step:'0.1', placeholder:'52.0' },
+];
+
+// 今日の日付をセット
+document.getElementById('race-date').value = new Date().toISOString().slice(0, 10);
+
+// ボートカード生成
+const grid = document.getElementById('boats-grid');
+for (let i = 1; i <= 6; i++) {
+  const card = document.createElement('div');
+  card.className = 'boat-card';
+  card.dataset.num = i;
+  let html = `<div class="boat-num"><span class="boat-badge badge-${i}">${i}</span>${i}号艇</div>`;
+  for (const f of FIELDS) {
+    const attrs = [
+      f.type ? `type="${f.type}"` : '',
+      f.min !== undefined ? `min="${f.min}"` : '',
+      f.max !== undefined ? `max="${f.max}"` : '',
+      f.step ? `step="${f.step}"` : '',
+      f.placeholder ? `placeholder="${f.placeholder}"` : '',
+    ].filter(Boolean).join(' ');
+    // コースのデフォルト値 = 号艇番号
+    const defaultVal = f.key === 'course' ? i : '';
+    html += `<div class="field-row">
+      <label>${f.label}</label>
+      <input id="b${i}_${f.key}" ${attrs} value="${defaultVal}">
+    </div>`;
+  }
+  card.innerHTML = html;
+  grid.appendChild(card);
+}
+
+// 貼付エリア
+let currentPasteType = null;
+const pasteTypeLabels = {
+  'avg-st': '平均STデータを貼り付け（例: 1号艇 0.18）',
+  'player': '選手成績データを貼り付け',
+  'motor': 'モーターデータを貼り付け',
+  'exhibit': '展示タイムを貼り付け（例: 1着 6.78）',
+  'odds': 'オッズデータを貼り付け',
+};
+function openPaste(type) {
+  const area = document.getElementById('paste-area');
+  const hint = document.getElementById('paste-hint');
+  if (currentPasteType === type && area.classList.contains('open')) {
+    area.classList.remove('open');
+    hint.style.display = 'none';
+    currentPasteType = null;
+    return;
+  }
+  currentPasteType = type;
+  area.classList.add('open');
+  area.value = '';
+  hint.style.display = 'block';
+  hint.textContent = pasteTypeLabels[type] || '';
+  area.focus();
+}
+
+// 貼付データの自動解析（展示タイム・平均ST）
+document.getElementById('paste-area').addEventListener('input', function() {
+  const text = this.value;
+  if (!currentPasteType) return;
+  if (currentPasteType === 'exhibit') {
+    // 「6.78」のような数値を行順に1〜6号艇へ
+    const nums = text.match(/\d\.\d{2}/g);
+    if (nums) {
+      for (let i = 0; i < Math.min(nums.length, 6); i++) {
+        document.getElementById(`b${i+1}_exhibit_time`).value = nums[i];
+      }
+    }
+  } else if (currentPasteType === 'avg-st') {
+    const nums = text.match(/0\.\d{2}/g);
+    if (nums) {
+      for (let i = 0; i < Math.min(nums.length, 6); i++) {
+        document.getElementById(`b${i+1}_avg_st`).value = nums[i];
+      }
+    }
+  }
+});
+
+// 予想実行
+async function runPredict() {
+  const boats = [];
+  for (let i = 1; i <= 6; i++) {
+    const boat = {};
+    for (const f of FIELDS) {
+      const el = document.getElementById(`b${i}_${f.key}`);
+      boat[f.key] = el ? el.value : '';
+    }
+    boats.push(boat);
+  }
+
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('result-section').style.display = 'none';
+
+  try {
+    const res = await fetch('/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ boats })
+    });
+    const data = await res.json();
+
+    document.getElementById('r-honmei').textContent = data.honmei || '-';
+    document.getElementById('r-taikou').textContent = data.taikou || '-';
+    document.getElementById('r-ana').textContent = data.ana || '-';
+
+    // パターン一覧
+    const pl = document.getElementById('patterns-list');
+    if (data.patterns && data.patterns.length) {
+      pl.innerHTML = '<h3>展開パターン一覧</h3>';
+      data.patterns.forEach(([pattern, combo], idx) => {
+        const cls = pattern.includes('逃げ') ? 'p-nige' :
+                    pattern.includes('差し') ? 'p-makuri-sashi' : 'p-makuri';
+        const rank = ['◎','○','▲','△','×','☆'][idx] || '';
+        pl.innerHTML += `<div class="pattern-item">
+          <span class="pattern-badge ${cls}">${pattern}</span>
+          <span style="font-weight:700;font-size:16px;letter-spacing:2px">${combo}</span>
+          <span style="color:var(--muted);font-size:12px">${rank}</span>
+        </div>`;
+      });
+    } else {
+      pl.innerHTML = '';
+    }
+
+    document.getElementById('result-section').style.display = 'block';
+  } catch(e) {
+    alert('予想中にエラーが発生しました: ' + e.message);
+  } finally {
+    document.getElementById('loading').style.display = 'none';
+  }
+}
+</script>
+</body>
+</html>
