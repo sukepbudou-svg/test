@@ -1166,7 +1166,13 @@ def get_recommendations(
                 })
 
             # 裏熊: 1号艇1着固定の本命2点の2着・3着を入れ替え
-            _df_b1 = _valid[_valid["boat1"] == 1].nlargest(2, "prob")
+            # コース展開パターン: 逃げ展開では2着は2〜4号艇（内側）が基本
+            _df_b1 = _valid[_valid["boat1"] == 1].copy()
+            _df_b1["honmei_score"] = _df_b1.apply(
+                lambda r: float(r["prob"]) * (1.2 if int(r["boat2"]) in (2, 3, 4) else 0.8),
+                axis=1
+            )
+            _df_b1 = _df_b1.nlargest(2, "honmei_score")
             for _, _honmei_r in _df_b1.iterrows():
                 _b1 = int(_honmei_r["boat1"])
                 _b2 = int(_honmei_r["boat2"])
