@@ -413,25 +413,54 @@ const PLAYER_PERIODS = ['今期','直近6ヶ月','直近3ヶ月','直近1ヶ月'
 
 function parsePlayerStats(text) {
   const result = { win1: {}, win2: {}, win3: {} };
-  const sections = text.split(/(?=1着率|2連対率|3連対率)/);
   const keys = ['win1','win2','win3'];
   const headers = ['1着率','2連対率','3連対率'];
+
+  // 「直近\n6ヶ月」「直近\n3ヶ月」「直近\n1ヶ月」を結合
+  const normalized = text
+    .replace(/直近\r?\n(\d+[ヶ年][月]?)/g, '直近$1')
+    .replace(/直近\r?\n(\d+年)/g, '直近$1');
+
+  const sections = normalized.split(/(?=^1着率|^2連対率|^3連対率)/m);
 
   for (let si = 0; si < headers.length; si++) {
     const sec = sections.find(s => s.trim().startsWith(headers[si]));
     if (!sec) continue;
     const lines = sec.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    let periodIdx = -1;
-    for (const line of lines) {
-      const pidx = PLAYER_PERIODS.indexOf(line);
-      if (pidx !== -1) { periodIdx = pidx; continue; }
-      if (periodIdx === -1) continue;
-      const pct = line.match(/(\d+\.\d+)%/g);
-      if (pct && pct.length === 6) {
-        result[keys[si]][PLAYER_PERIODS[periodIdx]] = pct.map(p => parseFloat(p));
-        periodIdx = -1;
+
+    let currentPeriod = null;
+    let collected = [];
+
+    const flush = () => {
+      if (currentPeriod && collected.length >= 6) {
+        result[keys[si]][currentPeriod] = collected.slice(0, 6);
       }
+    };
+
+    for (const line of lines) {
+      // 期間名の判定
+      const period = PLAYER_PERIODS.find(p => line.startsWith(p));
+      if (period) {
+        flush();
+        currentPeriod = period;
+        collected = [];
+        // 同じ行に%があれば回収
+        const pcts = line.match(/(\d+\.?\d*)%/g);
+        if (pcts) collected.push(...pcts.map(p => parseFloat(p)));
+        continue;
+      }
+      if (!currentPeriod) continue;
+      // SG/G1行で「-」のみなら0で6個埋めてflush
+      if (/^[-\t\s]+$/.test(line) && currentPeriod === 'SG/G1') {
+        collected = [0,0,0,0,0,0];
+        flush();
+        currentPeriod = null; collected = [];
+        continue;
+      }
+      const pcts = line.match(/(\d+\.?\d*)%/g);
+      if (pcts) collected.push(...pcts.map(p => parseFloat(p)));
     }
+    flush();
   }
   return result;
 }
