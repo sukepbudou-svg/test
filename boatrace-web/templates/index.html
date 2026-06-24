@@ -505,11 +505,11 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
 <div class="header">
   <h1>🐻㊙ 裏熊予想ツール</h1>
   <div class="race-info">
-    <select id="venue">
+    <select id="venue" onchange="allClear()">
       <option value="">会場</option>
       {% for v in venues %}<option value="{{ v }}">{{ v }}</option>{% endfor %}
     </select>
-    <select id="race_no">
+    <select id="race_no" onchange="allClear()">
       {% for i in range(1,13) %}<option value="{{ i }}">{{ i }}R</option>{% endfor %}
     </select>
     <select id="wind">
@@ -537,6 +537,7 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
         <button class="tab-btn" onclick="switchTab('motor',this)">モーター</button>
         <button class="tab-btn" onclick="switchTab('exhibit',this)">展示タイム</button>
         <button class="tab-btn" onclick="switchTab('odds',this)">オッズ</button>
+        <button class="tab-btn" onclick="allClear()" style="margin-left:auto;color:var(--accent);border-color:var(--accent);">オールクリア</button>
       </div>
 
       <div class="tab-pane active" id="tab-avg-st">
@@ -1091,6 +1092,7 @@ function allClear() {
   document.getElementById('result-area').innerHTML = '<div style="color:var(--text-muted);font-size:12px;margin-top:12px;text-align:center;letter-spacing:1px;">データを入力して予想するを押してください</div>';
   ['avg-st','player','kimari','motor','exhibit','odds'].forEach(n => {
     const el = document.getElementById(`status-${n}`); if (el) el.textContent = '';
+    const ta = document.getElementById(`paste-${n}`); if (ta) ta.value = '';
   });
 }
 
