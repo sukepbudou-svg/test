@@ -664,8 +664,8 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
       </div>
 
       <div class="tab-pane" id="tab-exhibit">
-        <div class="tab-desc">展示タイムデータをコピー＆ペーストしてください（近日対応予定）</div>
-        <textarea id="paste-exhibit" rows="7" placeholder="ここにコピペ（近日対応予定）"></textarea>
+        <div class="tab-desc">展示情報をコピー＆ペーストしてください</div>
+        <textarea id="paste-exhibit" rows="10" placeholder="ここにコピペ&#10;（展示情報タイトルから部品交換行まで全部OK）"></textarea>
         <div style="display:flex;gap:8px;margin-top:8px;">
           <button class="btn btn-apply" onclick="parseData('exhibit')">適用</button>
         </div>
@@ -1102,6 +1102,96 @@ function applyMotorStats() {
   }
 }
 
+// ======== 展示情報パーサー ========
+function parseExhibitInfo(text) {
+  const result = { courses:[], exhibit:[], laps:[], mawari:[], st:[], stF:[], weight:[], tilt:[] };
+  const labelMap = {
+    '進入':'courses', '展示':'exhibit', '周回':'laps',
+    '周り足':'mawari', 'ST':'st', '体重':'weight', 'チルト':'tilt'
+  };
+  for (const line of text.split('\n').map(l => l.trim()).filter(l => l.length > 0)) {
+    const cols = line.split('\t');
+    if (cols.length < 2) continue;
+    const key = labelMap[cols[0].trim()];
+    if (!key) continue;
+    const vals = [];
+    for (let ci = 1; ci < cols.length && vals.length < 6; ci++) {
+      vals.push(cols[ci].trim());
+    }
+    while (vals.length < 6) vals.push('');
+    if (key === 'st') {
+      result.st = vals.map(v => {
+        const isF = v.toUpperCase().startsWith('F');
+        const num = parseFloat(v.replace(/^F/i, '')) || 0;
+        return num;
+      });
+      result.stF = vals.map(v => v.toUpperCase().startsWith('F'));
+    } else if (key === 'courses' || key === 'weight' || key === 'exhibit' || key === 'laps' || key === 'mawari' || key === 'tilt') {
+      result[key] = vals.map(v => {
+        const n = parseFloat(v);
+        return isNaN(n) ? v : n;
+      });
+    } else {
+      result[key] = vals;
+    }
+  }
+  return result;
+}
+
+function applyExhibitInfo(data) {
+  // 進入コース順にマッピング（courses配列が進入コース、インデックスが艇番-1）
+  // courses = [1,2,3,4,5,6] の場合は順番通り
+  const courses = data.courses.length === 6 ? data.courses : [1,2,3,4,5,6];
+  for (let idx = 0; idx < 6; idx++) {
+    const boatNo = idx + 1; // 艇番
+    const course = courses[idx];
+    // コース欄を設定
+    const courseEl = document.getElementById(`b${boatNo}_course`);
+    if (courseEl && course) courseEl.value = course;
+    // 展示タイム
+    if (data.exhibit[idx] !== undefined) {
+      const el = document.getElementById(`b${boatNo}_exhibit_time`);
+      if (el) el.value = data.exhibit[idx];
+    }
+    // 周回
+    if (data.laps[idx] !== undefined) {
+      const el = document.getElementById(`b${boatNo}_laps`);
+      if (el) el.value = data.laps[idx];
+    }
+    // まわり足
+    if (data.mawari[idx] !== undefined) {
+      const el = document.getElementById(`b${boatNo}_mawariashi`);
+      if (el) el.value = data.mawari[idx];
+    }
+    // 展示ST
+    if (data.st[idx] !== undefined) {
+      const el = document.getElementById(`b${boatNo}_exhibit_st`);
+      if (el) el.value = data.st[idx].toFixed(3);
+    }
+    // F持ち自動検出
+    if (data.stF[idx]) {
+      const fbtn = document.getElementById(`b${boatNo}_fbtn`);
+      if (fbtn && !fbtn.classList.contains('f-on')) {
+        fbtn.classList.add('f-on');
+        fbtn.textContent = 'F持ち ✓';
+        const frow = document.getElementById(`b${boatNo}_frow`);
+        if (frow) frow.classList.add('visible');
+      }
+    }
+    // 体重
+    if (data.weight[idx] !== undefined) {
+      const el = document.getElementById(`b${boatNo}_weight`);
+      if (el) el.value = data.weight[idx];
+    }
+    // チルト
+    if (data.tilt[idx] !== undefined) {
+      const el = document.getElementById(`b${boatNo}_tilt`);
+      if (el) el.value = data.tilt[idx];
+    }
+  }
+  updateSlit();
+}
+
 // ======== Main Dispatcher ========
 function parseData(name) {
   const statusEl = document.getElementById(`status-${name}`);
@@ -1138,8 +1228,20 @@ function parseData(name) {
     applyMotorStats();
     statusEl.textContent = '✓ モーターデータを適用しました';
   } else if (name === 'exhibit') {
-    statusEl.style.color = 'var(--text-muted)';
-    statusEl.textContent = '近日対応予定です';
+    const text = document.getElementById('paste-exhibit').value;
+    const data = parseExhibitInfo(text);
+    if (data.exhibit.length > 0 || data.st.length > 0) {
+      applyExhibitInfo(data);
+      const fCount = data.stF.filter(Boolean).length;
+      let msg = '✓ 展示情報を適用しました';
+      if (fCount > 0) msg += `（F持ち${fCount}艇を自動検出）`;
+      statusEl.textContent = msg;
+      // スリットを展示STモードに自動切り替え
+      switchSlit('ex');
+    } else {
+      statusEl.style.color = 'var(--accent)';
+      statusEl.textContent = '× 解析失敗: データ形式を確認してください';
+    }
   } else if (name === 'odds') {
     statusEl.style.color = 'var(--text-muted)';
     statusEl.textContent = '近日対応予定です';
