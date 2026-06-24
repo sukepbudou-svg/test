@@ -19,13 +19,60 @@ WIND_OPTIONS = [
     "無風", "その他"
 ]
 
+# 会場プロファイル
+# in_rate: 1コース逃げのしやすさ補正（高いほどイン有利）
+# upset:   荒れやすさ補正（高いほど外枠を加点）
+# wind:    風の影響度（高いほど風向きの影響が大きい）
+VENUE_PROFILES = {
+    "桐生":  {"in_rate": 0.5,  "upset": 0.3, "wind": 0.4},
+    "戸田":  {"in_rate": 0.3,  "upset": 0.5, "wind": 0.3},
+    "江戸川":{"in_rate": -0.5, "upset": 1.5, "wind": 1.5},  # 最も荒れやすく風影響大
+    "平和島":{"in_rate": 0.0,  "upset": 0.8, "wind": 0.5},
+    "多摩川":{"in_rate": 0.5,  "upset": 0.3, "wind": 0.2},
+    "浜名湖":{"in_rate": 0.0,  "upset": 0.8, "wind": 1.2},  # 風影響大
+    "蒲郡":  {"in_rate": 0.5,  "upset": 0.3, "wind": 0.3},
+    "常滑":  {"in_rate": 0.8,  "upset": 0.2, "wind": 0.4},
+    "津":    {"in_rate": 0.3,  "upset": 0.4, "wind": 0.5},
+    "三国":  {"in_rate": -0.3, "upset": 1.0, "wind": 1.0},  # 荒れやすい・風影響
+    "びわこ":{"in_rate": 0.0,  "upset": 0.6, "wind": 0.8},
+    "住之江":{"in_rate": 1.2,  "upset": 0.1, "wind": 0.1},  # 最もイン有利・堅い
+    "尼崎":  {"in_rate": 0.8,  "upset": 0.2, "wind": 0.2},
+    "鳴門":  {"in_rate": 0.3,  "upset": 0.5, "wind": 0.8},
+    "丸亀":  {"in_rate": 0.3,  "upset": 0.5, "wind": 0.7},
+    "児島":  {"in_rate": 0.5,  "upset": 0.4, "wind": 0.5},
+    "宮島":  {"in_rate": 0.3,  "upset": 0.6, "wind": 0.6},
+    "徳山":  {"in_rate": 0.8,  "upset": 0.2, "wind": 0.3},
+    "下関":  {"in_rate": 0.5,  "upset": 0.4, "wind": 0.5},
+    "若松":  {"in_rate": 0.3,  "upset": 0.6, "wind": 0.7},
+    "芦屋":  {"in_rate": 0.8,  "upset": 0.2, "wind": 0.3},
+    "福岡":  {"in_rate": 0.5,  "upset": 0.4, "wind": 0.4},
+    "唐津":  {"in_rate": 0.3,  "upset": 0.5, "wind": 0.6},
+    "大村":  {"in_rate": 1.5,  "upset": 0.0, "wind": 0.1},  # 最もイン勝率高い
+}
+
+# 風向きの向かい風強度（強いほど外枠有利）
+WIND_UPSET_BONUS = {
+    "向かい風1m": 0.0, "向かい風2m": 0.1, "向かい風3m": 0.3,
+    "向かい風4m": 0.5, "向かい風5m": 0.8, "向かい風6m以上": 1.2,
+    "追い風1m": 0.0,  "追い風2m": 0.0,  "追い風3m": 0.1,
+    "追い風4m": 0.2,  "追い風5m": 0.3,  "追い風6m以上": 0.5,
+    "横風（左）強": 0.6, "横風（右）強": 0.6,
+    "無風": 0.0, "その他": 0.0,
+}
+
 def safe_float(val, default=0.0):
     try:
         return float(val)
     except (ValueError, TypeError):
         return default
 
-def predict(boats, kimari=None):
+def predict(boats, kimari=None, venue=None, wind=None):
+    # 会場プロファイル取得
+    vp = VENUE_PROFILES.get(venue, {"in_rate": 0.0, "upset": 0.5, "wind": 0.5})
+    wind_bonus = WIND_UPSET_BONUS.get(wind, 0.0)
+    # 風影響度 = 会場の風感度 × 風の強さ
+    wind_effect = vp["wind"] * wind_bonus
+
     scores = []
     for b in boats:
         course = int(b.get('course', b.get('boat_number', 1)))
@@ -46,7 +93,7 @@ def predict(boats, kimari=None):
             base -= (avg_st - 0.15) * 8
         # Tilt penalty
         base -= tilt * 2
-        # F持ちペナルティ（スタートが慎重になる分を減点）
+        # F持ちペナルティ
         if is_f:
             base -= 1.5
 
@@ -58,15 +105,22 @@ def predict(boats, kimari=None):
 
         score = base + player_bonus + motor_bonus
 
-        # Course advantage
+        # コース補正（基本）
+        course_base = {1: 3.0, 2: 0.5, 3: 0.2, 4: 0.0, 5: -0.2, 6: -0.5}
+        score += course_base.get(course, 0.0)
+
+        # 会場イン有利補正: 1コースをさらに加点
         if course == 1:
-            score += 3.0
-        elif course == 2:
-            score += 0.5
-        elif course == 3:
-            score += 0.2
+            score += vp["in_rate"]
+
+        # 荒れやすい場・向かい風: 外枠（4〜6コース）を加点
+        upset_effect = vp["upset"] + wind_effect
+        if course == 4:
+            score += upset_effect * 0.4
+        elif course == 5:
+            score += upset_effect * 0.5
         elif course == 6:
-            score -= 0.5
+            score += upset_effect * 0.3
 
         scores.append({'boat': b, 'score': score, 'course': course})
 
@@ -205,7 +259,9 @@ def predict_route():
     data = request.get_json()
     boats = data.get('boats', [])
     kimari = data.get('kimari', None)
-    result = predict(boats, kimari)
+    venue = data.get('venue', None)
+    wind = data.get('wind', None)
+    result = predict(boats, kimari, venue=venue, wind=wind)
     return jsonify(result)
 
 

@@ -1022,10 +1022,13 @@ async function runPredict() {
   let kimariPayload = null;
   if (kimariStats && kimariStats.sim) kimariPayload = { sim: kimariStats.sim };
 
+  const venue = document.getElementById('venue').value;
+  const wind  = document.getElementById('wind').value;
+
   const resp = await fetch('/predict', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ boats, kimari: kimariPayload })
+    body: JSON.stringify({ boats, kimari: kimariPayload, venue, wind })
   });
   const data = await resp.json();
   renderResult(data);
