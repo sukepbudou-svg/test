@@ -5,81 +5,499 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🐻㊙裏熊予想ツール</title>
 <style>
-  :root {
-    --bg: #1a1a2e;
-    --surface: #16213e;
-    --surface2: #0f3460;
-    --accent: #e94560;
-    --accent2: #f5a623;
-    --text: #eaeaea;
-    --text-muted: #8a8a9a;
-    --border: #2a2a4a;
-    --green: #2ecc71;
-    --yellow: #f1c40f;
-    --blue: #3498db;
-    --input-bg: #0d1b2a;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; font-size: 14px; }
-  h1 { color: var(--accent); font-size: 1.4rem; }
-  h2 { color: var(--accent2); font-size: 1.1rem; margin-bottom: 8px; }
-  .header { background: var(--surface); padding: 12px 20px; display: flex; align-items: center; gap: 16px; border-bottom: 2px solid var(--accent); }
-  .main { display: flex; gap: 12px; padding: 12px; }
-  .left-panel { flex: 1; min-width: 0; }
-  .right-panel { width: 320px; flex-shrink: 0; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
-  .race-info { display: flex; gap: 8px; flex-wrap: wrap; }
-  .race-info select, .race-info input { background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 5px 8px; font-size: 13px; }
-  .boats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .boat-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
-  .boat-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-  .boat-num { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; }
-  .b1 { background: #fff; color: #000; }
-  .b2 { background: #000; color: #fff; }
-  .b3 { background: #e74c3c; color: #fff; }
-  .b4 { background: #3498db; color: #fff; }
-  .b5 { background: #f1c40f; color: #000; }
-  .b6 { background: #2ecc71; color: #000; }
-  .motor-info { font-size: 11px; color: var(--text-muted); }
-  .badges { display: flex; flex-wrap: wrap; gap: 3px; margin: 4px 0; }
-  .badge { font-size: 10px; padding: 1px 5px; border-radius: 3px; }
-  .badge-yellow { background: rgba(241,196,15,0.2); color: var(--yellow); border: 1px solid rgba(241,196,15,0.4); }
-  .badge-green  { background: rgba(46,204,113,0.2); color: var(--green);  border: 1px solid rgba(46,204,113,0.4); }
-  .badge-blue   { background: rgba(52,152,219,0.2); color: var(--blue);   border: 1px solid rgba(52,152,219,0.4); }
-  .boat-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
-  .input-row { display: flex; flex-direction: column; }
-  .input-row label { font-size: 10px; color: var(--text-muted); }
-  .input-row input { background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 3px; padding: 3px 5px; font-size: 12px; width: 100%; }
-  /* Tabs */
-  .tab-buttons { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
-  .tab-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
-  .tab-btn.active { background: var(--accent2); color: #000; border-color: var(--accent2); }
-  .tab-pane { display: none; }
-  .tab-pane.active { display: block; }
-  .period-select { background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; font-size: 12px; margin-bottom: 6px; }
-  textarea { width: 100%; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 6px; font-size: 12px; font-family: monospace; resize: vertical; }
-  .btn { border: none; border-radius: 4px; padding: 6px 14px; cursor: pointer; font-size: 13px; font-weight: bold; }
-  .btn-apply { background: var(--blue); color: #fff; }
-  .btn-predict { background: var(--accent); color: #fff; font-size: 15px; padding: 10px 24px; width: 100%; }
-  .btn-clear { background: var(--surface2); color: var(--text-muted); border: 1px solid var(--border); }
-  .status-msg { font-size: 12px; color: var(--green); margin-top: 4px; min-height: 18px; }
-  .result-area { margin-top: 10px; }
-  .pred-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 5px; margin-bottom: 4px; }
-  .pred-honmei { background: rgba(233,69,96,0.2); border: 1px solid var(--accent); }
-  .pred-taikou { background: rgba(245,166,35,0.2); border: 1px solid var(--accent2); }
-  .pred-ana     { background: rgba(46,204,113,0.2); border: 1px solid var(--green); }
-  .pred-label { font-size: 11px; font-weight: bold; min-width: 32px; }
-  .pred-combo { font-size: 16px; font-weight: bold; letter-spacing: 2px; }
-  .score-table { font-size: 11px; margin-top: 8px; }
-  .score-table th, .score-table td { padding: 2px 6px; text-align: center; }
-  .score-table th { color: var(--text-muted); }
-  /* F持ち */
-  .btn-f { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; font-size: 11px; font-weight: bold; cursor: pointer; }
-  .btn-f.f-on { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .f-st-row { display: none; grid-column: 1 / -1; }
-  .f-st-row.visible { display: flex; align-items: center; gap: 6px; }
-  .f-st-row label { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
-  .f-st-row select { background: var(--input-bg); color: var(--text); border: 1px solid var(--accent); border-radius: 3px; padding: 3px 5px; font-size: 12px; flex: 1; }
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Noto+Sans+JP:wght@400;700&display=swap');
+
+:root {
+  --bg:        #080c14;
+  --surface:   #0d1520;
+  --surface2:  #111d2e;
+  --surface3:  #162030;
+  --accent:    #e94560;
+  --accent2:   #f5a623;
+  --accent3:   #00d4ff;
+  --text:      #e8edf5;
+  --text-muted:#5a6a80;
+  --border:    #1e2d42;
+  --green:     #00e676;
+  --yellow:    #ffd740;
+  --blue:      #40c4ff;
+  --input-bg:  #060a10;
+  --glow-r:    rgba(233,69,96,0.4);
+  --glow-b:    rgba(0,212,255,0.4);
+  --glow-g:    rgba(0,230,118,0.3);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Noto Sans JP', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  min-height: 100vh;
+  background-image:
+    radial-gradient(ellipse at 20% 0%, rgba(0,212,255,0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 0%, rgba(233,69,96,0.06) 0%, transparent 50%);
+}
+
+/* ===== HEADER ===== */
+.header {
+  background: linear-gradient(135deg, #0d1520 0%, #111d2e 100%);
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 20px rgba(0,0,0,0.5);
+  position: relative;
+  overflow: hidden;
+}
+.header::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent3), var(--accent), var(--accent2), var(--accent3));
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+h1 {
+  font-family: 'Orbitron', 'Noto Sans JP', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 900;
+  background: linear-gradient(135deg, #fff 0%, var(--accent2) 50%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.race-info { display: flex; gap: 8px; flex-wrap: wrap; }
+.race-info select, .race-info input {
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+.race-info select:focus, .race-info input:focus {
+  border-color: var(--accent3);
+  box-shadow: 0 0 0 2px rgba(0,212,255,0.15);
+}
+
+/* ===== LAYOUT ===== */
+.main { display: flex; gap: 12px; padding: 14px; }
+.left-panel { flex: 1; min-width: 0; }
+.right-panel { width: 300px; flex-shrink: 0; }
+
+/* ===== CARD ===== */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,212,255,0.3), transparent);
+}
+
+h2 {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent3);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+h2::before {
+  content: '';
+  width: 3px; height: 14px;
+  background: linear-gradient(to bottom, var(--accent3), var(--accent));
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* ===== BOAT GRID ===== */
+.boats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.boat-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.boat-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(0,212,255,0.3);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4), 0 0 15px rgba(0,212,255,0.08);
+}
+
+.boat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.boat-num {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900;
+  font-size: 14px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+}
+.b1 { background: #ffffff; color: #000; box-shadow: 0 2px 10px rgba(255,255,255,0.3); }
+.b2 { background: #1a1a1a; color: #fff; border: 1px solid #444; }
+.b3 { background: linear-gradient(135deg,#e74c3c,#c0392b); color: #fff; box-shadow: 0 2px 10px rgba(231,76,60,0.4); }
+.b4 { background: linear-gradient(135deg,#3498db,#2980b9); color: #fff; box-shadow: 0 2px 10px rgba(52,152,219,0.4); }
+.b5 { background: linear-gradient(135deg,#f1c40f,#f39c12); color: #000; box-shadow: 0 2px 10px rgba(241,196,15,0.4); }
+.b6 { background: linear-gradient(135deg,#2ecc71,#27ae60); color: #000; box-shadow: 0 2px 10px rgba(46,204,113,0.4); }
+
+.motor-info { font-size: 10px; color: var(--text-muted); line-height: 1.5; }
+.motor-info span { color: var(--accent2); }
+
+/* ===== BADGES ===== */
+.badges { display: flex; flex-wrap: wrap; gap: 3px; margin: 5px 0; }
+.badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.badge-yellow { background: rgba(255,215,64,0.12); color: var(--yellow); border: 1px solid rgba(255,215,64,0.25); }
+.badge-green  { background: rgba(0,230,118,0.12); color: var(--green);  border: 1px solid rgba(0,230,118,0.25); }
+.badge-blue   { background: rgba(64,196,255,0.12); color: var(--blue);  border: 1px solid rgba(64,196,255,0.25); }
+
+/* ===== INPUTS ===== */
+.boat-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.input-row { display: flex; flex-direction: column; }
+.input-row label { font-size: 9px; color: var(--text-muted); margin-bottom: 2px; letter-spacing: 0.5px; }
+.input-row input {
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 4px 6px;
+  font-size: 12px;
+  font-family: 'Orbitron', monospace;
+  width: 100%;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+.input-row input:focus {
+  border-color: var(--accent3);
+  box-shadow: 0 0 0 2px rgba(0,212,255,0.12);
+}
+.input-row input::placeholder { color: #2a3a50; }
+
+/* ===== F持ち ===== */
+.btn-f {
+  background: var(--surface3);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.btn-f:hover { border-color: var(--accent); color: var(--accent); }
+.btn-f.f-on {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 0 10px var(--glow-r);
+  animation: pulse-f 1.5s ease-in-out infinite;
+}
+@keyframes pulse-f {
+  0%, 100% { box-shadow: 0 0 8px var(--glow-r); }
+  50%       { box-shadow: 0 0 18px var(--glow-r); }
+}
+.f-st-row { display: none; grid-column: 1 / -1; margin-top: 2px; }
+.f-st-row.visible { display: flex; align-items: center; gap: 6px; }
+.f-st-row label { font-size: 9px; color: var(--text-muted); white-space: nowrap; }
+.f-st-row select {
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 3px 5px;
+  font-size: 11px;
+  flex: 1;
+  outline: none;
+}
+
+/* ===== TABS ===== */
+.tab-buttons { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.tab-btn {
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 700;
+  transition: all 0.2s;
+  letter-spacing: 0.5px;
+}
+.tab-btn:hover { border-color: var(--accent3); color: var(--accent3); }
+.tab-btn.active {
+  background: linear-gradient(135deg, var(--accent2), #e8920f);
+  color: #000;
+  border-color: var(--accent2);
+  box-shadow: 0 2px 10px rgba(245,166,35,0.3);
+}
+
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+.tab-desc { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.5; }
+
+.period-select {
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  margin-bottom: 8px;
+  outline: none;
+  transition: border-color 0.2s;
+  display: block;
+}
+.period-select:focus { border-color: var(--accent3); }
+
+textarea {
+  width: 100%;
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 11px;
+  font-family: 'Consolas', monospace;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s;
+  line-height: 1.4;
+}
+textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,255,0.08); }
+
+/* ===== BUTTONS ===== */
+.btn {
+  border: none;
+  border-radius: 6px;
+  padding: 7px 16px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.btn::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 0; height: 0;
+  background: rgba(255,255,255,0.2);
+  border-radius: 50%;
+  transform: translate(-50%,-50%);
+  transition: width 0.4s, height 0.4s, opacity 0.4s;
+  opacity: 0;
+}
+.btn:active::after { width: 200px; height: 200px; opacity: 1; transition: 0s; }
+
+.btn-apply {
+  background: linear-gradient(135deg, var(--accent3), #0099bb);
+  color: #000;
+  font-weight: 900;
+}
+.btn-apply:hover { box-shadow: 0 4px 15px rgba(0,212,255,0.4); transform: translateY(-1px); }
+
+.btn-predict {
+  background: linear-gradient(135deg, var(--accent), #c0392b);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 900;
+  padding: 12px 24px;
+  width: 100%;
+  letter-spacing: 2px;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(233,69,96,0.3);
+}
+.btn-predict:hover {
+  box-shadow: 0 6px 30px rgba(233,69,96,0.5);
+  transform: translateY(-2px);
+}
+.btn-predict:active { transform: translateY(0); }
+
+.btn-clear {
+  background: var(--surface3);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  width: 100%;
+  font-size: 12px;
+}
+.btn-clear:hover { border-color: var(--accent); color: var(--accent); }
+
+.status-msg { font-size: 11px; color: var(--green); margin-top: 6px; min-height: 18px; }
+
+/* ===== RESULT ===== */
+.result-area { margin-top: 12px; }
+
+.pred-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  opacity: 0;
+  transform: translateX(20px);
+  animation: slideIn 0.4s ease forwards;
+  position: relative;
+  overflow: hidden;
+}
+.pred-item::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+}
+@keyframes slideIn {
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.pred-honmei {
+  background: linear-gradient(135deg, rgba(233,69,96,0.15), rgba(233,69,96,0.05));
+  border: 1px solid rgba(233,69,96,0.4);
+  box-shadow: 0 2px 12px rgba(233,69,96,0.1);
+}
+.pred-honmei::before { background: var(--accent); }
+
+.pred-taikou {
+  background: linear-gradient(135deg, rgba(245,166,35,0.15), rgba(245,166,35,0.05));
+  border: 1px solid rgba(245,166,35,0.4);
+  box-shadow: 0 2px 12px rgba(245,166,35,0.1);
+}
+.pred-taikou::before { background: var(--accent2); }
+
+.pred-ana {
+  background: linear-gradient(135deg, rgba(0,230,118,0.12), rgba(0,230,118,0.04));
+  border: 1px solid rgba(0,230,118,0.3);
+  box-shadow: 0 2px 12px rgba(0,230,118,0.08);
+}
+.pred-ana::before { background: var(--green); }
+
+.pred-label {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  min-width: 28px;
+  text-align: center;
+}
+.pred-honmei .pred-label { color: var(--accent); }
+.pred-taikou .pred-label { color: var(--accent2); }
+.pred-ana    .pred-label { color: var(--green); }
+
+.pred-combo {
+  font-family: 'Orbitron', monospace;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: var(--text);
+}
+
+.score-section { margin-top: 14px; }
+.score-title { font-size: 10px; letter-spacing: 2px; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; }
+.score-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.score-table th {
+  color: var(--text-muted);
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+.score-table td {
+  padding: 4px 8px;
+  text-align: center;
+  border-bottom: 1px solid rgba(30,45,66,0.5);
+}
+.score-table tr:first-child td { color: var(--accent2); font-weight: 700; }
+
+/* delay for animation */
+.pred-item:nth-child(1) { animation-delay: 0.05s; }
+.pred-item:nth-child(2) { animation-delay: 0.12s; }
+.pred-item:nth-child(3) { animation-delay: 0.19s; }
+.pred-item:nth-child(4) { animation-delay: 0.26s; }
+.pred-item:nth-child(5) { animation-delay: 0.33s; }
+.pred-item:nth-child(6) { animation-delay: 0.40s; }
+
+/* loading */
+.loading {
+  display: flex; align-items: center; gap: 8px;
+  color: var(--accent3); font-size: 12px; margin-top: 10px;
+}
+.loading-dots span {
+  display: inline-block;
+  width: 6px; height: 6px;
+  background: var(--accent3);
+  border-radius: 50%;
+  animation: dot-bounce 1.2s ease-in-out infinite;
+}
+.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dot-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40%           { transform: scale(1);   opacity: 1; }
+}
+
+/* divider */
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+  margin: 10px 0;
+}
 </style>
 </head>
 <body>
@@ -104,31 +522,25 @@
 
 <div class="main">
   <div class="left-panel">
-    <!-- Boat Cards -->
+
     <div class="card">
       <h2>艇情報入力</h2>
-      <div class="boats-grid" id="boats-grid">
-        <!-- Generated by JS -->
-      </div>
+      <div class="boats-grid" id="boats-grid"></div>
     </div>
 
-    <!-- Data Paste -->
     <div class="card">
       <h2>データ貼り付け</h2>
       <div class="tab-buttons">
-        <button class="tab-btn active" onclick="switchTab('avg-st')">平均ST</button>
-        <button class="tab-btn" onclick="switchTab('player')">選手成績</button>
-        <button class="tab-btn" onclick="switchTab('kimari')">決まり手</button>
-        <button class="tab-btn" onclick="switchTab('motor')">モーター</button>
-        <button class="tab-btn" onclick="switchTab('exhibit')">展示タイム</button>
-        <button class="tab-btn" onclick="switchTab('odds')">オッズ</button>
+        <button class="tab-btn active" onclick="switchTab('avg-st',this)">平均ST</button>
+        <button class="tab-btn" onclick="switchTab('player',this)">選手成績</button>
+        <button class="tab-btn" onclick="switchTab('kimari',this)">決まり手</button>
+        <button class="tab-btn" onclick="switchTab('motor',this)">モーター</button>
+        <button class="tab-btn" onclick="switchTab('exhibit',this)">展示タイム</button>
+        <button class="tab-btn" onclick="switchTab('odds',this)">オッズ</button>
       </div>
 
-      <!-- 平均ST -->
       <div class="tab-pane active" id="tab-avg-st">
-        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">
-          ボートレース日和の「平均ST」表をそのままコピー＆ペーストしてください
-        </div>
+        <div class="tab-desc">ボートレース日和の「平均ST」表をそのままコピー＆ペーストしてください</div>
         <select class="period-select" id="st-period" onchange="applyAvgST()">
           <option value="今期">今期</option>
           <option value="直近6ヶ月">直近6ヶ月</option>
@@ -142,18 +554,15 @@
           <option value="ナイター">ナイター</option>
           <option value="F持">F持</option>
         </select>
-        <textarea id="paste-avg-st" rows="8" placeholder="ここにコピペ"></textarea>
-        <div style="display:flex;gap:6px;margin-top:6px;">
+        <textarea id="paste-avg-st" rows="7" placeholder="ここにコピペ"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;">
           <button class="btn btn-apply" onclick="parseData('avg-st')">適用</button>
         </div>
         <div class="status-msg" id="status-avg-st"></div>
       </div>
 
-      <!-- 選手成績 -->
       <div class="tab-pane" id="tab-player">
-        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">
-          ボートレース日和の「選手成績」（1着率・2連対率・3連対率）をまとめてコピー＆ペーストしてください
-        </div>
+        <div class="tab-desc">ボートレース日和の「選手成績」（1着率・2連対率・3連対率）をまとめてコピー＆ペーストしてください</div>
         <select class="period-select" id="player-period" onchange="applyPlayerStats()">
           <option value="今期">今期</option>
           <option value="直近6ヶ月">直近6ヶ月</option>
@@ -164,112 +573,102 @@
           <option value="SG/G1">SG/G1</option>
           <option value="女子戦">女子戦</option>
         </select>
-        <textarea id="paste-player" rows="10" placeholder="ここにコピペ"></textarea>
-        <div style="display:flex;gap:6px;margin-top:6px;">
+        <textarea id="paste-player" rows="9" placeholder="ここにコピペ"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;">
           <button class="btn btn-apply" onclick="parseData('player')">適用</button>
         </div>
         <div class="status-msg" id="status-player"></div>
       </div>
 
-      <!-- 決まり手 -->
       <div class="tab-pane" id="tab-kimari">
-        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">
-          ボートレース日和の「決まり手」と「逃げシミュレーション」をまとめてコピー＆ペーストしてください
-        </div>
+        <div class="tab-desc">ボートレース日和の「決まり手」と「逃げシミュレーション」をまとめてコピー＆ペーストしてください</div>
         <select class="period-select" id="kimari-period">
           <option value="直近6ヶ月">直近6ヶ月</option>
           <option value="直近1年">直近1年</option>
         </select>
-        <textarea id="paste-kimari" rows="12" placeholder="ここにコピペ"></textarea>
-        <div style="display:flex;gap:6px;margin-top:6px;">
+        <textarea id="paste-kimari" rows="11" placeholder="ここにコピペ"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;">
           <button class="btn btn-apply" onclick="parseData('kimari')">適用</button>
         </div>
         <div class="status-msg" id="status-kimari"></div>
       </div>
 
-      <!-- モーター -->
       <div class="tab-pane" id="tab-motor">
-        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">
-          ボートレース日和の「モーター成績」をコピー＆ペーストしてください
-        </div>
-        <textarea id="paste-motor" rows="10" placeholder="ここにコピペ"></textarea>
-        <div style="display:flex;gap:6px;margin-top:6px;">
+        <div class="tab-desc">ボートレース日和の「モーター成績」をコピー＆ペーストしてください</div>
+        <textarea id="paste-motor" rows="9" placeholder="ここにコピペ"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;">
           <button class="btn btn-apply" onclick="parseData('motor')">適用</button>
         </div>
         <div class="status-msg" id="status-motor"></div>
       </div>
 
-      <!-- 展示タイム -->
       <div class="tab-pane" id="tab-exhibit">
-        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">
-          展示タイムデータをコピー＆ペーストしてください（準備中）
-        </div>
-        <textarea id="paste-exhibit" rows="8" placeholder="ここにコピペ（近日対応予定）"></textarea>
-        <div style="display:flex;gap:6px;margin-top:6px;">
+        <div class="tab-desc">展示タイムデータをコピー＆ペーストしてください（近日対応予定）</div>
+        <textarea id="paste-exhibit" rows="7" placeholder="ここにコピペ（近日対応予定）"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;">
           <button class="btn btn-apply" onclick="parseData('exhibit')">適用</button>
         </div>
         <div class="status-msg" id="status-exhibit"></div>
       </div>
 
-      <!-- オッズ -->
       <div class="tab-pane" id="tab-odds">
-        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">
-          オッズデータをコピー＆ペーストしてください（準備中）
-        </div>
-        <textarea id="paste-odds" rows="8" placeholder="ここにコピペ（近日対応予定）"></textarea>
-        <div style="display:flex;gap:6px;margin-top:6px;">
+        <div class="tab-desc">オッズデータをコピー＆ペーストしてください（近日対応予定）</div>
+        <textarea id="paste-odds" rows="7" placeholder="ここにコピペ（近日対応予定）"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;">
           <button class="btn btn-apply" onclick="parseData('odds')">適用</button>
         </div>
         <div class="status-msg" id="status-odds"></div>
       </div>
     </div>
+
   </div>
 
   <div class="right-panel">
     <div class="card">
       <h2>予想結果</h2>
-      <button class="btn btn-predict" onclick="runPredict()">予想する</button>
+      <button class="btn btn-predict" onclick="runPredict()">🎯 予想する</button>
       <div class="result-area" id="result-area">
-        <div style="color:var(--text-muted);font-size:12px;margin-top:10px;">予想するボタンを押してください</div>
+        <div style="color:var(--text-muted);font-size:12px;margin-top:12px;text-align:center;letter-spacing:1px;">
+          データを入力して予想するを押してください
+        </div>
       </div>
     </div>
-    <div class="card">
-      <button class="btn btn-clear" onclick="allClear()" style="width:100%">全クリア</button>
+    <div class="card" style="padding:10px;">
+      <button class="btn btn-clear" onclick="allClear()">全クリア</button>
     </div>
   </div>
 </div>
 
-<!-- Hidden inputs for backend -->
 <form id="predict-form" style="display:none">
   {% for i in range(1,7) %}
-  <input type="hidden" id="b{{ i }}_win1_rate" name="b{{ i }}_win1_rate" value="">
-  <input type="hidden" id="b{{ i }}_win2_rate" name="b{{ i }}_win2_rate" value="">
-  <input type="hidden" id="b{{ i }}_motor_win1" name="b{{ i }}_motor_win1" value="">
-  <input type="hidden" id="b{{ i }}_motor_contrib" name="b{{ i }}_motor_contrib" value="">
+  <input type="hidden" id="b{{ i }}_win1_rate" value="">
+  <input type="hidden" id="b{{ i }}_win2_rate" value="">
+  <input type="hidden" id="b{{ i }}_motor_win1" value="">
+  <input type="hidden" id="b{{ i }}_motor_contrib" value="">
   {% endfor %}
 </form>
 
 <script>
 // ======== Global State ========
-let avgStStats  = null; // {period: [v1..v6]}
-let playerStats = null; // {win1, win2, win3} each: {period: [v1..v6]}
-let kimariStats = null; // {直近6ヶ月: {...}, 直近1年: {...}, sim: {...}}
-let motorStats  = null; // {numbers, shorit, contrib, win1, win2, win3}
+let avgStStats  = null;
+let playerStats = null;
+let kimariStats = null;
+let motorStats  = null;
 
 // ======== Build Boat Cards ========
 const BOAT_COLORS = ['b1','b2','b3','b4','b5','b6'];
-const BOAT_LABELS = ['1号艇','2号艇','3号艇','4号艇','5号艇','6号艇'];
 
 function buildBoatCards() {
   const grid = document.getElementById('boats-grid');
   grid.innerHTML = '';
   for (let i = 1; i <= 6; i++) {
-    grid.innerHTML += `
-    <div class="boat-card">
+    const card = document.createElement('div');
+    card.className = 'boat-card';
+    card.innerHTML = `
       <div class="boat-header">
         <div class="boat-num ${BOAT_COLORS[i-1]}">${i}</div>
         <div>
-          <div class="motor-info">Motor: <span id="mn-${i}">-</span> <span id="mr-${i}" style="color:var(--accent2)"></span></div>
+          <div class="motor-info">Motor: <span id="mn-${i}">-</span> <span id="mr-${i}"></span></div>
           <div class="motor-info" id="mi-${i}"></div>
         </div>
       </div>
@@ -298,26 +697,26 @@ function buildBoatCards() {
           <div style="flex:1;display:flex;flex-direction:column;">
             <label>平均ST</label><input type="number" id="b${i}_avg_st" step="0.001" placeholder="0.150">
           </div>
-          <button class="btn-f" id="b${i}_fbtn" onclick="toggleF(${i})" title="F持ち">F持ち</button>
+          <button class="btn-f" id="b${i}_fbtn" onclick="toggleF(${i})">F持ち</button>
         </div>
         <div class="input-row"><label>体重</label><input type="number" id="b${i}_weight" placeholder="52"></div>
         <div class="f-st-row" id="b${i}_frow">
-          <label>F持ち時の平均ST</label>
+          <label>F持ち時ST</label>
           <select id="b${i}_fst_period" onchange="applyFST(${i})">
             <option value="">-- 選択 --</option>
           </select>
         </div>
-      </div>
-    </div>`;
+      </div>`;
+    grid.appendChild(card);
   }
 }
 
 // ======== Tab Switch ========
-function switchTab(name) {
+function switchTab(name, btn) {
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  event.target.classList.add('active');
+  btn.classList.add('active');
 }
 
 // ======== Parse: 平均ST ========
@@ -334,12 +733,8 @@ function parseAvgST(text) {
     const values = [];
     for (let c = 1; c < cols.length && values.length < 6; c++) {
       const v = cols[c].trim();
-      if (v === '-' || v === '') {
-        values.push('');
-      } else {
-        const n = parseFloat(v);
-        values.push(isNaN(n) ? '' : n);
-      }
+      if (v === '-' || v === '') { values.push(''); }
+      else { const n = parseFloat(v); values.push(isNaN(n) ? '' : n); }
     }
     while (values.length < 6) values.push('');
     result[periodLabel] = values;
@@ -354,12 +749,11 @@ function applyAvgST() {
   if (!vals) return;
   for (let i = 1; i <= 6; i++) {
     const fBtn = document.getElementById(`b${i}_fbtn`);
-    if (fBtn && fBtn.classList.contains('f-on')) continue; // F持ち中は上書きしない
+    if (fBtn && fBtn.classList.contains('f-on')) continue;
     const v = vals[i-1];
     const el = document.getElementById(`b${i}_avg_st`);
     if (el && v !== '') el.value = v;
   }
-  // F持ちドロップダウンに選択肢を設定
   populateFSTDropdowns();
 }
 
@@ -372,9 +766,8 @@ function populateFSTDropdowns() {
     sel.innerHTML = '<option value="">-- 選択 --</option>';
     for (const p of Object.keys(avgStStats)) {
       const opt = document.createElement('option');
-      opt.value = p;
-      opt.textContent = p;
-      if (p === 'F持') opt.selected = true; // デフォルトでF持を選択
+      opt.value = p; opt.textContent = p;
+      if (p === 'F持') opt.selected = true;
       sel.appendChild(opt);
     }
     if (current) sel.value = current;
@@ -388,12 +781,7 @@ function toggleF(i) {
   const isOn = btn.classList.toggle('f-on');
   btn.textContent = isOn ? 'F持ち✓' : 'F持ち';
   frow.classList.toggle('visible', isOn);
-  if (isOn) {
-    applyFST(i);
-  } else {
-    // F持ち解除→通常の平均STに戻す
-    applyAvgST();
-  }
+  if (isOn) { applyFST(i); } else { applyAvgST(); }
 }
 
 function applyFST(i) {
@@ -415,47 +803,30 @@ function parsePlayerStats(text) {
   const result = { win1: {}, win2: {}, win3: {} };
   const keys = ['win1','win2','win3'];
   const headers = ['1着率','2連対率','3連対率'];
-
-  // 「直近\n6ヶ月」「直近\n3ヶ月」「直近\n1ヶ月」を結合
   const normalized = text
     .replace(/直近\r?\n(\d+[ヶ年][月]?)/g, '直近$1')
     .replace(/直近\r?\n(\d+年)/g, '直近$1');
-
   const sections = normalized.split(/(?=^1着率|^2連対率|^3連対率)/m);
-
   for (let si = 0; si < headers.length; si++) {
     const sec = sections.find(s => s.trim().startsWith(headers[si]));
     if (!sec) continue;
     const lines = sec.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-
     let currentPeriod = null;
     let collected = [];
-
     const flush = () => {
-      if (currentPeriod && collected.length >= 6) {
-        result[keys[si]][currentPeriod] = collected.slice(0, 6);
-      }
+      if (currentPeriod && collected.length >= 6) result[keys[si]][currentPeriod] = collected.slice(0, 6);
     };
-
     for (const line of lines) {
-      // 期間名の判定
       const period = PLAYER_PERIODS.find(p => line.startsWith(p));
       if (period) {
-        flush();
-        currentPeriod = period;
-        collected = [];
-        // 同じ行に%があれば回収
+        flush(); currentPeriod = period; collected = [];
         const pcts = line.match(/(\d+\.?\d*)%/g);
         if (pcts) collected.push(...pcts.map(p => parseFloat(p)));
         continue;
       }
       if (!currentPeriod) continue;
-      // SG/G1行で「-」のみなら0で6個埋めてflush
       if (/^[-\t\s]+$/.test(line) && currentPeriod === 'SG/G1') {
-        collected = [0,0,0,0,0,0];
-        flush();
-        currentPeriod = null; collected = [];
-        continue;
+        collected = [0,0,0,0,0,0]; flush(); currentPeriod = null; collected = []; continue;
       }
       const pcts = line.match(/(\d+\.?\d*)%/g);
       if (pcts) collected.push(...pcts.map(p => parseFloat(p)));
@@ -489,63 +860,47 @@ function applyPlayerStats() {
 // ======== Parse: 決まり手 ========
 function parseKimariStats(text) {
   const result = {};
-  // Split into period blocks and sim block
   const blocks = text.split(/\n(?=直近[16][年ヶ月]+|逃げシミュ)/);
   for (const block of blocks) {
     const lines = block.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     if (lines.length === 0) continue;
     const header = lines[0];
-
     if (header.startsWith('逃げシミュ')) {
       const sim = {};
       let curCourse = null;
       for (let li = 1; li < lines.length; li++) {
         const line = lines[li];
-        const courseMatch = line.match(/^(\d)コース/);
-        if (courseMatch) { curCourse = parseInt(courseMatch[1]); sim[curCourse] = { nige_2nd_rates: {} }; continue; }
+        const m = line.match(/^(\d)コース/);
+        if (m) { curCourse = parseInt(m[1]); sim[curCourse] = { nige_2nd_rates: {} }; continue; }
         if (curCourse === null) continue;
-        const tabParts = line.split('\t');
-        // Format: コース番号\t%  or  2着艇\t%
-        if (tabParts.length >= 2) {
-          const courseNum = parseInt(tabParts[0]);
-          const pct = parseFloat(tabParts[1]);
-          if (!isNaN(courseNum) && !isNaN(pct)) {
-            sim[curCourse].nige_2nd_rates[courseNum] = pct;
-          }
+        const parts = line.split('\t');
+        if (parts.length >= 2) {
+          const cn = parseInt(parts[0]); const pct = parseFloat(parts[1]);
+          if (!isNaN(cn) && !isNaN(pct)) sim[curCourse].nige_2nd_rates[cn] = pct;
         }
       }
-      result['sim'] = sim;
-      continue;
+      result['sim'] = sim; continue;
     }
-
-    // Period block
     const periodKey = header.match(/直近[16][年ヶ月]+/)?.[0];
     if (!periodKey) continue;
     result[periodKey] = { nige: [], maki: [], makis: [], sashi: [], nukiashi: [] };
-    const entries = {};
     const labels = { '逃げ': 'nige', '捲り': 'maki', '捲り差し': 'makis', '差し': 'sashi', '抜き足': 'nukiashi' };
     for (let li = 1; li < lines.length; li++) {
       const cols = lines[li].split('\t');
       if (cols.length < 2) continue;
-      const label = cols[0].trim();
-      const key = labels[label];
+      const key = labels[cols[0].trim()];
       if (!key) continue;
       const vals = [];
       for (let ci = 1; ci < cols.length && vals.length < 6; ci++) {
-        const pct = parseFloat(cols[ci]);
-        vals.push(isNaN(pct) ? 0 : pct);
+        const pct = parseFloat(cols[ci]); vals.push(isNaN(pct) ? 0 : pct);
       }
       while (vals.length < 6) vals.push(0);
       result[periodKey][key] = vals;
     }
-    // Also update badges
     for (let i = 1; i <= 6; i++) {
-      const nige = (result[periodKey].nige[i-1] || 0).toFixed(1);
-      const mak  = (result[periodKey].maki[i-1] || 0).toFixed(1);
-      const maks = (result[periodKey].makis[i-1] || 0).toFixed(1);
-      document.getElementById(`kr-nige-${i}`).textContent = `逃${nige}%`;
-      document.getElementById(`kr-mak-${i}`).textContent  = `捲${mak}%`;
-      document.getElementById(`kr-maks-${i}`).textContent = `捲差${maks}%`;
+      document.getElementById(`kr-nige-${i}`).textContent = `逃${(result[periodKey].nige[i-1]||0).toFixed(1)}%`;
+      document.getElementById(`kr-mak-${i}`).textContent  = `捲${(result[periodKey].maki[i-1]||0).toFixed(1)}%`;
+      document.getElementById(`kr-maks-${i}`).textContent = `捲差${(result[periodKey].makis[i-1]||0).toFixed(1)}%`;
     }
   }
   return result;
@@ -557,42 +912,25 @@ function applyKimariStats() {
   const data = kimariStats[period];
   if (!data) return;
   for (let i = 1; i <= 6; i++) {
-    const nige = (data.nige[i-1] || 0).toFixed(1);
-    const mak  = (data.maki[i-1] || 0).toFixed(1);
-    const maks = (data.makis[i-1] || 0).toFixed(1);
-    document.getElementById(`kr-nige-${i}`).textContent = `逃${nige}%`;
-    document.getElementById(`kr-mak-${i}`).textContent  = `捲${mak}%`;
-    document.getElementById(`kr-maks-${i}`).textContent = `捲差${maks}%`;
+    document.getElementById(`kr-nige-${i}`).textContent = `逃${(data.nige[i-1]||0).toFixed(1)}%`;
+    document.getElementById(`kr-mak-${i}`).textContent  = `捲${(data.maki[i-1]||0).toFixed(1)}%`;
+    document.getElementById(`kr-maks-${i}`).textContent = `捲差${(data.makis[i-1]||0).toFixed(1)}%`;
   }
 }
 
 // ======== Parse: モーター ========
 function parseMotorStats(text) {
   const result = { numbers: [], shorit: [], contrib: [], win1: [], win2: [], win3: [] };
-  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  const labelMap = {
-    'モーター番号': 'numbers',
-    '勝率': 'shorit',
-    '2連対率': 'win2',
-    '3連対率': 'win3',
-    '機力貢献度': 'contrib',
-    '1着率': 'win1',
-  };
-  for (const line of lines) {
+  const labelMap = { 'モーター番号':'numbers','勝率':'shorit','2連対率':'win2','3連対率':'win3','機力貢献度':'contrib','1着率':'win1' };
+  for (const line of text.split('\n').map(l => l.trim()).filter(l => l.length > 0)) {
     const cols = line.split('\t');
     if (cols.length < 2) continue;
-    const label = cols[0].trim();
-    const key = labelMap[label];
+    const key = labelMap[cols[0].trim()];
     if (!key) continue;
     const vals = [];
     for (let ci = 1; ci < cols.length && vals.length < 6; ci++) {
       const v = cols[ci].trim();
-      if (key === 'numbers') {
-        vals.push(v);
-      } else {
-        const n = parseFloat(v);
-        vals.push(isNaN(n) ? 0 : n);
-      }
+      key === 'numbers' ? vals.push(v) : vals.push(isNaN(parseFloat(v)) ? 0 : parseFloat(v));
     }
     while (vals.length < 6) { key === 'numbers' ? vals.push('-') : vals.push(0); }
     result[key] = vals;
@@ -603,25 +941,20 @@ function parseMotorStats(text) {
 function applyMotorStats() {
   if (!motorStats) return;
   for (let i = 1; i <= 6; i++) {
-    const num = motorStats.numbers[i-1] || '-';
-    const shorit = motorStats.shorit[i-1] || 0;
-    const contrib = motorStats.contrib[i-1] || 0;
-    const mw1 = motorStats.win1[i-1] || 0;
-    const mw2 = motorStats.win2[i-1] || 0;
-    const mw3 = motorStats.win3[i-1] || 0;
-    document.getElementById(`mn-${i}`).textContent = num;
-    document.getElementById(`mr-${i}`).textContent = shorit ? `勝率${shorit}` : '';
-    document.getElementById(`mb1-${i}`).textContent = `機1着${mw1}%`;
-    document.getElementById(`mb2-${i}`).textContent = `機2連${mw2}%`;
-    document.getElementById(`mb3-${i}`).textContent = `機3連${mw3}%`;
-    document.getElementById(`b${i}_motor_win1`).value = mw1;
-    document.getElementById(`b${i}_motor_contrib`).value = contrib;
+    document.getElementById(`mn-${i}`).textContent = motorStats.numbers[i-1] || '-';
+    document.getElementById(`mr-${i}`).textContent = motorStats.shorit[i-1] ? `勝率${motorStats.shorit[i-1]}` : '';
+    document.getElementById(`mb1-${i}`).textContent = `機1着${motorStats.win1[i-1]||0}%`;
+    document.getElementById(`mb2-${i}`).textContent = `機2連${motorStats.win2[i-1]||0}%`;
+    document.getElementById(`mb3-${i}`).textContent = `機3連${motorStats.win3[i-1]||0}%`;
+    document.getElementById(`b${i}_motor_win1`).value = motorStats.win1[i-1] || 0;
+    document.getElementById(`b${i}_motor_contrib`).value = motorStats.contrib[i-1] || 0;
   }
 }
 
 // ======== Main Dispatcher ========
 function parseData(name) {
   const statusEl = document.getElementById(`status-${name}`);
+  statusEl.style.color = 'var(--green)';
   if (name === 'avg-st') {
     const text = document.getElementById('paste-avg-st').value;
     avgStStats = parseAvgST(text);
@@ -629,8 +962,8 @@ function parseData(name) {
       applyAvgST();
       statusEl.textContent = `✓ 適用済み（${Object.keys(avgStStats).join(', ')}）`;
     } else {
-      statusEl.textContent = '× 解析失敗: データ形式を確認してください';
       statusEl.style.color = 'var(--accent)';
+      statusEl.textContent = '× 解析失敗: データ形式を確認してください';
     }
   } else if (name === 'player') {
     const text = document.getElementById('paste-player').value;
@@ -638,12 +971,10 @@ function parseData(name) {
     const w1keys = Object.keys(playerStats.win1);
     if (w1keys.length > 0) {
       applyPlayerStats();
-      statusEl.style.color = 'var(--green)';
       statusEl.textContent = `✓ 選手成績を適用しました（${w1keys.join(', ')}）`;
     } else {
       statusEl.style.color = 'var(--accent)';
-      statusEl.textContent = '× 解析失敗: データ形式を確認してください（コンソールF12で詳細確認）';
-      console.log('parsePlayerStats失敗。入力テキスト:', text);
+      statusEl.textContent = '× 解析失敗: データ形式を確認してください';
     }
   } else if (name === 'kimari') {
     const text = document.getElementById('paste-kimari').value;
@@ -656,39 +987,40 @@ function parseData(name) {
     applyMotorStats();
     statusEl.textContent = '✓ モーターデータを適用しました';
   } else if (name === 'exhibit') {
-    statusEl.textContent = '準備中です';
     statusEl.style.color = 'var(--text-muted)';
+    statusEl.textContent = '近日対応予定です';
   } else if (name === 'odds') {
-    statusEl.textContent = '準備中です';
     statusEl.style.color = 'var(--text-muted)';
+    statusEl.textContent = '近日対応予定です';
   }
 }
 
 // ======== Predict ========
 async function runPredict() {
+  const area = document.getElementById('result-area');
+  area.innerHTML = `<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div><span>予想計算中...</span></div>`;
+
   const boats = [];
   for (let i = 1; i <= 6; i++) {
     boats.push({
-      boat_number: i,
-      course:       parseFloat(document.getElementById(`b${i}_course`).value) || i,
-      exhibit_time: parseFloat(document.getElementById(`b${i}_exhibit_time`).value) || 0,
-      laps:         parseFloat(document.getElementById(`b${i}_laps`).value) || 0,
-      mawariashi:   parseFloat(document.getElementById(`b${i}_mawariashi`).value) || 0,
-      tilt:         parseFloat(document.getElementById(`b${i}_tilt`).value) || 0,
-      avg_st:       parseFloat(document.getElementById(`b${i}_avg_st`).value) || 0,
-      is_f:         document.getElementById(`b${i}_fbtn`)?.classList.contains('f-on') || false,
-      weight:       parseFloat(document.getElementById(`b${i}_weight`).value) || 0,
-      win1_rate:    parseFloat(document.getElementById(`b${i}_win1_rate`).value) || 0,
-      win2_rate:    parseFloat(document.getElementById(`b${i}_win2_rate`).value) || 0,
-      motor_win1:   parseFloat(document.getElementById(`b${i}_motor_win1`).value) || 0,
-      motor_contrib:parseFloat(document.getElementById(`b${i}_motor_contrib`).value) || 0,
+      boat_number:   i,
+      course:        parseFloat(document.getElementById(`b${i}_course`).value) || i,
+      exhibit_time:  parseFloat(document.getElementById(`b${i}_exhibit_time`).value) || 0,
+      laps:          parseFloat(document.getElementById(`b${i}_laps`).value) || 0,
+      mawariashi:    parseFloat(document.getElementById(`b${i}_mawariashi`).value) || 0,
+      tilt:          parseFloat(document.getElementById(`b${i}_tilt`).value) || 0,
+      avg_st:        parseFloat(document.getElementById(`b${i}_avg_st`).value) || 0,
+      is_f:          document.getElementById(`b${i}_fbtn`)?.classList.contains('f-on') || false,
+      weight:        parseFloat(document.getElementById(`b${i}_weight`).value) || 0,
+      win1_rate:     parseFloat(document.getElementById(`b${i}_win1_rate`).value) || 0,
+      win2_rate:     parseFloat(document.getElementById(`b${i}_win2_rate`).value) || 0,
+      motor_win1:    parseFloat(document.getElementById(`b${i}_motor_win1`).value) || 0,
+      motor_contrib: parseFloat(document.getElementById(`b${i}_motor_contrib`).value) || 0,
     });
   }
 
   let kimariPayload = null;
-  if (kimariStats && kimariStats.sim) {
-    kimariPayload = { sim: kimariStats.sim };
-  }
+  if (kimariStats && kimariStats.sim) kimariPayload = { sim: kimariStats.sim };
 
   const resp = await fetch('/predict', {
     method: 'POST',
@@ -705,15 +1037,21 @@ function renderResult(data) {
   let html = '';
   for (const p of data.predictions) {
     const cls = typeClass[p.type] || 'pred-honmei';
-    html += `<div class="pred-item ${cls}"><span class="pred-label">${p.type}</span><span class="pred-combo">${p.combo}</span></div>`;
+    html += `<div class="pred-item ${cls}">
+      <span class="pred-label">${p.type}</span>
+      <span class="pred-combo">${p.combo}</span>
+    </div>`;
   }
-  if (data.score_order) {
-    html += `<div style="margin-top:10px;color:var(--text-muted);font-size:11px;">スコア順</div>`;
-    html += `<table class="score-table"><tr><th>コース</th><th>艇番</th><th>スコア</th></tr>`;
-    for (const s of data.score_order) {
-      html += `<tr><td>${s.course}コース</td><td>${s.boat_number}号艇</td><td>${s.score}</td></tr>`;
-    }
-    html += `</table>`;
+  if (data.score_order && data.score_order.length > 0) {
+    html += `<div class="divider"></div>
+    <div class="score-section">
+      <div class="score-title">スコア順位</div>
+      <table class="score-table">
+        <tr><th>順位</th><th>艇番</th><th>コース</th><th>スコア</th></tr>`;
+    data.score_order.forEach((s, idx) => {
+      html += `<tr><td>${idx+1}</td><td>${s.boat_number}号艇</td><td>${s.course}コース</td><td>${s.score}</td></tr>`;
+    });
+    html += `</table></div>`;
   }
   area.innerHTML = html || '<div style="color:var(--text-muted)">予想なし</div>';
 }
@@ -723,8 +1061,7 @@ function allClear() {
   avgStStats = null; playerStats = null; kimariStats = null; motorStats = null;
   for (let i = 1; i <= 6; i++) {
     ['exhibit_time','laps','mawariashi','avg_st','weight'].forEach(f => {
-      const el = document.getElementById(`b${i}_${f}`);
-      if (el) el.value = '';
+      const el = document.getElementById(`b${i}_${f}`); if (el) el.value = '';
     });
     document.getElementById(`b${i}_tilt`).value = '0';
     document.getElementById(`b${i}_course`).value = i;
@@ -748,10 +1085,9 @@ function allClear() {
     document.getElementById(`mn-${i}`).textContent = '-';
     document.getElementById(`mr-${i}`).textContent = '';
   }
-  document.getElementById('result-area').innerHTML = '<div style="color:var(--text-muted);font-size:12px;">予想するボタンを押してください</div>';
+  document.getElementById('result-area').innerHTML = '<div style="color:var(--text-muted);font-size:12px;margin-top:12px;text-align:center;letter-spacing:1px;">データを入力して予想するを押してください</div>';
   ['avg-st','player','kimari','motor','exhibit','odds'].forEach(n => {
-    const el = document.getElementById(`status-${n}`);
-    if (el) el.textContent = '';
+    const el = document.getElementById(`status-${n}`); if (el) el.textContent = '';
   });
 }
 
