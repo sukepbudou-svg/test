@@ -22,7 +22,6 @@
   select,input[type=date],input[type=number]{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:6px 10px;font-size:13px;outline:none;transition:border-color .2s}
   select:focus,input:focus{border-color:var(--accent)}
   select{cursor:pointer}
-  /* paste */
   .paste-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:18px;overflow:hidden}
   .paste-tabs{display:flex;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border);padding:10px 12px 0;gap:6px}
   .tab-btn{background:var(--surface2);border:1px solid var(--border);border-bottom:none;border-radius:6px 6px 0 0;color:var(--muted);padding:7px 14px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .15s,color .15s;white-space:nowrap}
@@ -43,7 +42,6 @@
   .btn-clear-area:hover{background:var(--border);color:var(--text)}
   .parse-result{margin-top:8px;font-size:12px;display:none}
   .parse-ok{color:var(--taikou)}.parse-err{color:var(--ana)}
-  /* 逃げシミュ */
   .nige-sim{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-top:10px;font-size:12px;display:none}
   .nige-sim h4{color:var(--accent);margin-bottom:8px;font-size:12px}
   .nige-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
@@ -54,12 +52,10 @@
   .odds-cell{background:#1a3a1a;border:1px solid #2d4a2d;border-radius:4px;padding:4px 8px;font-size:11px}
   .odds-cell .oc-label{color:var(--muted);margin-right:4px}
   .odds-cell .oc-val{color:var(--taikou);font-weight:700}
-  /* period */
   .period-selectors{display:flex;flex-wrap:wrap;gap:18px;padding:12px 16px;border-top:1px solid var(--border);align-items:center}
   .period-group{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
   .period-group select{font-size:12px;padding:4px 8px}
   .period-note{font-size:11px;color:#4a5568}
-  /* boats */
   .boats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:18px}
   .boat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;position:relative}
   .boat-card::before{content:attr(data-num);position:absolute;top:10px;right:12px;font-size:22px;font-weight:900;opacity:.15}
@@ -74,13 +70,11 @@
   .badge-1{background:#4e9eff;color:#fff}.badge-2{background:#333;color:#fff;border:1px solid #888}
   .badge-3{background:#e63946;color:#fff}.badge-4{background:#06d6a0;color:#111}
   .badge-5{background:#ffd166;color:#111}.badge-6{background:#adb5bd;color:#111}
-  /* 調査バッジ行 */
   .stat-row{display:flex;gap:4px;margin-bottom:5px;flex-wrap:wrap}
   .stat-badge{font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700;background:var(--surface2);border:1px solid var(--border);color:var(--muted)}
   .stat-badge.yellow{color:#ffd166;border-color:#ffd166;background:#2a2200}
   .stat-badge.green{color:#06d6a0;border-color:#06d6a0;background:#002a1a}
   .stat-badge.blue{color:#4e9eff;border-color:#4e9eff;background:#001a2a}
-  /* motor表示 */
   .motor-info{font-size:10px;color:var(--muted);margin-bottom:5px;display:none}
   .motor-info.visible{display:block}
   .motor-num{font-weight:700;color:#a78bfa}
@@ -133,10 +127,10 @@
     <div class="paste-content">
 
       <div class="tab-panel active" id="panel-avg-st">
-        <div class="tab-desc">基本情報の平均ST表（今期〜F持ち）をコピペ。下の期間プルダウンで選んだ行のSTを反映。</div>
+        <div class="tab-desc">基本情報の平均ST表（「平均ST」見出しからF持ち行まで）をコピペ。下の「平均STの期間」で選んだ行のST値を各艇に自動入力します。</div>
         <textarea class="paste-area" id="ta-avg-st" placeholder="ここに貼り付け"></textarea>
         <div class="paste-btns"><button class="btn-parse" onclick="parseData('avg-st')">解析して入力</button><button class="btn-clear-area" onclick="clearArea('avg-st')">クリア</button></div>
-        <div class="parse-result parse-ok" id="pr-avg-st"></div>
+        <div class="parse-result" id="pr-avg-st"></div>
       </div>
 
       <div class="tab-panel" id="panel-player">
@@ -179,12 +173,28 @@
     <div class="period-selectors">
       <div class="period-group">
         <span>平均STの期間</span>
-        <select id="st-period"><option>今期</option><option>直近6ヶ月</option><option>直近3ヶ月</option><option>直近1ヶ月</option><option>F持ち</option></select>
+        <select id="st-period" onchange="applyAvgST()">
+          <option>今期</option>
+          <option>直近6ヶ月</option>
+          <option>直近3ヶ月</option>
+          <option>直近1ヶ月</option>
+          <option>当地</option>
+          <option>一般戦</option>
+          <option>SG/G1</option>
+          <option>初日</option>
+          <option>最終日</option>
+          <option>ナイター</option>
+          <option>F持</option>
+        </select>
         <span class="period-note">※平均ST表を貼り付けると有効</span>
       </div>
       <div class="period-group">
         <span>選手成績の区分</span>
-        <select id="player-period"><option>今期</option><option>直近6ヶ月</option><option>直近3ヶ月</option><option>直近1ヶ月</option><option>当地</option><option>一般戦</option><option>SG/G1</option><option>女子戦</option></select>
+        <select id="player-period" onchange="applyPlayerStats()">
+          <option>今期</option><option>直近6ヶ月</option><option>直近3ヶ月</option>
+          <option>直近1ヶ月</option><option>当地</option><option>一般戦</option>
+          <option>SG/G1</option><option>女子戦</option>
+        </select>
         <span class="period-note">※選手成績を貼り付けると有効</span>
       </div>
       <div class="period-group">
@@ -222,6 +232,7 @@ const FIELDS = [
   {key:'weight',       label:'体重 (kg)',  type:'number', step:'0.1', placeholder:'52.0'},
 ];
 
+let avgStStats  = null;
 let playerStats = null;
 let kimariStats = null;
 let motorStats  = null;
@@ -234,22 +245,18 @@ for (let i = 1; i <= 6; i++) {
   const card = document.createElement('div');
   card.className = 'boat-card'; card.dataset.num = i;
   let html = `<div class="boat-num"><span class="boat-badge badge-${i}">${i}</span>${i}号艇</div>`;
-  // モーター情報行
   html += `<div class="motor-info" id="mi-${i}">モーター <span class="motor-num" id="mn-${i}">-</span> 勝率 <span id="mr-${i}">-</span></div>`;
-  // 選手成績バッジ
-  html += `<div class="stat-row" id="wr-${i}">
+  html += `<div class="stat-row">
     <span class="stat-badge" id="wr1-${i}">1着-</span>
     <span class="stat-badge" id="wr2-${i}">2連-</span>
     <span class="stat-badge" id="wr3-${i}">3連-</span>
   </div>`;
-  // 決まり手バッジ
-  html += `<div class="stat-row" id="kr-${i}">
+  html += `<div class="stat-row">
     <span class="stat-badge" id="kr-nige-${i}">${i===1?'逃げ-':'差し-'}</span>
     <span class="stat-badge" id="kr-mak-${i}">捲り-</span>
     <span class="stat-badge" id="kr-maks-${i}">捲差-</span>
   </div>`;
-  // モーターバッジ
-  html += `<div class="stat-row" id="mr-row-${i}">
+  html += `<div class="stat-row">
     <span class="stat-badge" id="mb1-${i}">機1着-</span>
     <span class="stat-badge" id="mb2-${i}">機2連-</span>
     <span class="stat-badge" id="mb3-${i}">機3連-</span>
@@ -273,7 +280,7 @@ for (let i = 1; i <= 6; i++) {
   grid.appendChild(card);
 }
 
-function switchTab(name, btn) {
+function switchTab(name, btn){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
   btn.classList.add('active');
@@ -291,24 +298,49 @@ function allClear(){
   ['avg-st','player','kimari','motor','exhibit','odds'].forEach(n=>clearArea(n));
   document.querySelectorAll('.parse-result').forEach(el=>{el.style.display='none';});
   document.getElementById('nige-sim').style.display='none';
-  playerStats=null; kimariStats=null; motorStats=null;
+  avgStStats=null; playerStats=null; kimariStats=null; motorStats=null;
   for(let i=1;i<=6;i++){
     for(const f of FIELDS){const el=document.getElementById(`b${i}_${f.key}`);if(el)el.value=f.key==='course'?i:'';}
-    document.getElementById(`b${i}_win1_rate`).value='';
-    document.getElementById(`b${i}_win2_rate`).value='';
-    document.getElementById(`b${i}_motor_win1`).value='';
-    document.getElementById(`b${i}_motor_contrib`).value='';
-    // 選手バッジ
+    ['win1_rate','win2_rate','motor_win1','motor_contrib'].forEach(k=>{const el=document.getElementById(`b${i}_${k}`);if(el)el.value='';});
     ['wr1','wr2','wr3'].forEach((p,j)=>{const el=document.getElementById(`${p}-${i}`);if(el){el.textContent=['1着-','2連-','3連-'][j];el.className='stat-badge';}});
-    // 決まり手バッジ
     const kn=document.getElementById(`kr-nige-${i}`);if(kn){kn.textContent=i===1?'逃げ-':'差し-';kn.className='stat-badge';}
-    const km=document.getElementById(`kr-mak-${i}`);if(km){km.textContent='捲り-';km.className='stat-badge';}
-    const ks=document.getElementById(`kr-maks-${i}`);if(ks){ks.textContent='捲差-';ks.className='stat-badge';}
-    // モーターバッジ
-    const mb1=document.getElementById(`mb1-${i}`);if(mb1){mb1.textContent='機1着-';mb1.className='stat-badge';}
-    const mb2=document.getElementById(`mb2-${i}`);if(mb2){mb2.textContent='機2連-';mb2.className='stat-badge';}
-    const mb3=document.getElementById(`mb3-${i}`);if(mb3){mb3.textContent='機3連-';mb3.className='stat-badge';}
+    ['kr-mak','kr-maks'].forEach((p,j)=>{const el=document.getElementById(`${p}-${i}`);if(el){el.textContent=['捲り-','捲差-'][j];el.className='stat-badge';}});
+    ['mb1','mb2','mb3'].forEach((p,j)=>{const el=document.getElementById(`${p}-${i}`);if(el){el.textContent=['機1着-','機2連-','機3連-'][j];el.className='stat-badge';}});
     const mi=document.getElementById(`mi-${i}`);if(mi)mi.classList.remove('visible');
+  }
+}
+
+// ===== 平均STパーサ =====
+const ST_PERIODS = ['今期','直近6ヶ月','直近3ヶ月','直近1ヶ月','当地','一般戦','SG/G1','初日','最終日','ナイター','F持'];
+function parseAvgST(text){
+  const lines=text.split('\n').map(l=>l.trim()).filter(l=>l);
+  const result={};
+  for(const line of lines){
+    const parts=line.split(/\t+/);
+    const label=parts[0].trim();
+    if(ST_PERIODS.includes(label)){
+      // "-" は空文字に、数値はそのまま
+      result[label]=parts.slice(1).map(v=>v.trim()==='-'?'':v.trim()).slice(0,6);
+    }
+  }
+  return Object.keys(result).length>0 ? result : null;
+}
+function applyAvgST(){
+  if(!avgStStats)return;
+  const period=document.getElementById('st-period').value;
+  const vals=avgStStats[period]||[];
+  let applied=0;
+  for(let i=1;i<=6;i++){
+    const v=vals[i-1];
+    if(v!==undefined && v!==''){
+      document.getElementById(`b${i}_avg_st`).value=v;
+      applied++;
+    }
+  }
+  // 期間変更時に結果表示を更新
+  const pr=document.getElementById('pr-avg-st');
+  if(pr.style.display!=='none'){
+    showPr('pr-avg-st',`✓ 平均ST解析完了（${period}）: ${vals.map(v=>v||'-').join(' / ')}`);
   }
 }
 
@@ -338,9 +370,7 @@ function applyPlayerStats(){
   const period=document.getElementById('player-period').value;
   const w1=playerStats.win1[period]||[],w2=playerStats.win2[period]||[],w3=playerStats.win3[period]||[];
   for(let i=1;i<=6;i++){
-    const v1=w1[i-1]!==undefined?w1[i-1]:'';
-    const v2=w2[i-1]!==undefined?w2[i-1]:'';
-    const v3=w3[i-1]!==undefined?w3[i-1]:'';
+    const v1=w1[i-1]!==undefined?w1[i-1]:'',v2=w2[i-1]!==undefined?w2[i-1]:'',v3=w3[i-1]!==undefined?w3[i-1]:'';
     document.getElementById(`b${i}_win1_rate`).value=v1;
     document.getElementById(`b${i}_win2_rate`).value=v2;
     const b1=document.getElementById(`wr1-${i}`),b2=document.getElementById(`wr2-${i}`),b3=document.getElementById(`wr3-${i}`);
@@ -349,7 +379,6 @@ function applyPlayerStats(){
     if(v3!==''){b3.textContent=`3連 ${v3}%`;b3.className='stat-badge yellow';}
   }
 }
-document.getElementById('player-period').addEventListener('change',applyPlayerStats);
 
 // ===== 決まり手/逃げパーサ =====
 function parseKimariStats(text){
@@ -360,13 +389,9 @@ function parseKimariStats(text){
   function parsePeriodBlock(block){
     if(!block)return null;
     const pcts=block.match(/\d+\.\d+%/g)||[];
-    return{
-      nige:     pcts[0]  ?parseFloat(pcts[0]):0,
-      nigashi:  pcts[1]  ?parseFloat(pcts[1]):0,
-      sashi:    pcts.slice(3,8).map(v=>parseFloat(v)||0),
-      makuri:   pcts.slice(9,14).map(v=>parseFloat(v)||0),
-      makuri_s: pcts.slice(15,20).map(v=>parseFloat(v)||0),
-    };
+    return{nige:pcts[0]?parseFloat(pcts[0]):0,nigashi:pcts[1]?parseFloat(pcts[1]):0,
+      sashi:pcts.slice(3,8).map(v=>parseFloat(v)||0),makuri:pcts.slice(9,14).map(v=>parseFloat(v)||0),
+      makuri_s:pcts.slice(15,20).map(v=>parseFloat(v)||0)};
   }
   result['直近6ヶ月']=parsePeriodBlock(m6?m6[1]:null);
   result['直近1年']=parsePeriodBlock(m1?m1[1]:null);
@@ -391,17 +416,13 @@ function applyKimariStats(){
     if(kn){kn.textContent=`逃げ ${block.nige}%`;kn.className='stat-badge green';}
     for(let i=2;i<=6;i++){
       const idx=i-2;
-      const ks=document.getElementById(`kr-nige-${i}`);
-      const km=document.getElementById(`kr-mak-${i}`);
-      const kms=document.getElementById(`kr-maks-${i}`);
+      const ks=document.getElementById(`kr-nige-${i}`),km=document.getElementById(`kr-mak-${i}`),kms=document.getElementById(`kr-maks-${i}`);
       if(ks&&block.sashi[idx]!==undefined){ks.textContent=`差 ${block.sashi[idx]}%`;ks.className='stat-badge green';}
       if(km&&block.makuri[idx]!==undefined){km.textContent=`捲 ${block.makuri[idx]}%`;km.className='stat-badge green';}
       if(kms&&block.makuri_s[idx]!==undefined){kms.textContent=`捲差 ${block.makuri_s[idx]}%`;kms.className='stat-badge green';}
     }
   }
   const sim=kimariStats.sim;
-  const simBox=document.getElementById('nige-sim');
-  const simBody=document.getElementById('nige-sim-body');
   if(sim){
     let html='<div class="nige-row">';
     html+=`<div class="nige-cell"><span class="nc-label">1着率</span><span class="nc-val">${sim.win_rate}%</span></div>`;
@@ -411,11 +432,10 @@ function applyKimariStats(){
     html+='</div><div class="odds-row">';
     Object.entries(sim.nige_odds).forEach(([c,v])=>{html+=`<div class="odds-cell"><span class="oc-label">1-${c}</span><span class="oc-val">${v}%</span></div>`;});
     html+='</div>';
-    simBody.innerHTML=html;
-    simBox.style.display='block';
+    document.getElementById('nige-sim-body').innerHTML=html;
+    document.getElementById('nige-sim').style.display='block';
   }
 }
-document.getElementById('kimari-period').addEventListener('change',applyKimariStats);
 
 // ===== モーターパーサ =====
 function parseMotorStats(text){
@@ -425,19 +445,12 @@ function parseMotorStats(text){
     const parts=line.split(/\t+/);
     const label=parts[0].trim();
     const vals=parts.slice(1).map(v=>v.trim()).filter(v=>v);
-    if(label==='番号'){
-      result.numbers=vals;
-    } else if(label==='勝率'){
-      result.shorit=vals.map(v=>parseFloat(v)||0);
-    } else if(label==='貢献ポイント'||label==='貢献P'||label==='貢献P'||label.includes('貢献')){
-      result.contrib=vals.map(v=>parseFloat(v)||0);
-    } else if(label==='1着率'){
-      result.win1=vals.map(v=>parseFloat(v)||0);
-    } else if(label==='2連対率'){
-      result.win2=vals.map(v=>parseFloat(v)||0);
-    } else if(label==='3連対率'){
-      result.win3=vals.map(v=>parseFloat(v)||0);
-    }
+    if(label==='番号')result.numbers=vals;
+    else if(label==='勝率')result.shorit=vals.map(v=>parseFloat(v)||0);
+    else if(label.includes('貢献'))result.contrib=vals.map(v=>parseFloat(v)||0);
+    else if(label==='1着率')result.win1=vals.map(v=>parseFloat(v)||0);
+    else if(label==='2連対率')result.win2=vals.map(v=>parseFloat(v)||0);
+    else if(label==='3連対率')result.win3=vals.map(v=>parseFloat(v)||0);
   }
   return result.numbers.length>0 ? result : null;
 }
@@ -445,24 +458,14 @@ function applyMotorStats(){
   if(!motorStats)return;
   for(let i=1;i<=6;i++){
     const idx=i-1;
-    const num=motorStats.numbers[idx]||'-';
-    const sho=motorStats.shorit[idx]!==undefined?motorStats.shorit[idx]:'-';
+    const num=motorStats.numbers[idx]||'-',sho=motorStats.shorit[idx]!==undefined?motorStats.shorit[idx]:'-';
     const c=motorStats.contrib[idx]!==undefined?motorStats.contrib[idx]:0;
-    const m1=motorStats.win1[idx]!==undefined?motorStats.win1[idx]:'';
-    const m2=motorStats.win2[idx]!==undefined?motorStats.win2[idx]:'';
-    const m3=motorStats.win3[idx]!==undefined?motorStats.win3[idx]:'';
-    // モーター番号・勝率表示
-    const mi=document.getElementById(`mi-${i}`);
-    const mnEl=document.getElementById(`mn-${i}`);
-    const mrEl=document.getElementById(`mr-${i}`);
+    const m1=motorStats.win1[idx]!==undefined?motorStats.win1[idx]:'',m2=motorStats.win2[idx]!==undefined?motorStats.win2[idx]:'',m3=motorStats.win3[idx]!==undefined?motorStats.win3[idx]:'';
+    const mi=document.getElementById(`mi-${i}`),mnEl=document.getElementById(`mn-${i}`),mrEl=document.getElementById(`mr-${i}`);
     if(mi&&mnEl&&mrEl){mnEl.textContent=num;mrEl.textContent=sho;mi.classList.add('visible');}
-    // hidden入力欄
     document.getElementById(`b${i}_motor_win1`).value=m1;
     document.getElementById(`b${i}_motor_contrib`).value=c;
-    // バッジ
-    const mb1=document.getElementById(`mb1-${i}`);
-    const mb2=document.getElementById(`mb2-${i}`);
-    const mb3=document.getElementById(`mb3-${i}`);
+    const mb1=document.getElementById(`mb1-${i}`),mb2=document.getElementById(`mb2-${i}`),mb3=document.getElementById(`mb3-${i}`);
     if(mb1&&m1!==''){mb1.textContent=`機1着 ${m1}%`;mb1.className='stat-badge blue';}
     if(mb2&&m2!==''){mb2.textContent=`機2連 ${m2}%`;mb2.className='stat-badge blue';}
     if(mb3&&m3!==''){mb3.textContent=`機3連 ${m3}%`;mb3.className='stat-badge blue';}
@@ -473,19 +476,23 @@ function applyMotorStats(){
 function parseData(name){
   const text=document.getElementById('ta-'+name).value;
   if(!text.trim())return;
-  if(name==='exhibit'){
+  if(name==='avg-st'){
+    const stats=parseAvgST(text);
+    if(!stats){showPr('pr-avg-st','⚠ 解析できませんでした。「平均ST」見出しからF持行までコピペしてください。',false);return;}
+    avgStStats=stats;
+    applyAvgST();
+    const period=document.getElementById('st-period').value;
+    const vals=stats[period]||[];
+    showPr('pr-avg-st',`✓ 平均ST解析完了（${period}）: ${vals.map(v=>v||'-').join(' / ')}`);
+  } else if(name==='exhibit'){
     const nums=text.match(/\d\.\d{2}/g);
     if(nums){for(let i=0;i<Math.min(nums.length,6);i++)document.getElementById(`b${i+1}_exhibit_time`).value=nums[i];showPr('pr-exhibit',`✓ 展示タイムを${Math.min(nums.length,6)}艇分入力しました`);}
-  } else if(name==='avg-st'){
-    const nums=text.match(/0\.\d{2}/g);
-    if(nums){for(let i=0;i<Math.min(nums.length,6);i++)document.getElementById(`b${i+1}_avg_st`).value=nums[i];showPr('pr-avg-st',`✓ 平均STを${Math.min(nums.length,6)}艇分入力しました`);}
   } else if(name==='player'){
     const stats=parsePlayerStats(text);
     if(!stats){showPr('pr-player','⚠ 解析できませんでした。',false);return;}
     playerStats=stats; applyPlayerStats();
     const period=document.getElementById('player-period').value;
-    const w1=stats.win1[period]||[];
-    showPr('pr-player',`✓ 選手成績解析完了（${period}） 1着率: ${w1.map(v=>`${v}%`).join(' / ')}`);
+    showPr('pr-player',`✓ 選手成績解析完了（${period}） 1着率: ${(stats.win1[period]||[]).map(v=>`${v}%`).join(' / ')}`);
   } else if(name==='kimari'){
     const stats=parseKimariStats(text);
     kimariStats=stats; applyKimariStats();
