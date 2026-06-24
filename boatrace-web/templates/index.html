@@ -606,8 +606,16 @@ function parseData(name) {
   } else if (name === 'player') {
     const text = document.getElementById('paste-player').value;
     playerStats = parsePlayerStats(text);
-    applyPlayerStats();
-    statusEl.textContent = '✓ 選手成績を適用しました';
+    const w1keys = Object.keys(playerStats.win1);
+    if (w1keys.length > 0) {
+      applyPlayerStats();
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = `✓ 選手成績を適用しました（${w1keys.join(', ')}）`;
+    } else {
+      statusEl.style.color = 'var(--accent)';
+      statusEl.textContent = '× 解析失敗: データ形式を確認してください（コンソールF12で詳細確認）';
+      console.log('parsePlayerStats失敗。入力テキスト:', text);
+    }
   } else if (name === 'kimari') {
     const text = document.getElementById('paste-kimari').value;
     kimariStats = parseKimariStats(text);
