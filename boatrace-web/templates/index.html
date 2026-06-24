@@ -73,6 +73,13 @@
   .score-table { font-size: 11px; margin-top: 8px; }
   .score-table th, .score-table td { padding: 2px 6px; text-align: center; }
   .score-table th { color: var(--text-muted); }
+  /* F持ち */
+  .btn-f { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; font-size: 11px; font-weight: bold; cursor: pointer; }
+  .btn-f.f-on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .f-st-row { display: none; grid-column: 1 / -1; }
+  .f-st-row.visible { display: flex; align-items: center; gap: 6px; }
+  .f-st-row label { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+  .f-st-row select { background: var(--input-bg); color: var(--text); border: 1px solid var(--accent); border-radius: 3px; padding: 3px 5px; font-size: 12px; flex: 1; }
 </style>
 </head>
 <body>
@@ -287,8 +294,19 @@ function buildBoatCards() {
         <div class="input-row"><label>周回数</label><input type="number" id="b${i}_laps" placeholder="3"></div>
         <div class="input-row"><label>まわり足</label><input type="number" id="b${i}_mawariashi" step="0.01"></div>
         <div class="input-row"><label>チルト</label><input type="number" id="b${i}_tilt" step="0.5" value="0"></div>
-        <div class="input-row"><label>平均ST</label><input type="number" id="b${i}_avg_st" step="0.001" placeholder="0.150"></div>
+        <div class="input-row" style="flex-direction:row;align-items:flex-end;gap:4px;">
+          <div style="flex:1;display:flex;flex-direction:column;">
+            <label>平均ST</label><input type="number" id="b${i}_avg_st" step="0.001" placeholder="0.150">
+          </div>
+          <button class="btn-f" id="b${i}_fbtn" onclick="toggleF(${i})" title="F持ち">F持ち</button>
+        </div>
         <div class="input-row"><label>体重</label><input type="number" id="b${i}_weight" placeholder="52"></div>
+        <div class="f-st-row" id="b${i}_frow">
+          <label>F持ち時の平均ST</label>
+          <select id="b${i}_fst_period" onchange="applyFST(${i})">
+            <option value="">-- 選択 --</option>
+          </select>
+        </div>
       </div>
     </div>`;
   }
@@ -335,10 +353,59 @@ function applyAvgST() {
   const vals = avgStStats[period];
   if (!vals) return;
   for (let i = 1; i <= 6; i++) {
+    const fBtn = document.getElementById(`b${i}_fbtn`);
+    if (fBtn && fBtn.classList.contains('f-on')) continue; // F持ち中は上書きしない
     const v = vals[i-1];
     const el = document.getElementById(`b${i}_avg_st`);
     if (el && v !== '') el.value = v;
   }
+  // F持ちドロップダウンに選択肢を設定
+  populateFSTDropdowns();
+}
+
+function populateFSTDropdowns() {
+  if (!avgStStats) return;
+  for (let i = 1; i <= 6; i++) {
+    const sel = document.getElementById(`b${i}_fst_period`);
+    if (!sel) continue;
+    const current = sel.value;
+    sel.innerHTML = '<option value="">-- 選択 --</option>';
+    for (const p of Object.keys(avgStStats)) {
+      const opt = document.createElement('option');
+      opt.value = p;
+      opt.textContent = p;
+      if (p === 'F持') opt.selected = true; // デフォルトでF持を選択
+      sel.appendChild(opt);
+    }
+    if (current) sel.value = current;
+    applyFST(i);
+  }
+}
+
+function toggleF(i) {
+  const btn = document.getElementById(`b${i}_fbtn`);
+  const frow = document.getElementById(`b${i}_frow`);
+  const isOn = btn.classList.toggle('f-on');
+  btn.textContent = isOn ? 'F持ち✓' : 'F持ち';
+  frow.classList.toggle('visible', isOn);
+  if (isOn) {
+    applyFST(i);
+  } else {
+    // F持ち解除→通常の平均STに戻す
+    applyAvgST();
+  }
+}
+
+function applyFST(i) {
+  const btn = document.getElementById(`b${i}_fbtn`);
+  if (!btn || !btn.classList.contains('f-on')) return;
+  if (!avgStStats) return;
+  const sel = document.getElementById(`b${i}_fst_period`);
+  const period = sel ? sel.value : '';
+  if (!period || !avgStStats[period]) return;
+  const v = avgStStats[period][i-1];
+  const el = document.getElementById(`b${i}_avg_st`);
+  if (el && v !== '') el.value = v;
 }
 
 // ======== Parse: 選手成績 ========
@@ -572,6 +639,7 @@ async function runPredict() {
       mawariashi:   parseFloat(document.getElementById(`b${i}_mawariashi`).value) || 0,
       tilt:         parseFloat(document.getElementById(`b${i}_tilt`).value) || 0,
       avg_st:       parseFloat(document.getElementById(`b${i}_avg_st`).value) || 0,
+      is_f:         document.getElementById(`b${i}_fbtn`)?.classList.contains('f-on') || false,
       weight:       parseFloat(document.getElementById(`b${i}_weight`).value) || 0,
       win1_rate:    parseFloat(document.getElementById(`b${i}_win1_rate`).value) || 0,
       win2_rate:    parseFloat(document.getElementById(`b${i}_win2_rate`).value) || 0,
@@ -623,6 +691,10 @@ function allClear() {
     });
     document.getElementById(`b${i}_tilt`).value = '0';
     document.getElementById(`b${i}_course`).value = i;
+    const fbtn = document.getElementById(`b${i}_fbtn`);
+    if (fbtn) { fbtn.classList.remove('f-on'); fbtn.textContent = 'F持ち'; }
+    const frow = document.getElementById(`b${i}_frow`);
+    if (frow) frow.classList.remove('visible');
     document.getElementById(`b${i}_win1_rate`).value = '';
     document.getElementById(`b${i}_win2_rate`).value = '';
     document.getElementById(`b${i}_motor_win1`).value = '';

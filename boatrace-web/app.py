@@ -32,6 +32,7 @@ def predict(boats, kimari=None):
         et = safe_float(b.get('exhibit_time', 0))
         avg_st = safe_float(b.get('avg_st', 0))
         tilt = safe_float(b.get('tilt', 0))
+        is_f = b.get('is_f', False)
         win1 = safe_float(b.get('win1_rate', 0))
         win2 = safe_float(b.get('win2_rate', 0))
         motor_win1 = safe_float(b.get('motor_win1', 0))
@@ -45,6 +46,9 @@ def predict(boats, kimari=None):
             base -= (avg_st - 0.15) * 8
         # Tilt penalty
         base -= tilt * 2
+        # F持ちペナルティ（スタートが慎重になる分を減点）
+        if is_f:
+            base -= 1.5
 
         # Player bonus
         player_bonus = win1 * 0.3 + win2 * 0.1
