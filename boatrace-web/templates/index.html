@@ -628,6 +628,11 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
     <div class="card">
       <h2>予想結果</h2>
       <button class="btn btn-predict" onclick="runPredict()">🎯 予想する</button>
+      <button class="btn" id="btn-save" onclick="saveRecord()" style="display:none;width:100%;margin-top:8px;background:linear-gradient(135deg,var(--green),#00a854);color:#000;font-weight:900;">💾 予想を保存</button>
+      <div style="margin-top:8px;text-align:right;">
+        <a href="/history" style="font-size:11px;color:var(--accent3);text-decoration:none;letter-spacing:1px;">📊 記録・成績を見る →</a>
+      </div>
+      <div class="status-msg" id="status-save"></div>
       <div class="result-area" id="result-area">
         <div style="color:var(--text-muted);font-size:12px;margin-top:12px;text-align:center;letter-spacing:1px;">
           データを入力して予想するを押してください
@@ -1032,6 +1037,9 @@ async function runPredict() {
     body: JSON.stringify({ boats, kimari: kimariPayload, venue, wind })
   });
   const data = await resp.json();
+  lastPredictions = data.predictions || [];
+  document.getElementById('btn-save').style.display = lastPredictions.length > 0 ? 'block' : 'none';
+  document.getElementById('status-save').textContent = '';
   renderResult(data);
 }
 
@@ -1060,9 +1068,38 @@ function renderResult(data) {
   area.innerHTML = html || '<div style="color:var(--text-muted)">予想なし</div>';
 }
 
+// ======== Save Record ========
+let lastPredictions = [];
+
+async function saveRecord() {
+  const venue   = document.getElementById('venue').value;
+  const race_no = document.getElementById('race_no').value;
+  const race_date = document.getElementById('race_date').value;
+  const statusEl = document.getElementById('status-save');
+
+  if (!venue) { statusEl.style.color='var(--accent)'; statusEl.textContent='会場を選択してください'; return; }
+  if (!race_date) { statusEl.style.color='var(--accent)'; statusEl.textContent='日付を選択してください'; return; }
+  if (lastPredictions.length === 0) { statusEl.style.color='var(--accent)'; statusEl.textContent='先に予想してください'; return; }
+
+  const resp = await fetch('/save_record', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ race_date, venue, race_no: parseInt(race_no), predictions: lastPredictions })
+  });
+  const data = await resp.json();
+  if (data.success) {
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = `✓ 保存しました（ID:${data.id}）`;
+    document.getElementById('btn-save').style.display = 'none';
+  }
+}
+
 // ======== Clear ========
 function allClear() {
   avgStStats = null; playerStats = null; kimariStats = null; motorStats = null;
+  lastPredictions = [];
+  document.getElementById('btn-save').style.display = 'none';
+  document.getElementById('status-save').textContent = '';
   for (let i = 1; i <= 6; i++) {
     ['exhibit_time','laps','mawariashi','avg_st','weight'].forEach(f => {
       const el = document.getElementById(`b${i}_${f}`); if (el) el.value = '';

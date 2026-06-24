@@ -1,7 +1,41 @@
 from flask import Flask, render_template, request, jsonify
 import itertools
+import sqlite3
+import json
+import os
+from datetime import datetime
 
 app = Flask(__name__)
+
+DB_PATH = os.path.join(os.path.dirname(__file__), 'history.db')
+
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db()
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            race_date TEXT NOT NULL,
+            venue TEXT NOT NULL,
+            race_no INTEGER NOT NULL,
+            predictions TEXT NOT NULL,
+            result_1st INTEGER,
+            result_2nd INTEGER,
+            result_3rd INTEGER,
+            payout INTEGER,
+            purchase INTEGER,
+            is_hit INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
 
 VENUES = [
     "桐生", "戸田", "江戸川", "平和島", "多摩川", "浜名湖",
@@ -263,6 +297,101 @@ def predict_route():
     wind = data.get('wind', None)
     result = predict(boats, kimari, venue=venue, wind=wind)
     return jsonify(result)
+
+
+@app.route('/save_record', methods=['POST'])
+def save_record():
+    data = request.get_json()
+    conn = get_db()
+    conn.execute('''
+        INSERT INTO records (race_date, venue, race_no, predictions, created_at)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (
+        data.get('race_date', ''),
+        data.get('venue', ''),
+        data.get('race_no', 0),
+        json.dumps(data.get('predictions', []), ensure_ascii=False),
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ))
+    conn.commit()
+    record_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
+    conn.close()
+    return jsonify({'success': True, 'id': record_id})
+
+
+@app.route('/update_result', methods=['POST'])
+def update_result():
+    data = request.get_json()
+    record_id = data.get('id')
+    result_1st = data.get('result_1st')
+    result_2nd = data.get('result_2nd')
+    result_3rd = data.get('result_3rd')
+    payout = data.get('payout', 0)
+    purchase = data.get('purchase', 100)
+
+    conn = get_db()
+    row = conn.execute('SELECT predictions FROM records WHERE id=?', (record_id,)).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Not found'})
+
+    predictions = json.loads(row['predictions'])
+    result_combo = f"{result_1st}-{result_2nd}-{result_3rd}"
+    is_hit = 1 if any(p['combo'] == result_combo for p in predictions) else 0
+
+    conn.execute('''
+        UPDATE records SET result_1st=?, result_2nd=?, result_3rd=?,
+        payout=?, purchase=?, is_hit=? WHERE id=?
+    ''', (result_1st, result_2nd, result_3rd, payout, purchase, is_hit, record_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'is_hit': is_hit})
+
+
+@app.route('/get_records')
+def get_records():
+    period = request.args.get('period', 'all')
+    conn = get_db()
+    if period == 'week':
+        rows = conn.execute("SELECT * FROM records WHERE race_date >= date('now', '-7 days') ORDER BY race_date DESC, race_no DESC").fetchall()
+    elif period == 'month':
+        rows = conn.execute("SELECT * FROM records WHERE race_date >= date('now', '-30 days') ORDER BY race_date DESC, race_no DESC").fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM records ORDER BY race_date DESC, race_no DESC").fetchall()
+    conn.close()
+
+    records = []
+    for r in rows:
+        records.append({
+            'id': r['id'],
+            'race_date': r['race_date'],
+            'venue': r['venue'],
+            'race_no': r['race_no'],
+            'predictions': json.loads(r['predictions']),
+            'result_1st': r['result_1st'],
+            'result_2nd': r['result_2nd'],
+            'result_3rd': r['result_3rd'],
+            'payout': r['payout'],
+            'purchase': r['purchase'],
+            'is_hit': r['is_hit'],
+            'created_at': r['created_at'],
+        })
+    return jsonify(records)
+
+
+@app.route('/delete_record', methods=['POST'])
+def delete_record():
+    data = request.get_json()
+    conn = get_db()
+    conn.execute('DELETE FROM records WHERE id=?', (data.get('id'),))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+@app.route('/history')
+def history():
+    return render_template('history.html')
 
 
 if __name__ == '__main__':
