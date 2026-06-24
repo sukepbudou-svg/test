@@ -10,30 +10,37 @@ VENUES = [
     "下関", "若松", "芦屋", "福岡", "唐津", "大村"
 ]
 
-WIND_DIRECTIONS = ["追い風", "向い風", "横風(左)", "横風(右)", "無風"]
+WIND_OPTIONS = [
+    "向かい風1m",
+    "向かい風2m",
+    "向かい風3m",
+    "向かい風4m",
+    "向かい風5m以上",
+    "追い風1m",
+    "追い風2m",
+    "追い風3m",
+    "追い風4m",
+    "追い風5m以上",
+    "左横風1m",
+    "左横風2m",
+    "左横風3m以上",
+    "右横風1m",
+    "右横風2m",
+    "右横風3m以上",
+]
 
 
 def predict(boats):
-    """
-    コース展開パターンに基づく3連単予想。
-    boats: list of dict with keys:
-        course, exhibit_time, laps, mawariashi, tilt, avg_st, weight
-    Returns dict with honmei, taikou, ana (each: list of str like "1-2-3")
-    """
-    # インデックスはボート番号0〜5 (1〜6号艇)
-    # コース→号艇のマッピングを作成
-    course_to_boat = {}  # course_num -> boat_index (0-based)
+    course_to_boat = {}
     for i, b in enumerate(boats):
         c = int(b.get("course", i + 1))
         course_to_boat[c] = i
 
     def boat_num(course_num):
-        """コース番号→号艇番号(1-based)"""
         idx = course_to_boat.get(course_num)
         return idx + 1 if idx is not None else course_num
 
     def score(boat_index):
-        """スコア計算（小さいほど良い）"""
         b = boats[boat_index]
         try:
             et = float(b.get("exhibit_time") or 6.9)
@@ -41,11 +48,9 @@ def predict(boats):
             tilt = float(b.get("tilt") or 0)
         except ValueError:
             et, st, tilt = 6.9, 0.18, 0
-        # 展示タイムが速いほど、STが早いほど、チルトがプラスほど有利
         return et - (0 - st) * 2 - tilt * 0.05
 
-    # 各コースのスコアを計算
-    scores = {}  # course -> score
+    scores = {}
     for c, idx in course_to_boat.items():
         scores[c] = score(idx)
 
@@ -54,8 +59,6 @@ def predict(boats):
 
     results = []
 
-    # --- コース展開パターン ---
-    # 1コース逃げ
     if 1 in course_to_boat:
         inner = [c for c in [2, 3, 4] if c in course_to_boat]
         outer = [c for c in [5, 6] if c in course_to_boat]
@@ -64,26 +67,22 @@ def predict(boats):
             results.append(("逃げ", fmt(1, second_cands[0], second_cands[1])))
             results.append(("逃げ", fmt(1, second_cands[1], second_cands[0])))
 
-    # 4コースまくり
     if 4 in course_to_boat:
         rest = sorted([c for c in [5, 6] if c in course_to_boat], key=lambda c: scores.get(c, 99))
         if rest:
             third_cands = sorted([c for c in course_to_boat if c not in [4, rest[0]]], key=lambda c: scores.get(c, 99))
             if third_cands:
                 results.append(("まくり", fmt(4, rest[0], third_cands[0])))
-        # 4コースまくり差し (4-1系)
         if 1 in course_to_boat:
             third_cands2 = sorted([c for c in course_to_boat if c not in [4, 1]], key=lambda c: scores.get(c, 99))
             if third_cands2:
                 results.append(("まくり差し", fmt(4, 1, third_cands2[0])))
 
-    # 5コースまくり差し → 2着は1号艇
     if 5 in course_to_boat and 1 in course_to_boat:
         third_cands = sorted([c for c in course_to_boat if c not in [5, 1]], key=lambda c: scores.get(c, 99))
         if third_cands:
             results.append(("まくり差し", fmt(5, 1, third_cands[0])))
 
-    # 6コースまくり差し → 2着は1号艇
     if 6 in course_to_boat and 1 in course_to_boat:
         third_cands = sorted([c for c in course_to_boat if c not in [6, 1]], key=lambda c: scores.get(c, 99))
         if third_cands:
@@ -106,7 +105,7 @@ def predict(boats):
 
 @app.route("/")
 def index():
-    return render_template("index.html", venues=VENUES, wind_directions=WIND_DIRECTIONS)
+    return render_template("index.html", venues=VENUES, wind_options=WIND_OPTIONS)
 
 
 @app.route("/predict", methods=["POST"])
