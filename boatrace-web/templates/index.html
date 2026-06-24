@@ -6,193 +6,93 @@
 <title>ボートレース予想ツール</title>
 <style>
   :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --surface2: #22263a;
-    --accent: #4e9eff;
-    --text: #e2e8f0;
-    --muted: #8892a4;
-    --border: #2d3348;
-    --honmei: #4e9eff;
-    --taikou: #06d6a0;
-    --ana: #ff6b6b;
-    --radius: 8px;
+    --bg:#0f1117; --surface:#1a1d27; --surface2:#22263a;
+    --accent:#4e9eff; --text:#e2e8f0; --muted:#8892a4; --border:#2d3348;
+    --honmei:#4e9eff; --taikou:#06d6a0; --ana:#ff6b6b; --radius:8px;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI','Noto Sans JP',sans-serif; font-size: 14px; min-height: 100vh; }
-  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 12px; }
-  header h1 { font-size: 18px; font-weight: 700; color: var(--accent); }
-  header span { color: var(--muted); font-size: 12px; }
-  .container { max-width: 1200px; margin: 0 auto; padding: 20px 16px; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI','Noto Sans JP',sans-serif;font-size:14px;min-height:100vh}
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:12px}
+  header h1{font-size:18px;font-weight:700;color:var(--accent)}
+  header span{color:var(--muted);font-size:12px}
+  .container{max-width:1200px;margin:0 auto;padding:20px 16px}
 
-  /* 条件バー */
-  .conditions {
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 14px 18px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 18px;
-  }
-  .cond-group { display: flex; flex-direction: column; gap: 4px; }
-  .cond-group label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
-  select, input[type=date], input[type=number] {
-    background: var(--surface2); border: 1px solid var(--border); border-radius: 5px;
-    color: var(--text); padding: 6px 10px; font-size: 13px; outline: none; transition: border-color .2s;
-  }
-  select:focus, input:focus { border-color: var(--accent); }
-  select { cursor: pointer; }
+  .conditions{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:18px}
+  .cond-group{display:flex;flex-direction:column;gap:4px}
+  .cond-group label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  select,input[type=date],input[type=number]{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:6px 10px;font-size:13px;outline:none;transition:border-color .2s}
+  select:focus,input:focus{border-color:var(--accent)}
+  select{cursor:pointer}
 
-  /* ===== 貼り付けセクション ===== */
-  .paste-section {
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 0; margin-bottom: 18px; overflow: hidden;
-  }
+  /* paste section */
+  .paste-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:18px;overflow:hidden}
+  .paste-tabs{display:flex;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border);padding:10px 12px 0;gap:6px}
+  .tab-btn{background:var(--surface2);border:1px solid var(--border);border-bottom:none;border-radius:6px 6px 0 0;color:var(--muted);padding:7px 14px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .15s,color .15s;white-space:nowrap}
+  .tab-btn:hover{background:#2a2f45;color:var(--text)}
+  .tab-btn.active{background:#1e3a5f;border-color:var(--accent);color:var(--accent);font-weight:700}
+  .btn-all-clear{margin-left:auto;background:#7f1d1d;border:1px solid #ef4444;border-radius:6px;color:#fca5a5;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .15s;white-space:nowrap}
+  .btn-all-clear:hover{background:#991b1b}
+  .paste-content{padding:14px 16px}
+  .tab-panel{display:none}
+  .tab-panel.active{display:block}
+  .tab-desc{background:var(--surface2);border-radius:5px;padding:10px 14px;font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:10px}
+  textarea.paste-area{width:100%;min-height:100px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);padding:10px;font-size:13px;resize:vertical;outline:none;transition:border-color .2s}
+  textarea.paste-area:focus{border-color:var(--accent)}
+  textarea.paste-area::placeholder{color:var(--muted)}
+  .paste-btns{display:flex;gap:8px;margin-top:8px}
+  .btn-parse{background:linear-gradient(135deg,#1a4a8a,#4e9eff);border:none;border-radius:5px;color:#fff;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .2s}
+  .btn-parse:hover{opacity:.85}
+  .btn-clear-area{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--muted);padding:8px 16px;font-size:13px;cursor:pointer;transition:background .15s}
+  .btn-clear-area:hover{background:var(--border);color:var(--text)}
+  .parse-result{margin-top:8px;font-size:12px;color:var(--taikou);display:none}
 
-  /* タブ行 */
-  .paste-tabs {
-    display: flex; flex-wrap: wrap; align-items: center;
-    border-bottom: 1px solid var(--border);
-    padding: 10px 12px 0;
-    gap: 6px;
-    position: relative;
-  }
-  .tab-btn {
-    background: var(--surface2); border: 1px solid var(--border); border-bottom: none;
-    border-radius: 6px 6px 0 0; color: var(--muted);
-    padding: 7px 14px; font-size: 13px; cursor: pointer;
-    display: flex; align-items: center; gap: 6px;
-    transition: background .15s, color .15s;
-    white-space: nowrap;
-  }
-  .tab-btn:hover { background: #2a2f45; color: var(--text); }
-  .tab-btn.active { background: #1e3a5f; border-color: var(--accent); color: var(--accent); font-weight: 700; }
-  .tab-btn .tab-icon { font-size: 12px; }
+  .period-selectors{display:flex;flex-wrap:wrap;gap:18px;padding:12px 16px;border-top:1px solid var(--border);align-items:center}
+  .period-group{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+  .period-group select{font-size:12px;padding:4px 8px}
+  .period-note{font-size:11px;color:#4a5568}
 
-  .btn-all-clear {
-    margin-left: auto;
-    background: #7f1d1d; border: 1px solid #ef4444;
-    border-radius: 6px; color: #fca5a5;
-    padding: 7px 16px; font-size: 13px; font-weight: 700; cursor: pointer;
-    display: flex; align-items: center; gap: 6px;
-    transition: background .15s;
-    white-space: nowrap;
-  }
-  .btn-all-clear:hover { background: #991b1b; }
+  /* boats */
+  .boats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:18px}
+  .boat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;position:relative}
+  .boat-card::before{content:attr(data-num);position:absolute;top:10px;right:12px;font-size:22px;font-weight:900;opacity:.15}
+  .boat-card[data-num="1"]{border-top:3px solid #4e9eff}
+  .boat-card[data-num="2"]{border-top:3px solid #555}
+  .boat-card[data-num="3"]{border-top:3px solid #e63946}
+  .boat-card[data-num="4"]{border-top:3px solid #06d6a0}
+  .boat-card[data-num="5"]{border-top:3px solid #ffd166}
+  .boat-card[data-num="6"]{border-top:3px solid #adb5bd}
+  .boat-num{font-size:16px;font-weight:800;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .boat-badge{display:inline-block;width:22px;height:22px;border-radius:50%;text-align:center;line-height:22px;font-size:13px;font-weight:700}
+  .badge-1{background:#4e9eff;color:#fff} .badge-2{background:#333;color:#fff;border:1px solid #888}
+  .badge-3{background:#e63946;color:#fff} .badge-4{background:#06d6a0;color:#111}
+  .badge-5{background:#ffd166;color:#111} .badge-6{background:#adb5bd;color:#111}
+  /* 勝率表示バー */
+  .win-rates{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap}
+  .win-badge{font-size:10px;padding:2px 6px;border-radius:4px;font-weight:700;background:var(--surface2);border:1px solid var(--border);color:var(--muted)}
+  .win-badge.has-data{color:#ffd166;border-color:#ffd166;background:#2a2200}
+  .field-row{display:flex;flex-direction:column;margin-bottom:6px}
+  .field-row label{font-size:10px;color:var(--muted);margin-bottom:2px}
+  .field-row input,.field-row select{width:100%;padding:5px 8px;font-size:12px}
 
-  /* タブコンテンツ */
-  .paste-content { padding: 14px 16px; }
-  .tab-panel { display: none; }
-  .tab-panel.active { display: block; }
-  .tab-desc {
-    background: var(--surface2); border-radius: 5px;
-    padding: 10px 14px; font-size: 12px; color: var(--muted);
-    line-height: 1.7; margin-bottom: 10px;
-  }
-  textarea.paste-area {
-    width: 100%; min-height: 100px;
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 5px; color: var(--text);
-    padding: 10px; font-size: 13px; resize: vertical; outline: none;
-    transition: border-color .2s;
-  }
-  textarea.paste-area:focus { border-color: var(--accent); }
-  textarea.paste-area::placeholder { color: var(--muted); }
-  .paste-btns { display: flex; gap: 8px; margin-top: 8px; }
-  .btn-parse {
-    background: linear-gradient(135deg,#1a4a8a,#4e9eff); border: none;
-    border-radius: 5px; color: #fff;
-    padding: 8px 20px; font-size: 13px; font-weight: 700; cursor: pointer;
-    transition: opacity .2s;
-  }
-  .btn-parse:hover { opacity: .85; }
-  .btn-clear-area {
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 5px; color: var(--muted);
-    padding: 8px 16px; font-size: 13px; cursor: pointer;
-    transition: background .15s;
-  }
-  .btn-clear-area:hover { background: var(--border); color: var(--text); }
-
-  /* 期間セレクタ */
-  .period-selectors {
-    display: flex; flex-wrap: wrap; gap: 18px;
-    padding: 12px 16px; border-top: 1px solid var(--border);
-    align-items: center;
-  }
-  .period-group { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
-  .period-group select { font-size: 12px; padding: 4px 8px; }
-  .period-note { font-size: 11px; color: #4a5568; }
-
-  /* ボートグリッド */
-  .boats-grid {
-    display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr));
-    gap: 10px; margin-bottom: 18px;
-  }
-  .boat-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 12px; position: relative;
-  }
-  .boat-card::before {
-    content: attr(data-num); position: absolute; top: 10px; right: 12px;
-    font-size: 22px; font-weight: 900; opacity: .15;
-  }
-  .boat-card[data-num="1"] { border-top: 3px solid #4e9eff; }
-  .boat-card[data-num="2"] { border-top: 3px solid #555; }
-  .boat-card[data-num="3"] { border-top: 3px solid #e63946; }
-  .boat-card[data-num="4"] { border-top: 3px solid #06d6a0; }
-  .boat-card[data-num="5"] { border-top: 3px solid #ffd166; }
-  .boat-card[data-num="6"] { border-top: 3px solid #adb5bd; }
-  .boat-num { font-size: 16px; font-weight: 800; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
-  .boat-badge { display:inline-block; width:22px; height:22px; border-radius:50%; text-align:center; line-height:22px; font-size:13px; font-weight:700; }
-  .badge-1{background:#4e9eff;color:#fff}
-  .badge-2{background:#333;color:#fff;border:1px solid #888}
-  .badge-3{background:#e63946;color:#fff}
-  .badge-4{background:#06d6a0;color:#111}
-  .badge-5{background:#ffd166;color:#111}
-  .badge-6{background:#adb5bd;color:#111}
-  .field-row { display:flex; flex-direction:column; margin-bottom:6px; }
-  .field-row label { font-size:10px; color:var(--muted); margin-bottom:2px; }
-  .field-row input, .field-row select { width:100%; padding:5px 8px; font-size:12px; }
-
-  /* 予想ボタン */
-  .btn-predict {
-    width:100%; padding:14px;
-    background:linear-gradient(135deg,#1a4a8a,#4e9eff);
-    border:none; border-radius:var(--radius); color:#fff;
-    font-size:16px; font-weight:700; cursor:pointer; letter-spacing:2px;
-    transition:opacity .2s; margin-bottom:18px;
-  }
+  .btn-predict{width:100%;padding:14px;background:linear-gradient(135deg,#1a4a8a,#4e9eff);border:none;border-radius:var(--radius);color:#fff;font-size:16px;font-weight:700;cursor:pointer;letter-spacing:2px;transition:opacity .2s;margin-bottom:18px}
   .btn-predict:hover{opacity:.85}
-
-  /* 結果 */
-  .result-section {
-    background:var(--surface); border:1px solid var(--border);
-    border-radius:var(--radius); padding:18px; margin-bottom:18px;
-  }
-  .result-section h2 { font-size:14px; color:var(--muted); margin-bottom:14px; letter-spacing:1px; text-transform:uppercase; }
-  .result-grid { display:flex; gap:14px; flex-wrap:wrap; }
-  .result-box {
-    flex:1; min-width:120px; background:var(--surface2);
-    border-radius:var(--radius); padding:14px; text-align:center; border:1px solid var(--border);
-  }
-  .result-box .label { font-size:11px; font-weight:700; letter-spacing:1px; margin-bottom:8px; }
-  .result-box.honmei .label{color:var(--honmei)}
-  .result-box.taikou .label{color:var(--taikou)}
-  .result-box.ana    .label{color:var(--ana)}
-  .result-box .combo { font-size:24px; font-weight:900; letter-spacing:2px; }
-  .result-box.honmei .combo{color:var(--honmei)}
-  .result-box.taikou .combo{color:var(--taikou)}
-  .result-box.ana    .combo{color:var(--ana)}
-  .result-box .sub { font-size:10px; color:var(--muted); margin-top:4px; }
-  .patterns-list { margin-top:14px; }
-  .patterns-list h3 { font-size:12px; color:var(--muted); margin-bottom:8px; }
-  .pattern-item {
-    display:flex; align-items:center; gap:10px;
-    padding:6px 0; border-bottom:1px solid var(--border); font-size:13px;
-  }
-  .pattern-item:last-child{border-bottom:none}
-  .pattern-badge { font-size:10px; padding:2px 7px; border-radius:10px; font-weight:700; white-space:nowrap; }
-  .p-nige{background:#1a3a5e;color:#4e9eff}
-  .p-makuri{background:#1a3a2e;color:#06d6a0}
-  .p-makuri-sashi{background:#3a2a1a;color:#ffd166}
   .loading{text-align:center;color:var(--muted);padding:20px;display:none}
+
+  .result-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:18px}
+  .result-section h2{font-size:14px;color:var(--muted);margin-bottom:14px;letter-spacing:1px;text-transform:uppercase}
+  .result-grid{display:flex;gap:14px;flex-wrap:wrap}
+  .result-box{flex:1;min-width:120px;background:var(--surface2);border-radius:var(--radius);padding:14px;text-align:center;border:1px solid var(--border)}
+  .result-box .label{font-size:11px;font-weight:700;letter-spacing:1px;margin-bottom:8px}
+  .result-box.honmei .label{color:var(--honmei)} .result-box.taikou .label{color:var(--taikou)} .result-box.ana .label{color:var(--ana)}
+  .result-box .combo{font-size:24px;font-weight:900;letter-spacing:2px}
+  .result-box.honmei .combo{color:var(--honmei)} .result-box.taikou .combo{color:var(--taikou)} .result-box.ana .combo{color:var(--ana)}
+  .result-box .sub{font-size:10px;color:var(--muted);margin-top:4px}
+  .patterns-list{margin-top:14px}
+  .patterns-list h3{font-size:12px;color:var(--muted);margin-bottom:8px}
+  .pattern-item{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px}
+  .pattern-item:last-child{border-bottom:none}
+  .pattern-badge{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:700;white-space:nowrap}
+  .p-nige{background:#1a3a5e;color:#4e9eff} .p-makuri{background:#1a3a2e;color:#06d6a0} .p-makuri-sashi{background:#3a2a1a;color:#ffd166}
 </style>
 </head>
 <body>
@@ -202,202 +102,145 @@
 </header>
 <div class="container">
 
-  <!-- 条件 -->
   <div class="conditions">
-    <div class="cond-group">
-      <label>日付</label>
-      <input type="date" id="race-date">
-    </div>
+    <div class="cond-group"><label>日付</label><input type="date" id="race-date"></div>
     <div class="cond-group">
       <label>開催場</label>
-      <select id="venue">
-        {% for v in venues %}<option value="{{ v }}">{{ v }}</option>{% endfor %}
-      </select>
+      <select id="venue">{% for v in venues %}<option>{{ v }}</option>{% endfor %}</select>
     </div>
     <div class="cond-group">
       <label>レース</label>
-      <select id="race-no">
-        {% for i in range(1,13) %}<option value="{{ i }}">{{ i }}R</option>{% endfor %}
-      </select>
+      <select id="race-no">{% for i in range(1,13) %}<option>{{ i }}R</option>{% endfor %}</select>
     </div>
     <div class="cond-group">
       <label>風</label>
-      <select id="wind">
-        {% for w in wind_options %}<option value="{{ w }}">{{ w }}</option>{% endfor %}
-      </select>
+      <select id="wind">{% for w in wind_options %}<option>{{ w }}</option>{% endfor %}</select>
     </div>
   </div>
 
-  <!-- ===== 貼り付けセクション ===== -->
+  <!-- 貼り付けセクション -->
   <div class="paste-section">
-    <!-- タブ行 -->
     <div class="paste-tabs">
-      <button class="tab-btn active" onclick="switchTab('avg-st',this)"><span class="tab-icon">📋</span>平均ST</button>
-      <button class="tab-btn" onclick="switchTab('player',this)"><span class="tab-icon">📋</span>選手成績</button>
-      <button class="tab-btn" onclick="switchTab('kimari',this)"><span class="tab-icon">📋</span>決まり手/逃げ</button>
-      <button class="tab-btn" onclick="switchTab('motor',this)"><span class="tab-icon">📋</span>モーター</button>
-      <button class="tab-btn" onclick="switchTab('exhibit',this)"><span class="tab-icon">📋</span>展示タイム</button>
-      <button class="tab-btn" onclick="switchTab('odds',this)"><span class="tab-icon">📋</span>オッズ</button>
+      <button class="tab-btn active" onclick="switchTab('avg-st',this)">📋 平均ST</button>
+      <button class="tab-btn" onclick="switchTab('player',this)">📋 選手成績</button>
+      <button class="tab-btn" onclick="switchTab('kimari',this)">📋 決まり手/逃げ</button>
+      <button class="tab-btn" onclick="switchTab('motor',this)">📋 モーター</button>
+      <button class="tab-btn" onclick="switchTab('exhibit',this)">📋 展示タイム</button>
+      <button class="tab-btn" onclick="switchTab('odds',this)">📋 オッズ</button>
       <button class="btn-all-clear" onclick="allClear()">🗑 オールクリア</button>
     </div>
-
-    <!-- タブコンテンツ -->
     <div class="paste-content">
 
-      <!-- 平均ST -->
       <div class="tab-panel active" id="panel-avg-st">
-        <div class="tab-desc">
-          基本情報の平均ST表（今期〜F持ち）をコピペ。下の期間プルダウンで選んだ行のSTを反映。F持ちの行はF持ち時STとして保存（F持ちスイッチは手動）。
-        </div>
+        <div class="tab-desc">基本情報の平均ST表（今期〜F持ち）をコピペ。下の期間プルダウンで選んだ行のSTを反映。F持ちの行はF持ち時STとして保存（F持ちスイッチは手動）。</div>
         <textarea class="paste-area" id="ta-avg-st" placeholder="ここに貼り付け"></textarea>
         <div class="paste-btns">
           <button class="btn-parse" onclick="parseData('avg-st')">解析して入力</button>
           <button class="btn-clear-area" onclick="clearArea('avg-st')">クリア</button>
         </div>
+        <div class="parse-result" id="pr-avg-st"></div>
       </div>
 
-      <!-- 選手成績 -->
       <div class="tab-panel" id="panel-player">
-        <div class="tab-desc">
-          枠別情報の1着率〜3連対率をコピペ。今期・直近6/3/1ヶ月・当地・一般戦・SG/G1・女子戦の枠別成績を読み取り、選んだ区分の1着率・2連対率・3連対率に内部補正を加えて予想します（カッコ内の出走数は自動で読み飛ばし）。
-        </div>
+        <div class="tab-desc">枠別情報の1着率〜3連対率をコピペ。今期・直近6/3/1ヶ月・当地・一般戦・SG/G1・女子戦の枠別成績を読み取り、選んだ区分の1着率・2連対率・3連対率に内部補正を加えて予想します（カッコ内の出走数は自動で読み飛ばし）。</div>
         <textarea class="paste-area" id="ta-player" placeholder="ここに貼り付け"></textarea>
         <div class="paste-btns">
           <button class="btn-parse" onclick="parseData('player')">解析して入力</button>
           <button class="btn-clear-area" onclick="clearArea('player')">クリア</button>
         </div>
+        <div class="parse-result" id="pr-player"></div>
       </div>
 
-      <!-- 決まり手/逃げ -->
       <div class="tab-panel" id="panel-kimari">
-        <div class="tab-desc">
-          枠別情報の逃げシミュレーションと決まり手（直近6ヶ月・直近1年）をまとめてコピペ。逃がし2着率・3着率・出目確率と、差し/捲り/捲り差しの決まり手をAI評価に組み込みます。
-        </div>
+        <div class="tab-desc">枠別情報の逃げシミュレーションと決まり手（直近6ヶ月・直近1年）をまとめてコピペ。逃がし2着率・3着率・出目確率と、差し/捲り/捲り差しの決まり手をAI評価に組み込みます。</div>
         <textarea class="paste-area" id="ta-kimari" placeholder="ここに貼り付け"></textarea>
         <div class="paste-btns">
           <button class="btn-parse" onclick="parseData('kimari')">解析して入力</button>
           <button class="btn-clear-area" onclick="clearArea('kimari')">クリア</button>
         </div>
+        <div class="parse-result" id="pr-kimari"></div>
       </div>
 
-      <!-- モーター -->
       <div class="tab-panel" id="panel-motor">
-        <div class="tab-desc">
-          モータ情報の番号〜3連対率をコピペ。モーター番号・勝率・1着率・2連対率・3連対率を各艇カードに表示します。
-        </div>
+        <div class="tab-desc">モータ情報の番号〜3連対率をコピペ。モーター番号・勝率・1着率・2連対率・3連対率を各艇カードに表示します。</div>
         <textarea class="paste-area" id="ta-motor" placeholder="ここに貼り付け"></textarea>
         <div class="paste-btns">
           <button class="btn-parse" onclick="parseData('motor')">解析して入力</button>
           <button class="btn-clear-area" onclick="clearArea('motor')">クリア</button>
         </div>
+        <div class="parse-result" id="pr-motor"></div>
       </div>
 
-      <!-- 展示タイム -->
       <div class="tab-panel" id="panel-exhibit">
-        <div class="tab-desc">
-          直前情報の進入〜チルトをコピペ。進入・展示・周回・周り足・体重・チルトを一括入力します（直線・ST・調整重量は無視。STは平均ST欄を上書きしません）。
-        </div>
+        <div class="tab-desc">直前情報の進入〜チルトをコピペ。進入・展示・周回・周り足・体重・チルトを一括入力します（直線・ST・調整重量は無視。STは平均ST欄を上書きしません）。</div>
         <textarea class="paste-area" id="ta-exhibit" placeholder="ここに貼り付け"></textarea>
         <div class="paste-btns">
           <button class="btn-parse" onclick="parseData('exhibit')">解析して入力</button>
           <button class="btn-clear-area" onclick="clearArea('exhibit')">クリア</button>
         </div>
+        <div class="parse-result" id="pr-exhibit"></div>
       </div>
 
-      <!-- オッズ -->
       <div class="tab-panel" id="panel-odds">
-        <div class="tab-desc">
-          3連単オッズをコピペ。各組み合わせのオッズを読み取り、予想の参考に使用します。
-        </div>
+        <div class="tab-desc">3連単オッズをコピペ。各組み合わせのオッズを読み取り、予想の参考に使用します。</div>
         <textarea class="paste-area" id="ta-odds" placeholder="ここに貼り付け"></textarea>
         <div class="paste-btns">
           <button class="btn-parse" onclick="parseData('odds')">解析して入力</button>
           <button class="btn-clear-area" onclick="clearArea('odds')">クリア</button>
         </div>
+        <div class="parse-result" id="pr-odds"></div>
       </div>
 
-    </div><!-- /paste-content -->
+    </div>
 
-    <!-- 期間セレクタ -->
     <div class="period-selectors">
       <div class="period-group">
         <span>平均STの期間</span>
-        <select id="st-period">
-          <option>今期</option>
-          <option>直近6ヶ月</option>
-          <option>直近3ヶ月</option>
-          <option>直近1ヶ月</option>
-          <option>F持ち</option>
-        </select>
+        <select id="st-period"><option>今期</option><option>直近6ヶ月</option><option>直近3ヶ月</option><option>直近1ヶ月</option><option>F持ち</option></select>
         <span class="period-note">※平均ST表を貼り付けると有効</span>
       </div>
       <div class="period-group">
         <span>選手成績の区分</span>
-        <select id="player-period">
-          <option>今期</option>
-          <option>直近6ヶ月</option>
-          <option>直近3ヶ月</option>
-          <option>直近1ヶ月</option>
-          <option>当地</option>
-          <option>一般戦</option>
-          <option>SG/G1</option>
-          <option>女子戦</option>
-        </select>
+        <select id="player-period"><option>今期</option><option>直近6ヶ月</option><option>直近3ヶ月</option><option>直近1ヶ月</option><option>当地</option><option>一般戦</option><option>SG/G1</option><option>女子戦</option></select>
         <span class="period-note">※選手成績を貼り付けると有効</span>
       </div>
       <div class="period-group">
         <span>決まり手の期間</span>
-        <select id="kimari-period">
-          <option>直近6ヶ月</option>
-          <option>直近1年</option>
-        </select>
+        <select id="kimari-period"><option>直近6ヶ月</option><option>直近1年</option></select>
         <span class="period-note">※決まり手/逃げを貼り付けると有効</span>
       </div>
     </div>
-  </div><!-- /paste-section -->
+  </div>
 
-  <!-- ボート入力 -->
   <div class="boats-grid" id="boats-grid"></div>
 
-  <!-- 予想ボタン -->
   <button class="btn-predict" onclick="runPredict()">🏁 予想する</button>
   <div class="loading" id="loading">予想計算中...</div>
 
-  <!-- 結果 -->
   <div class="result-section" id="result-section" style="display:none">
     <h2>予想結果</h2>
     <div class="result-grid">
-      <div class="result-box honmei">
-        <div class="label">◎ 本命</div>
-        <div class="combo" id="r-honmei">-</div>
-        <div class="sub">3連単</div>
-      </div>
-      <div class="result-box taikou">
-        <div class="label">○ 対抗</div>
-        <div class="combo" id="r-taikou">-</div>
-        <div class="sub">3連単</div>
-      </div>
-      <div class="result-box ana">
-        <div class="label">▲ 穴</div>
-        <div class="combo" id="r-ana">-</div>
-        <div class="sub">3連単</div>
-      </div>
+      <div class="result-box honmei"><div class="label">◎ 本命</div><div class="combo" id="r-honmei">-</div><div class="sub">3連単</div></div>
+      <div class="result-box taikou"><div class="label">○ 対抗</div><div class="combo" id="r-taikou">-</div><div class="sub">3連単</div></div>
+      <div class="result-box ana"><div class="label">▲ 穴</div><div class="combo" id="r-ana">-</div><div class="sub">3連単</div></div>
     </div>
     <div class="patterns-list" id="patterns-list"></div>
   </div>
 
 </div>
-
 <script>
 const FIELDS = [
-  { key:'course',       label:'コース',     type:'number', min:1, max:6 },
-  { key:'exhibit_time', label:'展示タイム', type:'number', step:'0.01', placeholder:'6.80' },
-  { key:'laps',         label:'周回タイム', type:'number', step:'0.01', placeholder:'38.0' },
-  { key:'mawariashi',   label:'周り足',     type:'number', step:'0.01', placeholder:'6.90' },
-  { key:'tilt',         label:'チルト',     type:'number', step:'0.5',  min:-3, max:3, placeholder:'0' },
-  { key:'avg_st',       label:'平均ST',     type:'number', step:'0.01', placeholder:'0.18' },
-  { key:'weight',       label:'体重 (kg)',  type:'number', step:'0.1',  placeholder:'52.0' },
+  {key:'course',       label:'コース',     type:'number', min:1, max:6},
+  {key:'exhibit_time', label:'展示タイム', type:'number', step:'0.01', placeholder:'6.80'},
+  {key:'laps',         label:'周回タイム', type:'number', step:'0.01', placeholder:'38.0'},
+  {key:'mawariashi',   label:'周り足',     type:'number', step:'0.01', placeholder:'6.90'},
+  {key:'tilt',         label:'チルト',     type:'number', step:'0.5',  min:-3, max:3, placeholder:'0'},
+  {key:'avg_st',       label:'平均ST',     type:'number', step:'0.01', placeholder:'0.18'},
+  {key:'weight',       label:'体重 (kg)',  type:'number', step:'0.1',  placeholder:'52.0'},
 ];
+
+// 選手成績保存場所
+let playerStats = null;  // {win1, win2, win3} each: {'今期':[v1..v6], ...}
 
 document.getElementById('race-date').value = new Date().toISOString().slice(0,10);
 
@@ -405,9 +248,14 @@ document.getElementById('race-date').value = new Date().toISOString().slice(0,10
 const grid = document.getElementById('boats-grid');
 for (let i = 1; i <= 6; i++) {
   const card = document.createElement('div');
-  card.className = 'boat-card';
-  card.dataset.num = i;
+  card.className = 'boat-card'; card.dataset.num = i;
   let html = `<div class="boat-num"><span class="boat-badge badge-${i}">${i}</span>${i}号艇</div>`;
+  // 勝率表示エリア
+  html += `<div class="win-rates" id="wr-${i}">
+    <span class="win-badge" id="wr1-${i}">1着-</span>
+    <span class="win-badge" id="wr2-${i}">2連-</span>
+    <span class="win-badge" id="wr3-${i}">3連-</span>
+  </div>`;
   for (const f of FIELDS) {
     const attrs = [
       f.type  ? `type="${f.type}"` : '',
@@ -419,11 +267,14 @@ for (let i = 1; i <= 6; i++) {
     const def = f.key === 'course' ? i : '';
     html += `<div class="field-row"><label>${f.label}</label><input id="b${i}_${f.key}" ${attrs} value="${def}"></div>`;
   }
+  // 勝率隐し入力欄
+  html += `<input type="hidden" id="b${i}_win1_rate" value="">`;
+  html += `<input type="hidden" id="b${i}_win2_rate" value="">`;
+  html += `<input type="hidden" id="b${i}_win3_rate" value="">`;
   card.innerHTML = html;
   grid.appendChild(card);
 }
 
-// タブ切り替え
 function switchTab(name, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -431,51 +282,135 @@ function switchTab(name, btn) {
   document.getElementById('panel-' + name).classList.add('active');
 }
 
-// エリアクリア
-function clearArea(name) {
-  document.getElementById('ta-' + name).value = '';
-}
+function clearArea(name) { document.getElementById('ta-' + name).value = ''; }
 
-// オールクリア
 function allClear() {
   ['avg-st','player','kimari','motor','exhibit','odds'].forEach(n => clearArea(n));
+  document.querySelectorAll('.parse-result').forEach(el => { el.style.display='none'; el.textContent=''; });
+  playerStats = null;
   for (let i = 1; i <= 6; i++) {
     for (const f of FIELDS) {
       const el = document.getElementById(`b${i}_${f.key}`);
       if (el) el.value = f.key === 'course' ? i : '';
     }
+    ['win1_rate','win2_rate','win3_rate'].forEach(k => {
+      const el = document.getElementById(`b${i}_${k}`); if (el) el.value = '';
+    });
+    ['wr1','wr2','wr3'].forEach((prefix,j) => {
+      const el = document.getElementById(`${prefix}-${i}`);
+      if (el) { el.textContent = ['1着-','2連-','3連-'][j]; el.classList.remove('has-data'); }
+    });
   }
 }
 
-// 解析して入力
+// ===== 選手成績パーサ =====
+function parsePlayerStats(text) {
+  // 「直近\n6ヶ月」などを正規化
+  const norm = text.replace(/直近\s*\n\s*(\d)/g, '直近$1');
+
+  const PERIODS = ['今期','直近6ヶ月','直近3ヶ月','直近1ヶ月','当地','一般戦','SG/G1'];
+
+  function extractSection(secText) {
+    const result = {};
+    for (let i = 0; i < PERIODS.length; i++) {
+      const p = PERIODS[i];
+      const next = PERIODS[i + 1];
+      let chunk = '';
+      const idx = secText.indexOf(p);
+      if (idx < 0) { result[p] = []; continue; }
+      const start = idx + p.length;
+      if (next) {
+        const idxNext = secText.indexOf(next, start);
+        chunk = idxNext >= 0 ? secText.slice(start, idxNext) : secText.slice(start);
+      } else {
+        chunk = secText.slice(start);
+      }
+      const pcts = (chunk.match(/\d+\.\d+%/g) || []).slice(0, 6).map(v => parseFloat(v));
+      result[p] = pcts;
+    }
+    return result;
+  }
+
+  const m1 = norm.match(/1着率([\s\S]*?)2連対率/);
+  const m2 = norm.match(/2連対率([\s\S]*?)3連対率/);
+  const m3 = norm.match(/3連対率([\s\S]*)$/);
+  if (!m1) return null;
+
+  return {
+    win1: extractSection(m1[1]),
+    win2: m2 ? extractSection(m2[1]) : {},
+    win3: m3 ? extractSection(m3[1]) : {},
+  };
+}
+
+function applyPlayerStats() {
+  if (!playerStats) return;
+  const period = document.getElementById('player-period').value;
+  const w1 = playerStats.win1[period] || [];
+  const w2 = playerStats.win2[period] || [];
+  const w3 = playerStats.win3[period] || [];
+  for (let i = 1; i <= 6; i++) {
+    const v1 = w1[i-1] !== undefined ? w1[i-1] : '';
+    const v2 = w2[i-1] !== undefined ? w2[i-1] : '';
+    const v3 = w3[i-1] !== undefined ? w3[i-1] : '';
+    document.getElementById(`b${i}_win1_rate`).value = v1;
+    document.getElementById(`b${i}_win2_rate`).value = v2;
+    document.getElementById(`b${i}_win3_rate`).value = v3;
+    // バッジ表示更新
+    const b1 = document.getElementById(`wr1-${i}`);
+    const b2 = document.getElementById(`wr2-${i}`);
+    const b3 = document.getElementById(`wr3-${i}`);
+    if (v1 !== '') { b1.textContent = `1着 ${v1}%`; b1.classList.add('has-data'); }
+    if (v2 !== '') { b2.textContent = `2連 ${v2}%`; b2.classList.add('has-data'); }
+    if (v3 !== '') { b3.textContent = `3連 ${v3}%`; b3.classList.add('has-data'); }
+  }
+}
+
+// 区分変更時に再適用
+document.getElementById('player-period').addEventListener('change', applyPlayerStats);
+
+// ===== 解析して入力 =====
 function parseData(name) {
   const text = document.getElementById('ta-' + name).value;
+  const pr = document.getElementById('pr-' + name);
   if (!text.trim()) return;
 
   if (name === 'exhibit') {
-    // 展示タイム: x.xx の数値を順番に1〜6号艇へ
     const nums = text.match(/\d\.\d{2}/g);
     if (nums) {
-      for (let i = 0; i < Math.min(nums.length, 6); i++) {
-        const el = document.getElementById(`b${i+1}_exhibit_time`);
-        if (el) el.value = nums[i];
-      }
+      for (let i = 0; i < Math.min(nums.length, 6); i++)
+        document.getElementById(`b${i+1}_exhibit_time`).value = nums[i];
+      pr.textContent = `✓ 展示タイムを${Math.min(nums.length,6)}艇分入力しました`;
+      pr.style.display = 'block';
     }
   } else if (name === 'avg-st') {
-    // 平均ST: 0.xx の数値を順番に1〜6号艇へ
     const nums = text.match(/0\.\d{2}/g);
     if (nums) {
-      for (let i = 0; i < Math.min(nums.length, 6); i++) {
-        const el = document.getElementById(`b${i+1}_avg_st`);
-        if (el) el.value = nums[i];
-      }
+      for (let i = 0; i < Math.min(nums.length, 6); i++)
+        document.getElementById(`b${i+1}_avg_st`).value = nums[i];
+      pr.textContent = `✓ 平均STを${Math.min(nums.length,6)}艇分入力しました`;
+      pr.style.display = 'block';
     }
+  } else if (name === 'player') {
+    const stats = parsePlayerStats(text);
+    if (!stats) {
+      pr.textContent = '⚠ 解析できませんでした。ボートレース日和の枠別情報をコピペしてください。';
+      pr.style.color = '#ff6b6b'; pr.style.display = 'block';
+      return;
+    }
+    playerStats = stats;
+    applyPlayerStats();
+    const period = document.getElementById('player-period').value;
+    const w1 = stats.win1[period] || [];
+    pr.style.color = 'var(--taikou)';
+    pr.textContent = `✓ 選手成績を解析しました（${period}）　1着率: ${w1.map(v=>`${v}%`).join(' / ')}`;
+    pr.style.display = 'block';
   } else {
-    alert('「' + name + '」の解析は今後対応予定です。');
+    pr.textContent = '「' + name + '」の解析は今後対応予定です。';
+    pr.style.color = 'var(--muted)'; pr.style.display = 'block';
   }
 }
 
-// 予想
 async function runPredict() {
   const boats = [];
   for (let i = 1; i <= 6; i++) {
@@ -484,6 +419,8 @@ async function runPredict() {
       const el = document.getElementById(`b${i}_${f.key}`);
       boat[f.key] = el ? el.value : '';
     }
+    boat.win1_rate = document.getElementById(`b${i}_win1_rate`).value;
+    boat.win2_rate = document.getElementById(`b${i}_win2_rate`).value;
     boats.push(boat);
   }
   document.getElementById('loading').style.display = 'block';
@@ -501,14 +438,9 @@ async function runPredict() {
     if (data.patterns && data.patterns.length) {
       pl.innerHTML = '<h3>展開パターン一覧</h3>';
       data.patterns.forEach(([pattern, combo], idx) => {
-        const cls = pattern.includes('逃げ') ? 'p-nige' :
-                    pattern.includes('差し') ? 'p-makuri-sashi' : 'p-makuri';
+        const cls = pattern.includes('逃げ') ? 'p-nige' : pattern.includes('差し') ? 'p-makuri-sashi' : 'p-makuri';
         const rank = ['◎','○','▲','△','×','☆'][idx] || '';
-        pl.innerHTML += `<div class="pattern-item">
-          <span class="pattern-badge ${cls}">${pattern}</span>
-          <span style="font-weight:700;font-size:16px;letter-spacing:2px">${combo}</span>
-          <span style="color:var(--muted);font-size:12px">${rank}</span>
-        </div>`;
+        pl.innerHTML += `<div class="pattern-item"><span class="pattern-badge ${cls}">${pattern}</span><span style="font-weight:700;font-size:16px;letter-spacing:2px">${combo}</span><span style="color:var(--muted);font-size:12px">${rank}</span></div>`;
       });
     } else { pl.innerHTML = ''; }
     document.getElementById('result-section').style.display = 'block';
