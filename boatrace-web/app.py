@@ -279,7 +279,70 @@ def predict(boats, kimari=None, venue=None, wind=None):
 
     return {
         'predictions': results[:6],
-        'score_order': [{'course': s['course'], 'boat_number': s['boat']['boat_number'], 'score': round(s['score'], 2)} for s in scores]
+        'score_order': [{'course': s['course'], 'boat_number': s['boat']['boat_number'], 'score': round(s['score'], 2)} for s in scores],
+        'chaos': calc_chaos(scores, boats, vp, wind_effect)
+    }
+
+
+def calc_chaos(scores, boats, vp, wind_effect):
+    reasons = []
+    chaos = 0.0
+
+    # スコア差：1位と2位の差が小さいほど荒れやすい
+    if len(scores) >= 2:
+        score_gap = scores[0]['score'] - scores[1]['score']
+        if score_gap < 1.0:
+            chaos += 2.5
+            reasons.append("上位艇のスコア差が僅差")
+        elif score_gap < 2.0:
+            chaos += 1.0
+
+    # 4〜6コースが上位スコアにいる
+    outer_top = [s for s in scores[:3] if s['course'] >= 4]
+    if len(outer_top) >= 2:
+        chaos += 2.0
+        reasons.append("外枠艇が上位スコアに複数")
+    elif len(outer_top) == 1:
+        chaos += 1.0
+        reasons.append(f"{outer_top[0]['course']}コースが上位スコア")
+
+    # 1コースのF持ち
+    for b in boats:
+        course = int(b.get('course', b.get('boat_number', 1)))
+        if course == 1 and b.get('is_f', False):
+            chaos += 2.5
+            reasons.append("1コースにF持ち艇")
+            break
+
+    # 会場の荒れやすさ
+    upset = vp.get('upset', 0.5)
+    if upset >= 1.2:
+        chaos += 2.0
+        reasons.append("荒れやすい会場")
+    elif upset >= 0.8:
+        chaos += 1.0
+
+    # 風の影響
+    if wind_effect >= 0.8:
+        chaos += 1.5
+        reasons.append("風の影響が強い")
+    elif wind_effect >= 0.4:
+        chaos += 0.5
+
+    # 最大10点でクランプ
+    chaos = min(chaos, 10.0)
+    level = 'low'
+    label = '低め'
+    if chaos >= 7:
+        level = 'high'; label = '高い⚠️'
+    elif chaos >= 4:
+        level = 'mid'; label = 'やや高め'
+
+    return {
+        'score': round(chaos, 1),
+        'level': level,
+        'label': label,
+        'reasons': reasons
     }
 
 

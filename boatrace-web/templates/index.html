@@ -490,6 +490,24 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
 .pred-item:nth-child(5) { animation-delay: 0.33s; }
 .pred-item:nth-child(6) { animation-delay: 0.40s; }
 
+/* 荒れ度 */
+.chaos-box {
+  margin-top: 12px; padding: 10px 12px;
+  background: var(--surface2); border-radius: 8px; border: 1px solid var(--border);
+}
+.chaos-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.chaos-title { font-size: 10px; letter-spacing: 2px; color: var(--text-muted); text-transform: uppercase; }
+.chaos-label-low  { font-size: 12px; font-weight: 700; color: var(--green); }
+.chaos-label-mid  { font-size: 12px; font-weight: 700; color: var(--accent2); }
+.chaos-label-high { font-size: 12px; font-weight: 700; color: var(--accent); }
+.chaos-track { background: var(--surface3); border-radius: 4px; height: 10px; overflow: hidden; margin-bottom: 8px; }
+.chaos-bar { height: 100%; border-radius: 4px; transition: width 1s ease; }
+.chaos-bar.low  { background: linear-gradient(90deg, var(--green), #00a854); }
+.chaos-bar.mid  { background: linear-gradient(90deg, var(--accent2), #e8920f); }
+.chaos-bar.high { background: linear-gradient(90deg, var(--accent), #c0392b); }
+.chaos-reasons { display: flex; flex-wrap: wrap; gap: 4px; }
+.chaos-reason { font-size: 10px; padding: 2px 7px; border-radius: 3px; background: rgba(233,69,96,0.1); color: var(--accent); border: 1px solid rgba(233,69,96,0.2); }
+
 /* loading */
 .loading {
   display: flex; align-items: center; gap: 8px;
@@ -1143,6 +1161,22 @@ function renderResult(data) {
       <span class="pred-combo">${p.combo}</span>
     </div>`;
   }
+  if (data.chaos) {
+    const c = data.chaos;
+    const pct = Math.round(c.score / 10 * 100);
+    const reasons = c.reasons.map(r => `<span class="chaos-reason">⚡ ${r}</span>`).join('');
+    html += `<div class="chaos-box">
+      <div class="chaos-header">
+        <span class="chaos-title">荒れ度</span>
+        <span class="chaos-label-${c.level}">${c.label}</span>
+      </div>
+      <div class="chaos-track">
+        <div class="chaos-bar ${c.level}" style="width:0%" data-width="${pct}%"></div>
+      </div>
+      <div class="chaos-reasons">${reasons}</div>
+    </div>`;
+  }
+
   if (data.score_order && data.score_order.length > 0) {
     html += `<div class="divider"></div>
     <div class="score-section">
@@ -1155,6 +1189,12 @@ function renderResult(data) {
     html += `</table></div>`;
   }
   area.innerHTML = html || '<div style="color:var(--text-muted)">予想なし</div>';
+  // 荒れ度バーアニメーション
+  setTimeout(() => {
+    area.querySelectorAll('.chaos-bar[data-width]').forEach(el => {
+      el.style.width = el.dataset.width;
+    });
+  }, 100);
 }
 
 // ======== Save Record ========
