@@ -1546,6 +1546,8 @@ function updateNigeBanner(nige) {
     color = '#00e676'; comment = '✅ イン逃げ率が高い　本命勝負どき';
   } else if (nige >= 50) {
     color = '#ffd740'; comment = '⚠️ 標準的なイン逃げ率　慎重に判断';
+  } else if (nige < 40) {
+    color = '#ff3d57'; comment = '❌ イン逃げ率が極めて低い　万舟チャンスあり';
   } else {
     color = '#ff3d57'; comment = '❌ イン逃げ率が低い　荒れやすい傾向';
   }
@@ -1615,7 +1617,8 @@ function oddsToType(odds) {
   if (odds <= 15)  return '本命';
   if (odds <= 50)  return '対抗';
   if (odds <= 100) return '中穴';
-  return null; // 250倍超は対象外
+  if (odds <= 200) return '万舟';
+  return null; // 200倍超は対象外
 }
 
 const TYPE_CLASS = {
@@ -1624,11 +1627,11 @@ const TYPE_CLASS = {
   '中穴': 'pred-chuana',
   '万舟': 'pred-manshu',
 };
-const TYPE_ORDER = ['本命', '対抗', '中穴'];
-const TYPE_LIMITS = { '本命': 2, '対抗': 3, '中穴': 1 };
+const TYPE_ORDER = ['本命', '対抗', '中穴', '万舟'];
+const TYPE_LIMITS = { '本命': 2, '対抗': 3, '中穴': 1, '万舟': 2 };
 
 function classifyByOdds(candidates) {
-  const result = { '本命': [], '対抗': [], '中穴': [] };
+  const result = { '本命': [], '対抗': [], '中穴': [], '万舟': [] };
   for (const c of candidates) {
     const odds = getTriOdds(c.combo);
     if (odds === null) continue;
@@ -1641,7 +1644,7 @@ function classifyByOdds(candidates) {
 }
 
 function classifyByScore(predictions) {
-  const result = { '本命': [], '対抗': [], '中穴': [] };
+  const result = { '本命': [], '対抗': [], '中穴': [], '万舟': [] };
   for (const p of predictions) {
     if (result[p.type] && result[p.type].length < TYPE_LIMITS[p.type]) {
       result[p.type].push({ combo: p.combo, type: p.type, odds: null });
@@ -1658,6 +1661,38 @@ function renderResult(data) {
   const candidates = data.candidates || data.predictions.map(p => ({ combo: p.combo }));
   const hasOdds = oddsData && Object.keys(oddsData.byBoat).length > 0;
   const classified = hasOdds ? classifyByOdds(candidates) : classifyByScore(data.predictions);
+
+  // 万舟補完: スコア候補に入らない万舟をオッズデータ全体からピックアップ
+  if (hasOdds && classified['万舟'].length < TYPE_LIMITS['万舟']) {
+    const usedCombos = new Set([
+      ...classified['本命'].map(x => x.combo),
+      ...classified['対抗'].map(x => x.combo),
+      ...classified['中穴'].map(x => x.combo),
+      ...classified['万舟'].map(x => x.combo),
+    ]);
+    // 三連単オッズ全組み合わせを走査
+    const manshuPicks = [];
+    for (let b1 = 1; b1 <= 6; b1++) {
+      for (let b2 = 1; b2 <= 6; b2++) {
+        if (b2 === b1) continue;
+        for (let b3 = 1; b3 <= 6; b3++) {
+          if (b3 === b1 || b3 === b2) continue;
+          const combo = `${b1}-${b2}-${b3}`;
+          if (usedCombos.has(combo)) continue;
+          const odds = getTriOdds(combo);
+          if (odds !== null && odds > 100 && odds <= 200) {
+            manshuPicks.push({ combo, odds });
+          }
+        }
+      }
+    }
+    // スコア上位のcandidatesの並び順に準じて万舟も選ぶ（オッズ低い順=当たりやすい順）
+    manshuPicks.sort((a, b) => a.odds - b.odds);
+    for (const m of manshuPicks) {
+      if (classified['万舟'].length >= TYPE_LIMITS['万舟']) break;
+      classified['万舟'].push({ combo: m.combo, type: '万舟', odds: m.odds });
+    }
+  }
 
   // 各タイプ表示
   for (const type of TYPE_ORDER) {

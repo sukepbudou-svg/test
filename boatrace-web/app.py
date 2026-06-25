@@ -246,7 +246,7 @@ def predict(boats, kimari=None, venue=None, wind=None):
 
     return {
         'predictions': results,
-        'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2)} for c in candidates[:20]],
+        'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2)} for c in candidates[:60]],
         'score_order': [{'course': s['course'], 'boat_number': s['boat']['boat_number'], 'score': round(s['score'], 2)} for s in scores],
         'chaos': calc_chaos(scores, boats, vp, wind_effect)
     }
