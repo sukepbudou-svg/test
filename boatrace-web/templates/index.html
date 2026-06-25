@@ -1655,7 +1655,15 @@ function classifyByScore(predictions) {
 
 function renderResult(data) {
   const area = document.getElementById('result-area');
+  const venueVal = document.getElementById('venue').value;
+  const raceVal  = document.getElementById('race_no').value;
   let html = '';
+
+  // 会場・レース番号ヘッダー
+  if (venueVal || raceVal) {
+    const label = [venueVal, raceVal ? raceVal + 'R' : ''].filter(Boolean).join(' ');
+    html += `<div style="text-align:center;font-size:16px;font-weight:bold;letter-spacing:2px;margin-bottom:8px;color:var(--text);">${label}</div>`;
+  }
 
   // オッズ分類
   const candidates = data.candidates || data.predictions.map(p => ({ combo: p.combo }));
