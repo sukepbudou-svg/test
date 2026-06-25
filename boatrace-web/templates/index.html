@@ -1137,26 +1137,42 @@ function parseKimariStats(text) {
       continue;
     }
 
-    // 値行
+    // 値行（ヘッダー1行に対して2〜6号艇分の値行が5行続く形式）
     if (expectValues && line.includes('%')) {
       const vals = line.split('\t').map(s => parseFloat(s.replace('%', '')));
-      // vals[0]=1号艇受動, vals[1-5]=2-6号艇能動
-      // expectValues例: ['makur', 'maki'] — passiveKey=expectValues[0], activeKey=expectValues[1]
       const passiveKey = expectValues[0];
       const activeKey  = expectValues[1] || null;
-      // 受動値（vals[0]）
-      if (passiveKey) {
-        if (['nige1','nige_oth','sasar'].includes(passiveKey)) {
-          if (!isNaN(vals[0])) periodData[curPeriod][passiveKey] = vals[0];
-        } else {
-          if (!isNaN(vals[0])) periodData[curPeriod][passiveKey + '_passive'] = vals[0];
+      const simpleKeys = ['nige1','nige_oth','sasar'];
+
+      if (!expectValues._rowIdx) expectValues._rowIdx = 0;
+
+      if (expectValues._rowIdx === 0) {
+        // 最初の行: 受動値（1号艇）を記録
+        if (passiveKey) {
+          if (simpleKeys.includes(passiveKey)) {
+            if (!isNaN(vals[0])) periodData[curPeriod][passiveKey] = vals[0];
+          } else {
+            if (!isNaN(vals[0])) periodData[curPeriod][passiveKey + '_passive'] = vals[0];
+          }
+        }
+        // 能動配列を初期化
+        if (activeKey && !simpleKeys.includes(activeKey)) {
+          periodData[curPeriod][activeKey + '_active'] = [0, 0, 0, 0, 0];
+          // この行のvals[1]が2号艇の能動値
+          if (!isNaN(vals[1])) periodData[curPeriod][activeKey + '_active'][0] = vals[1];
+        }
+      } else {
+        // 2行目以降: 各号艇の能動値（2行目=3号艇、…、5行目=6号艇）
+        if (activeKey && !simpleKeys.includes(activeKey)) {
+          const idx = expectValues._rowIdx; // 1=3号艇, 2=4号艇, 3=5号艇, 4=6号艇
+          if (!periodData[curPeriod][activeKey + '_active']) periodData[curPeriod][activeKey + '_active'] = [0,0,0,0,0];
+          const v = isNaN(vals[1]) ? (isNaN(vals[0]) ? 0 : vals[0]) : vals[1];
+          if (idx < 5) periodData[curPeriod][activeKey + '_active'][idx] = v;
         }
       }
-      // 能動値（vals[1-5]）= 2〜6号艇
-      if (activeKey && !['nige1','nige_oth','sasar'].includes(activeKey)) {
-        periodData[curPeriod][activeKey + '_active'] = [1,2,3,4,5].map(j => isNaN(vals[j]) ? 0 : vals[j]);
-      }
-      expectValues = null;
+
+      expectValues._rowIdx++;
+      if (expectValues._rowIdx >= 5) expectValues = null; // 5行分処理完了
       continue;
     }
   }

@@ -323,9 +323,11 @@ function renderRecords() {
       ? (r.is_hit ? '<span class="badge-hit">◎ 的中</span>' : '<span class="badge-miss">× 不的中</span>')
       : '<span class="badge-none">-</span>';
 
-    const payout = r.payout ? `${r.payout.toLocaleString()}円` : '-';
-    const profit = r.payout && r.purchase
-      ? `<span class="${r.payout - r.purchase >= 0 ? 'profit-plus' : 'profit-minus'}">${r.payout - r.purchase >= 0 ? '+' : ''}${(r.payout - r.purchase).toLocaleString()}円</span>`
+    const payout = (r.is_hit && r.payout) ? `${r.payout.toLocaleString()}円` : '-';
+    const profit = (r.result_1st && r.purchase)
+      ? (r.is_hit && r.payout
+        ? `<span class="profit-plus">+${(r.payout - r.purchase).toLocaleString()}円</span>`
+        : `<span class="profit-minus">-${r.purchase.toLocaleString()}円</span>`)
       : '-';
 
     const resultBtn = r.result_1st
