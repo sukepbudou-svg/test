@@ -90,10 +90,10 @@ h1 {
 .badge-miss { background: rgba(233,69,96,0.12); color: var(--accent); border: 1px solid rgba(233,69,96,0.25); border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
 .badge-none { background: rgba(90,106,128,0.15); color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; font-size: 11px; }
 
-.pred-list { display: flex; flex-wrap: nowrap; gap: 3px; overflow-x: auto; }
+.pred-list { display: flex; flex-wrap: nowrap; gap: 3px; }
 .pred-tag {
-  font-size: 10px; padding: 2px 5px; border-radius: 3px; font-weight: 700;
-  font-family: 'Orbitron',monospace; letter-spacing: 0.5px; white-space: nowrap; flex-shrink: 0;
+  font-size: 10px; padding: 2px 6px; border-radius: 3px; font-weight: 700;
+  font-family: 'Orbitron',monospace; letter-spacing: 1px; white-space: nowrap;
 }
 .pred-tag.本命 { background: rgba(233,69,96,0.15); color: var(--accent); border: 1px solid rgba(233,69,96,0.3); }
 .pred-tag.対抗 { background: rgba(245,166,35,0.15); color: var(--accent2); border: 1px solid rgba(245,166,35,0.3); }
@@ -336,7 +336,7 @@ function renderRecords() {
       <td>${r.race_date}</td>
       <td>${r.venue}</td>
       <td>${r.race_no}R</td>
-      <td style="max-width:320px;overflow:hidden;"><div class="pred-list">${predHtml}</div></td>
+      <td><div class="pred-list">${predHtml}</div></td>
       <td>${resultStr}</td>
       <td>${hitBadge}</td>
       <td>${payout}</td>
