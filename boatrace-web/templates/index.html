@@ -559,6 +559,23 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
 .slit-toggle button.active {
   background:var(--accent3); color:#000; border-color:var(--accent3); font-weight:700;
 }
+/* レーン形式スリット */
+.slit-lane-wrap { position:relative; width:100%; }
+.slit-lane-header { display:flex; justify-content:space-between; font-size:9px; color:var(--text-muted); padding:0 4px; margin-bottom:4px; }
+.slit-lane-area { position:relative; background:var(--surface2); border-radius:8px; padding:10px 4px; }
+.slit-start-line { position:absolute; right:30%; top:0; bottom:0; width:2px; background:rgba(255,255,255,0.25); }
+.slit-start-label { position:absolute; right:30%; top:-16px; transform:translateX(50%); font-size:9px; color:rgba(255,255,255,0.4); }
+.slit-lane-row { display:flex; align-items:center; height:28px; margin:2px 0; position:relative; }
+.slit-lane-num { width:28px; font-size:10px; font-weight:700; flex-shrink:0; text-align:center; }
+.slit-lane-track { flex:1; position:relative; height:100%; }
+.slit-lane-dot {
+  position:absolute; top:50%; transform:translateY(-50%);
+  width:32px; height:20px; border-radius:4px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:9px; font-weight:700; color:#000;
+  transition: left .3s ease;
+}
+.slit-lane-st { position:absolute; font-size:9px; color:var(--text-muted); top:50%; transform:translateY(-50%) translateX(36px); white-space:nowrap; }
 .slit-row {
   display:flex; align-items:center; gap:6px; margin-bottom:5px; font-size:12px;
 }
@@ -1547,6 +1564,10 @@ function switchSlit(mode) {
   updateSlit();
 }
 
+// 艇番カラー
+const BOAT_COLORS = ['#ffffff','#000000','#ff3300','#0066ff','#ffcc00','#00cc44'];
+const BOAT_TEXT   = ['#000','#fff','#fff','#fff','#000','#000'];
+
 function updateSlit() {
   const body = document.getElementById('slit-body');
   const rows = [];
@@ -1566,36 +1587,52 @@ function updateSlit() {
 
   const minSt = Math.min(...validSts);
   const maxSt = Math.max(...validSts);
-  const range = maxSt - minSt || 0.001;
+  const range = maxSt - minSt || 0.01;
 
-  // 最もSTが低い(前にいる)艇のインデックス
-  const topIdx = rows.reduce((best, r, i) => (r.st !== null && (best === -1 || r.st < rows[best].st)) ? i : best, -1);
+  // スタートラインを右30%に固定、ST小=右寄り(前)、ST大=左寄り(後)
+  // 表示範囲: 左端=最も遅い艇、右端=スタートラインより少し前
+  const startLinePct = 70; // スタートライン位置(左から%)
 
-  let html = '';
-  rows.forEach((r, idx) => {
-    const label = `${r.boat}号艇<br><span style="font-size:10px;color:var(--text-muted)">${r.course}コース</span>`;
+  let laneRows = '';
+  // コース順（上から1コース）で表示
+  const sorted = [...rows].sort((a, b) => a.course - b.course);
+  sorted.forEach(r => {
+    const bg = BOAT_COLORS[r.boat - 1];
+    const tc = BOAT_TEXT[r.boat - 1];
+    let dotLeft;
     if (r.st === null) {
-      html += `<div class="slit-row">
-        <div class="slit-label">${label}</div>
-        <div class="slit-track"><div class="slit-bar st-na" style="width:15%"></div></div>
-        <div class="slit-st-val">-</div>
-      </div>`;
+      dotLeft = startLinePct - 2; // データなし: スタートライン付近
     } else {
-      const pct = Math.round(((maxSt - r.st) / range) * 75 + 15);
-      const isTop = idx === topIdx;
-      html += `<div class="slit-row">
-        <div class="slit-label">${label}</div>
-        <div class="slit-track">
-          <div class="slit-bar${isTop ? ' top1' : ''}" style="width:${pct}%">${isTop ? '▶' : ''}</div>
-        </div>
-        <div class="slit-st-val">${r.st.toFixed(3)}</div>
-      </div>`;
+      // STが小さい(速い)ほど右(スタートライン側)に配置
+      const ratio = (maxSt - r.st) / range; // 0=最遅, 1=最速
+      dotLeft = (startLinePct - 5) - (1 - ratio) * (startLinePct - 10);
     }
+    const stLabel = r.st !== null ? r.st.toFixed(3) : '-';
+    const border = r.st !== null && r.st === minSt ? 'box-shadow:0 0 6px 2px #ffd740;' : '';
+    laneRows += `
+      <div class="slit-lane-row">
+        <div class="slit-lane-num" style="color:${bg};text-shadow:0 0 4px ${bg}66;">${r.course}C</div>
+        <div class="slit-lane-track">
+          <div class="slit-lane-dot" style="left:${dotLeft}%;background:${bg};color:${tc};${border}">
+            ${r.boat}号艇
+          </div>
+          <div class="slit-lane-st" style="left:${dotLeft}%">${stLabel}</div>
+        </div>
+      </div>`;
   });
 
   const modeLabel = slitMode === 'ex' ? '展示ST（当日）' : '平均ST（過去実績）';
-  html += `<div class="slit-note">※ ${modeLabel}ベース　バーが長いほど前にいる</div>`;
-  body.innerHTML = html;
+  body.innerHTML = `
+    <div class="slit-lane-wrap">
+      <div class="slit-lane-area">
+        <div class="slit-start-line"></div>
+        <div style="position:absolute;right:30%;top:4px;transform:translateX(50%);font-size:9px;color:rgba(255,255,255,0.4);">ST</div>
+        ${laneRows}
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text-muted);margin-top:4px;padding:0 28px;">
+        <span>◀ 遅い</span><span>${modeLabel}</span><span>速い ▶</span>
+      </div>
+    </div>`;
 }
 
 // オッズ帯からタイプを決定
