@@ -1197,16 +1197,6 @@ function applyExhibitInfo(data) {
       const el = document.getElementById(`b${boatNo}_exhibit_st`);
       if (el) el.value = data.st[idx].toFixed(3);
     }
-    // F持ち自動検出
-    if (data.stF[idx]) {
-      const fbtn = document.getElementById(`b${boatNo}_fbtn`);
-      if (fbtn && !fbtn.classList.contains('f-on')) {
-        fbtn.classList.add('f-on');
-        fbtn.textContent = 'F持ち ✓';
-        const frow = document.getElementById(`b${boatNo}_frow`);
-        if (frow) frow.classList.add('visible');
-      }
-    }
     // 体重
     if (data.weight[idx] !== undefined) {
       const el = document.getElementById(`b${boatNo}_weight`);
@@ -1348,10 +1338,7 @@ function parseData(name) {
     const data = parseExhibitInfo(text);
     if (data.exhibit.length > 0 || data.st.length > 0) {
       applyExhibitInfo(data);
-      const fCount = data.stF.filter(Boolean).length;
-      let msg = '✓ 展示情報を適用しました';
-      if (fCount > 0) msg += `（F持ち${fCount}艇を自動検出）`;
-      statusEl.textContent = msg;
+      statusEl.textContent = '✓ 展示情報を適用しました';
       // スリットを展示STモードに自動切り替え
       switchSlit('ex');
     } else {
