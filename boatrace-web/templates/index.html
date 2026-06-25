@@ -1135,17 +1135,17 @@ function parseKimariStats(text) {
     if (!curPeriod) continue;
 
     // ヘッダー行（値なし、次行に値）
-    const headerCols = line.split('\t').map(s => s.trim());
+    const headerCols = line.split(/[\t　\s]+/).map(s => s.trim()).filter(s => s);
     // %を含まず、キーワードが含まれる場合はヘッダー行
-    if (!line.includes('%') && headerCols.some(h => headerToKey[h])) {
+    if (!line.includes('%') && !line.includes('％') && headerCols.some(h => headerToKey[h])) {
       expectValues = headerCols.map(h => headerToKey[h] || null);
       continue;
     }
 
     // 値行: ヘッダー1行に対して値が1行で6つ並ぶ形式
     // 例: 差され\t差し → 18.5%\t5.3%\t0.0%\t0.0%\t0.0%\t0.0%
-    if (expectValues && line.includes('%')) {
-      const vals = line.split('\t').map(s => parseFloat(s.replace('%', '')));
+    if (expectValues && (line.includes('%') || line.includes('％'))) {
+      const vals = line.split(/[\t　\s]+/).map(s => parseFloat(s.replace(/[%％]/g, '')));
       const passiveKey = expectValues[0];
       const activeKey  = expectValues[1] || null;
       const simpleKeys = ['nige1','nige_oth','sasar'];
