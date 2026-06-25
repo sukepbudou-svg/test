@@ -574,6 +574,20 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
 .slit-bar.st-na { background:var(--surface3); }
 .slit-st-val { width:38px; text-align:right; color:var(--text-muted); font-size:11px; flex-shrink:0; }
 .slit-note { font-size:10px; color:var(--text-muted); margin-top:6px; text-align:right; }
+.slit-lane-area { position:relative; background:var(--surface2); border-radius:8px; padding:8px 4px 8px 4px; }
+.slit-lane-row { display:flex; align-items:center; height:26px; margin:3px 0; }
+.slit-lane-label { width:24px; font-size:9px; color:var(--text-muted); text-align:center; flex-shrink:0; }
+.slit-lane-track { flex:1; position:relative; height:22px; }
+.slit-lane-chip {
+  position:absolute; top:1px; height:20px; border-radius:4px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:9px; font-weight:700; padding:0 5px; white-space:nowrap;
+  transition:left .3s ease;
+}
+.slit-start-line {
+  position:absolute; top:0; bottom:0; width:2px;
+  background:rgba(255,255,255,0.3);
+}
 
 /* ===== ODDS ===== */
 .odds-tag {
@@ -1547,55 +1561,64 @@ function switchSlit(mode) {
   updateSlit();
 }
 
+const BOAT_COLORS = ['#ffffff','#1a1a1a','#ff3300','#0066ff','#ffcc00','#00cc44'];
+const BOAT_TEXT_COLORS = ['#000','#fff','#fff','#fff','#000','#000'];
+
 function updateSlit() {
-  const body = document.getElementById('slit-body');
-  const rows = [];
-  for (let i = 1; i <= 6; i++) {
-    const course = parseInt(document.getElementById(`b${i}_course`)?.value) || i;
-    const avgSt  = parseFloat(document.getElementById(`b${i}_avg_st`)?.value);
-    const exSt   = parseFloat(document.getElementById(`b${i}_exhibit_st`)?.value);
-    const st = slitMode === 'ex' ? exSt : avgSt;
-    rows.push({ boat: i, course, st: isNaN(st) ? null : st });
+  var body = document.getElementById('slit-body');
+  var rows = [];
+  for (var i = 1; i <= 6; i++) {
+    var course = parseInt(document.getElementById('b' + i + '_course') && document.getElementById('b' + i + '_course').value) || i;
+    var avgSt  = parseFloat(document.getElementById('b' + i + '_avg_st') ? document.getElementById('b' + i + '_avg_st').value : '');
+    var exSt   = parseFloat(document.getElementById('b' + i + '_exhibit_st') ? document.getElementById('b' + i + '_exhibit_st').value : '');
+    var st = slitMode === 'ex' ? exSt : avgSt;
+    rows.push({ boat: i, course: course, st: isNaN(st) ? null : st });
   }
 
-  const validSts = rows.filter(r => r.st !== null).map(r => r.st);
+  var validSts = rows.filter(function(r){ return r.st !== null; }).map(function(r){ return r.st; });
   if (validSts.length === 0) {
     body.innerHTML = '<div style="color:var(--text-muted);font-size:11px;text-align:center;">STを入力すると隊形が表示されます</div>';
     return;
   }
 
-  const minSt = Math.min(...validSts);
-  const maxSt = Math.max(...validSts);
-  const range = maxSt - minSt || 0.001;
+  var minSt = Math.min.apply(null, validSts);
+  var maxSt = Math.max.apply(null, validSts);
+  var range = maxSt - minSt || 0.01;
 
-  // 最もSTが低い(前にいる)艇のインデックス
-  const topIdx = rows.reduce((best, r, i) => (r.st !== null && (best === -1 || r.st < rows[best].st)) ? i : best, -1);
+  // コース順に並べて表示（上=1コース）
+  var sorted = rows.slice().sort(function(a, b){ return a.course - b.course; });
 
-  let html = '';
-  rows.forEach((r, idx) => {
-    const label = `${r.boat}号艇<br><span style="font-size:10px;color:var(--text-muted)">${r.course}コース</span>`;
+  // スタートラインをトラック幅の70%位置に固定
+  // ST小(速い)=右寄り、ST大(遅い)=左寄り
+  var startPct = 68; // スタートライン位置(左から%)
+  var modeLabel = slitMode === 'ex' ? '展示ST（当日）' : '平均ST（過去実績）';
+
+  var laneRows = '';
+  sorted.forEach(function(r) {
+    var bg = BOAT_COLORS[r.boat - 1];
+    var tc = BOAT_TEXT_COLORS[r.boat - 1];
+    var leftPct;
     if (r.st === null) {
-      html += `<div class="slit-row">
-        <div class="slit-label">${label}</div>
-        <div class="slit-track"><div class="slit-bar st-na" style="width:15%"></div></div>
-        <div class="slit-st-val">-</div>
-      </div>`;
+      leftPct = startPct - 4;
     } else {
-      const pct = Math.round(((maxSt - r.st) / range) * 75 + 15);
-      const isTop = idx === topIdx;
-      html += `<div class="slit-row">
-        <div class="slit-label">${label}</div>
-        <div class="slit-track">
-          <div class="slit-bar${isTop ? ' top1' : ''}" style="width:${pct}%">${isTop ? '▶' : ''}</div>
-        </div>
-        <div class="slit-st-val">${r.st.toFixed(3)}</div>
-      </div>`;
+      var ratio = (maxSt - r.st) / range; // 0=最遅, 1=最速
+      leftPct = startPct - 4 - (1 - ratio) * (startPct - 12);
     }
+    var glow = (r.st !== null && r.st === minSt) ? 'box-shadow:0 0 7px 2px #ffd740;' : '';
+    var stStr = r.st !== null ? r.st.toFixed(3) : '-';
+    laneRows += '<div class="slit-lane-row">'
+      + '<div class="slit-lane-label">' + r.course + 'C</div>'
+      + '<div class="slit-lane-track">'
+      + '<div class="slit-start-line" style="left:' + startPct + '%;"></div>'
+      + '<div class="slit-lane-chip" style="left:' + leftPct + '%;background:' + bg + ';color:' + tc + ';' + glow + '">'
+      + r.boat + '号 ' + stStr
+      + '</div>'
+      + '</div>'
+      + '</div>';
   });
 
-  const modeLabel = slitMode === 'ex' ? '展示ST（当日）' : '平均ST（過去実績）';
-  html += `<div class="slit-note">※ ${modeLabel}ベース　バーが長いほど前にいる</div>`;
-  body.innerHTML = html;
+  body.innerHTML = '<div class="slit-lane-area">' + laneRows + '</div>'
+    + '<div class="slit-note">◀ 遅い　' + modeLabel + '　速い ▶　白線=ST</div>';
 }
 
 // オッズ帯からタイプを決定
