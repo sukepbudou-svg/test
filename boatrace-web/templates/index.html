@@ -444,16 +444,32 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
 }
 .pred-ana::before { background: var(--green); }
 
+.pred-chuana {
+  background: linear-gradient(135deg, rgba(0,212,255,0.12), rgba(0,212,255,0.04));
+  border: 1px solid rgba(0,212,255,0.3);
+  box-shadow: 0 2px 12px rgba(0,212,255,0.08);
+}
+.pred-chuana::before { background: var(--accent3); }
+
+.pred-manshu {
+  background: linear-gradient(135deg, rgba(180,0,255,0.12), rgba(180,0,255,0.04));
+  border: 1px solid rgba(180,0,255,0.3);
+  box-shadow: 0 2px 12px rgba(180,0,255,0.08);
+}
+.pred-manshu::before { background: #b400ff; }
+
 .pred-label {
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 1px;
-  min-width: 28px;
+  min-width: 32px;
   text-align: center;
 }
 .pred-honmei .pred-label { color: var(--accent); }
 .pred-taikou .pred-label { color: var(--accent2); }
 .pred-ana    .pred-label { color: var(--green); }
+.pred-chuana .pred-label { color: var(--accent3); }
+.pred-manshu .pred-label { color: #b400ff; }
 
 .pred-combo {
   font-family: 'Orbitron', monospace;
@@ -1458,33 +1474,92 @@ function updateSlit() {
   body.innerHTML = html;
 }
 
+// オッズ帯からタイプを決定
+function oddsToType(odds) {
+  if (odds <= 20)  return '本命';
+  if (odds <= 60)  return '対抗';
+  if (odds <= 100) return '中穴';
+  if (odds <= 250) return '万舟';
+  return null; // 250倍超は対象外
+}
+
+const TYPE_CLASS = {
+  '本命': 'pred-honmei',
+  '対抗': 'pred-taikou',
+  '中穴': 'pred-chuana',
+  '万舟': 'pred-manshu',
+};
+const TYPE_ORDER = ['本命', '対抗', '中穴', '万舟'];
+
+function classifyByOdds(candidates) {
+  // オッズデータがある場合: 各タイプ2点ずつ実オッズで分類
+  const result = { '本命': [], '対抗': [], '中穴': [], '万舟': [] };
+  for (const c of candidates) {
+    const odds = getTriOdds(c.combo);
+    if (odds === null) continue;
+    const type = oddsToType(odds);
+    if (type && result[type].length < 2) {
+      result[type].push({ combo: c.combo, type, odds });
+    }
+  }
+  return result;
+}
+
+function classifyByScore(predictions) {
+  // オッズなし: サーバーのスコア順タイプをそのまま使用
+  const result = { '本命': [], '対抗': [], '中穴': [], '万舟': [] };
+  for (const p of predictions) {
+    if (result[p.type] && result[p.type].length < 2) {
+      result[p.type].push({ combo: p.combo, type: p.type, odds: null });
+    }
+  }
+  return result;
+}
+
 function renderResult(data) {
   const area = document.getElementById('result-area');
-  const typeClass = { '本命': 'pred-honmei', '対抗': 'pred-taikou', '穴': 'pred-ana' };
   let html = '';
-  for (const p of data.predictions) {
-    const cls = typeClass[p.type] || 'pred-honmei';
-    const triOdds = getTriOdds(p.combo);
-    let oddsHtml = '';
-    if (triOdds !== null) {
-      const oddsClass = triOdds < 20 ? 'low' : triOdds < 100 ? '' : 'high';
-      oddsHtml = `<span class="odds-tag ${oddsClass}">${triOdds.toFixed(1)}倍</span>`;
+
+  // オッズ分類
+  const candidates = data.candidates || data.predictions.map(p => ({ combo: p.combo }));
+  const hasOdds = oddsData && Object.keys(oddsData.byBoat).length > 0;
+  const classified = hasOdds ? classifyByOdds(candidates) : classifyByScore(data.predictions);
+
+  // 各タイプ表示
+  for (const type of TYPE_ORDER) {
+    const items = classified[type] || [];
+    for (const item of items) {
+      const cls = TYPE_CLASS[type];
+      const oddsVal = item.odds !== null ? item.odds : getTriOdds(item.combo);
+      let oddsHtml = '';
+      if (oddsVal !== null) {
+        const oc = oddsVal < 20 ? 'low' : oddsVal > 100 ? 'high' : '';
+        oddsHtml = `<span class="odds-tag ${oc}">${oddsVal.toFixed(1)}倍</span>`;
+      }
+      html += `<div class="pred-item ${cls}">
+        <span class="pred-label">${type}</span>
+        <span class="pred-combo">${item.combo}</span>${oddsHtml}
+      </div>`;
     }
-    html += `<div class="pred-item ${cls}">
-      <span class="pred-label">${p.type}</span>
-      <span class="pred-combo">${p.combo}</span>${oddsHtml}
-    </div>`;
+    if (items.length === 0) {
+      // オッズ範囲内の組み合わせなし
+      html += `<div class="pred-item" style="opacity:0.4;border:1px dashed var(--border)">
+        <span class="pred-label ${TYPE_CLASS[type]?.replace('pred-','')||''}">${type}</span>
+        <span style="font-size:12px;color:var(--text-muted)">該当なし</span>
+      </div>`;
+    }
   }
+
   // 2連単オッズ一覧
-  if (oddsData && Object.keys(oddsData.byBoat).length > 0) {
+  if (hasOdds) {
     html += `<div class="divider"></div><div class="score-title" style="margin-bottom:4px;">2連単オッズ（1着→2着）</div>
     <table class="odds-table"><tr><th>1着</th><th>2着</th><th>オッズ</th></tr>`;
     for (const [boat, bd] of Object.entries(oddsData.byBoat)) {
       bd.cols.forEach((col2, i) => {
         const o = bd.tan2[i];
         if (o) {
-          const cls = o < 10 ? 'style="color:var(--accent);font-weight:700"' : o > 100 ? 'style="color:var(--text-muted)"' : '';
-          html += `<tr><td>${boat}号艇</td><td>${col2}号艇</td><td ${cls}>${o.toFixed(1)}</td></tr>`;
+          const sc = o < 10 ? 'style="color:var(--accent);font-weight:700"' : o > 100 ? 'style="color:var(--text-muted)"' : '';
+          html += `<tr><td>${boat}号艇</td><td>${col2}号艇</td><td ${sc}>${o.toFixed(1)}</td></tr>`;
         }
       });
     }

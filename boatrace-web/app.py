@@ -188,125 +188,63 @@ def predict(boats, kimari=None, venue=None, wind=None):
 
     scores.sort(key=lambda x: x['score'], reverse=True)
 
-    # Determine predicted patterns
-    results = []
-    top = scores[0]
-    c = top['course']
-
-    # Apply kimari data if available
-    nige_2nd_rates = {}
-    if kimari and 'sim' in kimari:
-        sim = kimari['sim']
-        # sim: {1: {nige_2nd_rates: {2: 30.0, 3: 20.0, ...}}}
-        if c in sim and 'nige_2nd_rates' in sim[c]:
-            nige_2nd_rates = sim[c]['nige_2nd_rates']
-
     def get_boat_by_course(course_num):
         for s in scores:
             if s['course'] == course_num:
                 return s
         return None
 
-    def score_order_except(exclude_courses):
-        return [s for s in scores if s['course'] not in exclude_courses]
+    # 決まり手データから2着重み付けを取得
+    nige_2nd_rates = {}
+    top_course = scores[0]['course']
+    if kimari and 'sim' in kimari:
+        sim = kimari['sim']
+        if top_course in sim and 'nige_2nd_rates' in sim[top_course]:
+            nige_2nd_rates = sim[top_course]['nige_2nd_rates']
 
-    boat1 = get_boat_by_course(1)
-
-    # Course 1: 逃げ
-    if c == 1:
-        first = top['boat']['boat_number']
-        if nige_2nd_rates:
-            sorted_2nd = sorted(nige_2nd_rates.items(), key=lambda x: x[1], reverse=True)
-            seconds = [get_boat_by_course(int(k)) for k, v in sorted_2nd[:3] if get_boat_by_course(int(k))]
+    # スコア順に全6艇を並べた候補リストを生成（最大12候補）
+    candidates = []
+    seen = set()
+    for s1 in scores[:4]:
+        bn1 = s1['boat']['boat_number']
+        # 2着候補: 決まり手データがあれば優先、なければスコア順
+        if nige_2nd_rates and s1['course'] == top_course:
+            sorted_2nd_courses = [int(k) for k, _ in sorted(nige_2nd_rates.items(), key=lambda x: x[1], reverse=True)]
+            seconds = [get_boat_by_course(c) for c in sorted_2nd_courses if get_boat_by_course(c)]
+            seconds += [s for s in scores if s['boat']['boat_number'] != bn1 and s not in seconds]
         else:
-            seconds = score_order_except([1])[:3]
-        thirds = score_order_except([1])[:4]
-        for s2 in seconds[:2]:
-            for s3 in thirds[:3]:
-                if s3['course'] != s2['course']:
-                    results.append({
-                        'type': '本命',
-                        'combo': f"{first}-{s2['boat']['boat_number']}-{s3['boat']['boat_number']}"
-                    })
-                    if len(results) >= 3:
-                        break
-            if len(results) >= 3:
-                break
-
-    # Course 4: まくり or まくり差し → 2着は1号艇
-    elif c == 4:
-        first = top['boat']['boat_number']
-        second = boat1['boat']['boat_number'] if boat1 else scores[1]['boat']['boat_number']
-        thirds = score_order_except([c, 1])[:3]
-        for s3 in thirds:
-            results.append({
-                'type': '本命' if len(results) == 0 else '対抗',
-                'combo': f"{first}-{second}-{s3['boat']['boat_number']}"
-            })
-
-    # Course 5: まくり差し → 2着は1号艇
-    elif c == 5:
-        first = top['boat']['boat_number']
-        second = boat1['boat']['boat_number'] if boat1 else scores[1]['boat']['boat_number']
-        thirds = score_order_except([c, 1])[:3]
-        for s3 in thirds:
-            results.append({
-                'type': '本命' if len(results) == 0 else '対抗',
-                'combo': f"{first}-{second}-{s3['boat']['boat_number']}"
-            })
-
-    # Course 6: まくり差し → 2着は1号艇
-    elif c == 6:
-        first = top['boat']['boat_number']
-        second = boat1['boat']['boat_number'] if boat1 else scores[1]['boat']['boat_number']
-        thirds = score_order_except([c, 1])[:3]
-        for s3 in thirds:
-            results.append({
-                'type': '本命' if len(results) == 0 else '対抗',
-                'combo': f"{first}-{second}-{s3['boat']['boat_number']}"
-            })
-
-    # Other courses: score-based
-    else:
-        for i, s1 in enumerate(scores[:2]):
-            for s2 in scores[:4]:
-                if s2['course'] == s1['course']:
+            seconds = [s for s in scores if s['boat']['boat_number'] != bn1]
+        for s2 in seconds[:4]:
+            bn2 = s2['boat']['boat_number']
+            for s3 in scores:
+                bn3 = s3['boat']['boat_number']
+                if bn3 in (bn1, bn2):
                     continue
-                for s3 in scores[:5]:
-                    if s3['course'] in [s1['course'], s2['course']]:
-                        continue
-                    results.append({
-                        'type': ['本命', '対抗', '穴'][min(i, 2)],
-                        'combo': f"{s1['boat']['boat_number']}-{s2['boat']['boat_number']}-{s3['boat']['boat_number']}"
-                    })
-                    if len(results) >= 6:
-                        break
-                if len(results) >= 6:
+                combo = f"{bn1}-{bn2}-{bn3}"
+                if combo not in seen:
+                    seen.add(combo)
+                    # 複合スコア = 1着スコア×3 + 2着スコア×2 + 3着スコア
+                    combined = s1['score'] * 3 + s2['score'] * 2 + s3['score']
+                    candidates.append({'combo': combo, 'combined': combined, 'type': None})
+                if len(candidates) >= 60:
                     break
-            if len(results) >= 6:
+            if len(candidates) >= 60:
                 break
+        if len(candidates) >= 60:
+            break
 
-    # Fill穴 if < 6 results
-    if len(results) < 6:
-        for s1 in scores[:3]:
-            for s2 in scores[:4]:
-                if s2['course'] == s1['course']:
-                    continue
-                for s3 in scores[:5]:
-                    if s3['course'] in [s1['course'], s2['course']]:
-                        continue
-                    combo = f"{s1['boat']['boat_number']}-{s2['boat']['boat_number']}-{s3['boat']['boat_number']}"
-                    if not any(r['combo'] == combo for r in results):
-                        results.append({'type': '穴', 'combo': combo})
-                    if len(results) >= 6:
-                        break
-                if len(results) >= 6:
-                    break
-            if len(results) >= 6:
-                break
+    candidates.sort(key=lambda x: x['combined'], reverse=True)
+
+    # スコアベースで仮タイプ付与（オッズなし時のフォールバック）
+    # 上位から 本命×2, 対抗×2, 中穴×2, 万舟×2 の8点
+    type_labels = ['本命', '本命', '対抗', '対抗', '中穴', '中穴', '万舟', '万舟']
+    results = []
+    for i, c in enumerate(candidates[:8]):
+        results.append({'combo': c['combo'], 'type': type_labels[i], 'combined': round(c['combined'], 2)})
 
     return {
-        'predictions': results[:6],
+        'predictions': results,
+        'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2)} for c in candidates[:20]],
         'score_order': [{'course': s['course'], 'boat_number': s['boat']['boat_number'], 'score': round(s['score'], 2)} for s in scores],
         'chaos': calc_chaos(scores, boats, vp, wind_effect)
     }
