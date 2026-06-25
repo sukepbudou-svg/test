@@ -1179,11 +1179,6 @@ function parseKimariStats(text) {
   const period = document.getElementById('kimari-period')?.value || '直近6ヶ月';
   const pd = periodData[period] || periodData['直近6ヶ月'] || periodData['直近1年'] || {};
 
-  // デバッグ: コンソールに出力
-  console.log('[kimari] periodData keys:', Object.keys(periodData));
-  console.log('[kimari] pd:', JSON.stringify(pd));
-  console.log('[kimari] sashi_active:', pd.sashi_active);
-  console.log('[kimari] maki_active:', pd.maki_active);
 
   // 1号艇: 逃げ率・捲られ率・捲られ差し率
   document.getElementById('kr-nige-1').textContent  = `逃${(pd.nige1 || 0).toFixed(1)}%`;
