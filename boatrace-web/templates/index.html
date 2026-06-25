@@ -1040,63 +1040,159 @@ function applyPlayerStats() {
 // ======== Parse: 決まり手 ========
 function parseKimariStats(text) {
   const result = {};
-  const blocks = text.split(/\n(?=直近[16][年ヶ月]+|逃げシミュ)/);
-  for (const block of blocks) {
-    const lines = block.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    if (lines.length === 0) continue;
-    const header = lines[0];
-    if (header.startsWith('逃げシミュ')) {
-      const sim = {};
-      let curCourse = null;
-      for (let li = 1; li < lines.length; li++) {
-        const line = lines[li];
-        const m = line.match(/^(\d)コース/);
-        if (m) { curCourse = parseInt(m[1]); sim[curCourse] = { nige_2nd_rates: {} }; continue; }
-        if (curCourse === null) continue;
-        const parts = line.split('\t');
-        if (parts.length >= 2) {
-          const cn = parseInt(parts[0]); const pct = parseFloat(parts[1]);
-          if (!isNaN(cn) && !isNaN(pct)) sim[curCourse].nige_2nd_rates[cn] = pct;
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  // --- 期間別データ (直近6ヶ月 / 直近1年) ---
+  // フォーマット:
+  //   逃げ\t逃し
+  //   73.9%\t61.1%     ← 次行に値
+  //   差され\t差し
+  //   0.0%\t11.1%\t... ← 次行に値
+  let curPeriod = null;
+  let expectValues = null; // 次行が値行のとき、キー名を保持
+
+  const periodData = {}; // { '直近6ヶ月': { nige1: 73.9, nige_others: 61.1, ... } }
+
+  const headerToKey = {
+    '逃げ': 'nige1',      // 1号艇の逃げ率
+    '逃し': 'nige_oth',   // 逃した率
+    '差され': 'sasar',
+    '差し': 'sashi',
+    '捲られ': 'makur',
+    '捲り': 'maki',
+    '捲られ差': 'makurS',
+    '捲り差し': 'makis',
+  };
+
+  // 逃げシミュレーション
+  let inSim = false;
+  let simNige2nd = [];   // 逃がし2着率 [boats 2-6]
+  let simNige3rd = [];   // 逃がし3着率 [boats 2-6]
+  let simDeMe = {};      // 出目確率 { '1-2': 13.9, '1-3': 23.6, ... }
+  let inDeMe = false;
+
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+
+    // 期間ヘッダー
+    const periodMatch = line.match(/^(直近[16][年ヶ月]+)$/);
+    if (periodMatch && !inSim) {
+      curPeriod = periodMatch[1];
+      if (!periodData[curPeriod]) periodData[curPeriod] = {};
+      expectValues = null;
+      continue;
+    }
+
+    // 逃げシミュレーション開始
+    if (line.startsWith('逃げシミュ')) {
+      inSim = true; inDeMe = false;
+      continue;
+    }
+
+    if (inSim) {
+      if (line.startsWith('逃がし2着率')) { continue; }
+      if (line.startsWith('逃がし3着率')) { expectValues = '3rd'; continue; }
+      if (line.startsWith('進入数')) { expectValues = null; continue; }
+      if (line.startsWith('逃げ逃し出目確率')) { inDeMe = true; expectValues = null; continue; }
+      if (line.startsWith('全艇成績') || line.startsWith('決まり手数')) { inSim = false; inDeMe = false; continue; }
+
+      if (inDeMe) {
+        // 出目ラベル行: "1-2\t1-3\t1-4\t1-5\t1-6"
+        if (line.match(/^1-\d/)) {
+          const labels = line.split('\t').map(s => s.trim());
+          const nextLine = lines[li + 1] || '';
+          const vals = nextLine.split('\t').map(s => parseFloat(s.replace('%', '')));
+          labels.forEach((lbl, i) => { if (!isNaN(vals[i])) simDeMe[lbl] = vals[i]; });
+          li++; // 値行をスキップ
+          continue;
         }
+        continue;
       }
-      result['sim'] = sim; continue;
-    }
-    const periodKey = header.match(/直近[16][年ヶ月]+/)?.[0];
-    if (!periodKey) continue;
-    result[periodKey] = { nige: [], maki: [], makis: [], sashi: [], nukiashi: [] };
-    const labels = { '逃げ': 'nige', '捲り': 'maki', '捲り差し': 'makis', '差し': 'sashi', '抜き足': 'nukiashi' };
-    for (let li = 1; li < lines.length; li++) {
-      const cols = lines[li].split('\t');
-      if (cols.length < 2) continue;
-      const key = labels[cols[0].trim()];
-      if (!key) continue;
-      const vals = [];
-      for (let ci = 1; ci < cols.length && vals.length < 6; ci++) {
-        const pct = parseFloat(cols[ci]); vals.push(isNaN(pct) ? 0 : pct);
+
+      // 1着\t逃げ\t逃がし2着率 行
+      if (line.startsWith('1着')) {
+        const vals = line.split('\t').map(s => parseFloat(s.replace('%', ''))).filter(v => !isNaN(v));
+        // vals: [65.1, 65.1, 25.0, 42.3, 31.8, 7.7, 10.0]
+        // index 2以降が逃がし2着率 (boats 2-6)
+        simNige2nd = vals.slice(2);
+        expectValues = null;
+        continue;
       }
-      while (vals.length < 6) vals.push(0);
-      result[periodKey][key] = vals;
+      if (expectValues === '3rd') {
+        simNige3rd = line.split('\t').map(s => parseFloat(s.replace('%', ''))).filter(v => !isNaN(v));
+        expectValues = null;
+        continue;
+      }
+      continue;
     }
-    for (let i = 1; i <= 6; i++) {
-      document.getElementById(`kr-nige-${i}`).textContent = `逃${(result[periodKey].nige[i-1]||0).toFixed(1)}%`;
-      document.getElementById(`kr-mak-${i}`).textContent  = `捲${(result[periodKey].maki[i-1]||0).toFixed(1)}%`;
-      document.getElementById(`kr-maks-${i}`).textContent = `捲差${(result[periodKey].makis[i-1]||0).toFixed(1)}%`;
+
+    // 期間データ内
+    if (!curPeriod) continue;
+
+    // ヘッダー行（値なし、次行に値）
+    const headerCols = line.split('\t').map(s => s.trim());
+    // %を含まず、キーワードが含まれる場合はヘッダー行
+    if (!line.includes('%') && headerCols.some(h => headerToKey[h])) {
+      expectValues = headerCols.map(h => headerToKey[h] || null);
+      continue;
+    }
+
+    // 値行
+    if (expectValues && line.includes('%')) {
+      const vals = line.split('\t').map(s => parseFloat(s.replace('%', '')));
+      expectValues.forEach((key, i) => {
+        if (key && !isNaN(vals[i])) periodData[curPeriod][key] = vals[i];
+      });
+      expectValues = null;
+      continue;
     }
   }
+
+  // 逃げシミュ結果をnige_2nd_ratesに変換 (boat番号2〜6 → course 2〜6 の想定)
+  const nige2ndRates = {};
+  simNige2nd.forEach((pct, i) => { nige2ndRates[i + 2] = pct; });
+
+  result['sim'] = { 1: { nige_2nd_rates: nige2ndRates, nige_3rd_rates: {}, deme: simDeMe } };
+  simNige3rd.forEach((pct, i) => { result['sim'][1].nige_3rd_rates[i + 2] = pct; });
+
+  // 期間データを格納
+  Object.assign(result, periodData);
+
+  // バッジ更新: 1号艇だけ逃げ率を表示、他は'-'
+  const period = document.getElementById('kimari-period')?.value || '直近6ヶ月';
+  const pd = periodData[period] || periodData['直近6ヶ月'] || periodData['直近1年'] || {};
+  document.getElementById('kr-nige-1').textContent = `逃${(pd.nige1 || 0).toFixed(1)}%`;
+  document.getElementById('kr-mak-1').textContent  = `捲${(pd.makur || 0).toFixed(1)}%`;
+  document.getElementById('kr-maks-1').textContent = `捲差${(pd.makurS || 0).toFixed(1)}%`;
+  for (let i = 2; i <= 6; i++) {
+    document.getElementById(`kr-nige-${i}`).textContent = '逃-';
+    document.getElementById(`kr-mak-${i}`).textContent  = '捲-';
+    document.getElementById(`kr-maks-${i}`).textContent = '捲差-';
+  }
+
+  // 出目確率を表示（1号艇のバッジ下に追加情報として）
+  if (Object.keys(simDeMe).length > 0) {
+    const demeStr = Object.entries(simDeMe).map(([k,v]) => `${k}:${v}%`).join(' ');
+    document.getElementById('kr-maks-1').title = `出目確率: ${demeStr}`;
+  }
+
   return result;
 }
 
 function applyKimariStats() {
   if (!kimariStats) return;
   const period = document.getElementById('kimari-period').value;
-  const data = kimariStats[period];
-  if (!data) return;
-  for (let i = 1; i <= 6; i++) {
-    document.getElementById(`kr-nige-${i}`).textContent = `逃${(data.nige[i-1]||0).toFixed(1)}%`;
-    document.getElementById(`kr-mak-${i}`).textContent  = `捲${(data.maki[i-1]||0).toFixed(1)}%`;
-    document.getElementById(`kr-maks-${i}`).textContent = `捲差${(data.makis[i-1]||0).toFixed(1)}%`;
+  const pd = kimariStats[period] || kimariStats['直近6ヶ月'] || kimariStats['直近1年'] || {};
+  document.getElementById('kr-nige-1').textContent = `逃${(pd.nige1 || 0).toFixed(1)}%`;
+  document.getElementById('kr-mak-1').textContent  = `捲${(pd.makur || 0).toFixed(1)}%`;
+  document.getElementById('kr-maks-1').textContent = `捲差${(pd.makurS || 0).toFixed(1)}%`;
+  for (let i = 2; i <= 6; i++) {
+    document.getElementById(`kr-nige-${i}`).textContent = '逃-';
+    document.getElementById(`kr-mak-${i}`).textContent  = '捲-';
+    document.getElementById(`kr-maks-${i}`).textContent = '捲差-';
   }
 }
+
 
 // ======== Parse: モーター ========
 function parseMotorStats(text) {
