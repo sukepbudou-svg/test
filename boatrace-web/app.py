@@ -236,8 +236,8 @@ def predict(boats, kimari=None, venue=None, wind=None):
     candidates.sort(key=lambda x: x['combined'], reverse=True)
 
     # スコアベースで仮タイプ付与（オッズなし時のフォールバック）
-    # 上位から 本命×2, 対抗×2, 中穴×2, 万舟×2 の8点
-    type_labels = ['本命', '本命', '対抗', '対抗', '中穴', '中穴', '万舟', '万舟']
+    # 上位から 本命×2, 対抗×3, 中穴×1 の6点
+    type_labels = ['本命', '本命', '対抗', '対抗', '対抗', '中穴']
     results = []
     for i, c in enumerate(candidates[:8]):
         results.append({'combo': c['combo'], 'type': type_labels[i], 'combined': round(c['combined'], 2)})

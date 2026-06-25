@@ -1600,10 +1600,9 @@ function updateSlit() {
 
 // オッズ帯からタイプを決定
 function oddsToType(odds) {
-  if (odds <= 20)  return '本命';
-  if (odds <= 60)  return '対抗';
+  if (odds <= 15)  return '本命';
+  if (odds <= 50)  return '対抗';
   if (odds <= 100) return '中穴';
-  if (odds <= 250) return '万舟';
   return null; // 250倍超は対象外
 }
 
@@ -1613,16 +1612,16 @@ const TYPE_CLASS = {
   '中穴': 'pred-chuana',
   '万舟': 'pred-manshu',
 };
-const TYPE_ORDER = ['本命', '対抗', '中穴', '万舟'];
+const TYPE_ORDER = ['本命', '対抗', '中穴'];
+const TYPE_LIMITS = { '本命': 2, '対抗': 3, '中穴': 1 };
 
 function classifyByOdds(candidates) {
-  // オッズデータがある場合: 各タイプ2点ずつ実オッズで分類
-  const result = { '本命': [], '対抗': [], '中穴': [], '万舟': [] };
+  const result = { '本命': [], '対抗': [], '中穴': [] };
   for (const c of candidates) {
     const odds = getTriOdds(c.combo);
     if (odds === null) continue;
     const type = oddsToType(odds);
-    if (type && result[type].length < 2) {
+    if (type && result[type].length < TYPE_LIMITS[type]) {
       result[type].push({ combo: c.combo, type, odds });
     }
   }
@@ -1630,10 +1629,9 @@ function classifyByOdds(candidates) {
 }
 
 function classifyByScore(predictions) {
-  // オッズなし: サーバーのスコア順タイプをそのまま使用
-  const result = { '本命': [], '対抗': [], '中穴': [], '万舟': [] };
+  const result = { '本命': [], '対抗': [], '中穴': [] };
   for (const p of predictions) {
-    if (result[p.type] && result[p.type].length < 2) {
+    if (result[p.type] && result[p.type].length < TYPE_LIMITS[p.type]) {
       result[p.type].push({ combo: p.combo, type: p.type, odds: null });
     }
   }
