@@ -90,7 +90,7 @@ h1 {
 .badge-miss { background: rgba(233,69,96,0.12); color: var(--accent); border: 1px solid rgba(233,69,96,0.25); border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
 .badge-none { background: rgba(90,106,128,0.15); color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; font-size: 11px; }
 
-.pred-list { display: flex; flex-direction: column; gap: 3px; }
+.pred-list { display: flex; flex-wrap: nowrap; gap: 3px; }
 .pred-tag {
   font-size: 10px; padding: 2px 6px; border-radius: 3px; font-weight: 700;
   font-family: 'Orbitron',monospace; letter-spacing: 1px;
@@ -354,7 +354,7 @@ function renderSummary() {
   const withResult = allRecords.filter(r => r.result_1st);
   const hits = withResult.filter(r => r.is_hit);
   const rate = withResult.length > 0 ? Math.round(hits.length / withResult.length * 100) : 0;
-  const totalPayout = withResult.reduce((s,r) => s + (r.payout || 0), 0);
+  const totalPayout = hits.reduce((s,r) => s + (r.payout || 0), 0);
   const totalPurchase = withResult.reduce((s,r) => s + (r.purchase || 0), 0);
   const balance = totalPayout - totalPurchase;
   const recover = totalPurchase > 0 ? Math.round(totalPayout / totalPurchase * 100) : 0;
