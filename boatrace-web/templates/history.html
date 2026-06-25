@@ -75,14 +75,14 @@ h1 {
 .filter-btn:hover:not(.active) { border-color: var(--accent3); color: var(--accent3); }
 
 /* 記録テーブル */
-.records-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow-x: auto; }
-.records-table { width: max-content; min-width: 100%; border-collapse: collapse; }
+.records-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.records-table { width: 100%; border-collapse: collapse; }
 .records-table th {
   background: var(--surface3); padding: 10px 12px; text-align: left;
   font-size: 10px; letter-spacing: 1px; color: var(--text-muted); text-transform: uppercase;
   border-bottom: 1px solid var(--border); white-space: nowrap;
 }
-.records-table td { padding: 10px 12px; border-bottom: 1px solid rgba(30,45,66,0.5); vertical-align: middle; white-space: nowrap; }
+.records-table td { padding: 10px 8px; border-bottom: 1px solid rgba(30,45,66,0.5); vertical-align: middle; white-space: nowrap; }
 .records-table tr:last-child td { border-bottom: none; }
 .records-table tr:hover td { background: rgba(255,255,255,0.02); }
 
@@ -90,10 +90,10 @@ h1 {
 .badge-miss { background: rgba(233,69,96,0.12); color: var(--accent); border: 1px solid rgba(233,69,96,0.25); border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
 .badge-none { background: rgba(90,106,128,0.15); color: var(--text-muted); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; font-size: 11px; }
 
-.pred-list { display: flex; flex-wrap: nowrap; gap: 3px; }
+.pred-list { display: flex; flex-wrap: nowrap; gap: 2px; }
 .pred-tag {
-  font-size: 10px; padding: 2px 6px; border-radius: 3px; font-weight: 700;
-  font-family: 'Orbitron',monospace; letter-spacing: 1px; white-space: nowrap;
+  font-size: 9px; padding: 1px 4px; border-radius: 3px; font-weight: 700;
+  font-family: 'Orbitron',monospace; letter-spacing: 0.5px; white-space: nowrap;
 }
 .pred-tag.本命 { background: rgba(233,69,96,0.15); color: var(--accent); border: 1px solid rgba(233,69,96,0.3); }
 .pred-tag.対抗 { background: rgba(245,166,35,0.15); color: var(--accent2); border: 1px solid rgba(245,166,35,0.3); }
