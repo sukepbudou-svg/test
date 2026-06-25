@@ -1490,10 +1490,10 @@ async function runPredict() {
     body: JSON.stringify({ boats, kimari: kimariPayload, venue, wind })
   });
   const data = await resp.json();
-  lastPredictions = data.predictions || [];
-  document.getElementById('btn-save').style.display = lastPredictions.length > 0 ? 'block' : 'none';
   document.getElementById('status-save').textContent = '';
-  renderResult(data);
+  const displayed = renderResult(data);
+  lastPredictions = displayed;
+  document.getElementById('btn-save').style.display = lastPredictions.length > 0 ? 'block' : 'none';
 }
 
 // ======== スリット隊形 ========
@@ -1682,6 +1682,14 @@ function renderResult(data) {
       el.style.width = el.dataset.width;
     });
   }, 100);
+  // 表示した予想を返す（saveRecordで使用）
+  const displayed = [];
+  for (const type of TYPE_ORDER) {
+    for (const item of (classified[type] || [])) {
+      displayed.push({ combo: item.combo, type });
+    }
+  }
+  return displayed;
 }
 
 // ======== Save Record ========
