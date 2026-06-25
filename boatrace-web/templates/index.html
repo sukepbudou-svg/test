@@ -848,6 +848,8 @@ function buildBoatCards() {
   for (let i = 1; i <= 6; i++) {
     const card = document.createElement('div');
     card.className = 'boat-card';
+    const bgColors = ['rgba(200,200,200,0.08)','rgba(30,30,30,0.18)','rgba(220,60,0,0.08)','rgba(0,80,220,0.08)','rgba(220,180,0,0.08)','rgba(0,180,60,0.08)'];
+    card.style.background = bgColors[i-1];
     card.innerHTML = `
       <div class="boat-header">
         <div class="boat-num ${BOAT_COLORS[i-1]}">${i}</div>
@@ -1578,38 +1580,34 @@ function updateSlit() {
     return;
   }
 
-  const minSt = Math.min(...validSts);
-  const maxSt = Math.max(...validSts);
-  const range = maxSt - minSt || 0.001;
+  const chipBg  = ['#ccc','#333','#e03000','#0050dd','#ddaa00','#00aa44'];
+  const chipFg  = ['#333','#fff','#fff','#fff','#333','#fff'];
 
-  // 最もSTが低い(前にいる)艇のインデックス
-  const topIdx = rows.reduce((best, r, i) => (r.st !== null && (best === -1 || r.st < rows[best].st)) ? i : best, -1);
+  // ST昇順にソート（小さいほど前）
+  const sorted = rows.filter(r => r.st !== null).sort((a, b) => a.st - b.st);
+  const noData = rows.filter(r => r.st === null);
 
-  let html = '';
-  rows.forEach((r, idx) => {
-    const label = `${r.boat}号艇<br><span style="font-size:10px;color:var(--text-muted)">${r.course}コース</span>`;
-    if (r.st === null) {
-      html += `<div class="slit-row">
-        <div class="slit-label">${label}</div>
-        <div class="slit-track"><div class="slit-bar st-na" style="width:15%"></div></div>
-        <div class="slit-st-val">-</div>
-      </div>`;
-    } else {
-      const pct = Math.round(((maxSt - r.st) / range) * 75 + 15);
-      const isTop = idx === topIdx;
-      html += `<div class="slit-row">
-        <div class="slit-label">${label}</div>
-        <div class="slit-track">
-          <div class="slit-bar${isTop ? ' top1' : ''}" style="width:${pct}%">${isTop ? '▶' : ''}</div>
-        </div>
-        <div class="slit-st-val">${r.st.toFixed(3)}</div>
-      </div>`;
-    }
+  let chips = sorted.map((r, rank) => {
+    const bg = chipBg[r.boat - 1];
+    const fg = chipFg[r.boat - 1];
+    const label = rank === 0 ? '前' : (rank === sorted.length - 1 && noData.length === 0 ? '後' : '');
+    return `<span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;">${label ? '<span style="font-size:9px;color:var(--text-muted)">'+label+'</span>' : '<span style="font-size:9px;">&nbsp;</span>'}<span style="background:${bg};color:${fg};border-radius:50%;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;font-size:13px;">${r.boat}</span><span style="font-size:9px;color:var(--text-muted);">${r.st.toFixed(3)}</span></span>`;
   });
 
-  const modeLabel = slitMode === 'ex' ? '展示ST（当日）' : '平均ST（過去実績）';
-  html += `<div class="slit-note">※ ${modeLabel}ベース　バーが長いほど前にいる</div>`;
-  body.innerHTML = html;
+  const arrowSep = '<span style="font-size:16px;color:var(--text-muted);align-self:center;margin-top:10px;">→</span>';
+  let rankHtml = chips.join(arrowSep);
+
+  if (noData.length > 0) {
+    const nochips = noData.map(r => {
+      const bg = chipBg[r.boat - 1];
+      const fg = chipFg[r.boat - 1];
+      return `<span style="background:${bg};color:${fg};border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;opacity:0.4;">${r.boat}</span>`;
+    }).join(' ');
+    rankHtml += `<span style="font-size:11px;color:var(--text-muted);margin-left:8px;">/ ST未入力: ${nochips}</span>`;
+  }
+
+  const modeLabel = slitMode === 'ex' ? '展示ST' : '平均ST';
+  body.innerHTML = `<div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:4px;justify-content:center;padding:4px 0;">${rankHtml}</div><div style="font-size:10px;color:var(--text-muted);text-align:center;margin-top:4px;">※ ${modeLabel}ベース　左が前・右が後ろ</div>`;
 }
 
 // オッズ帯からタイプを決定
