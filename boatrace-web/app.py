@@ -239,7 +239,7 @@ def predict(boats, kimari=None, venue=None, wind=None):
     # 上位から 本命×2, 対抗×3, 中穴×1 の6点
     type_labels = ['本命', '本命', '対抗', '対抗', '対抗', '中穴']
     results = []
-    for i, c in enumerate(candidates[:8]):
+    for i, c in enumerate(candidates[:len(type_labels)]):
         results.append({'combo': c['combo'], 'type': type_labels[i], 'combined': round(c['combined'], 2)})
 
     return {
