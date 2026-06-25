@@ -1140,37 +1140,58 @@ function parseKimariStats(text) {
     // 値行
     if (expectValues && line.includes('%')) {
       const vals = line.split('\t').map(s => parseFloat(s.replace('%', '')));
+      // expectValues例: ['makur', 'maki'] → vals[0]=1号艇受動, vals[1-5]=2-6号艇能動
       expectValues.forEach((key, i) => {
-        if (key && !isNaN(vals[i])) periodData[curPeriod][key] = vals[i];
+        if (!key || isNaN(vals[i])) return;
+        // 単一値キー（逃げ/逃し）
+        if (['nige1','nige_oth','sasar'].includes(key)) {
+          periodData[curPeriod][key] = vals[i];
+        } else {
+          // 能動側（差し/捲り/捲り差し）は boats 2-6 の配列として保存
+          // expectValuesの2番目以降が能動キー
+          // i=0 が受動(1号艇), i=1〜5 が2〜6号艇の能動値
+          if (i === 0) {
+            periodData[curPeriod][key + '_passive'] = vals[0]; // 1号艇受動
+          } else {
+            if (!periodData[curPeriod][key + '_active']) periodData[curPeriod][key + '_active'] = [0,0,0,0,0];
+            periodData[curPeriod][key + '_active'][i - 1] = vals[i]; // boats 2-6 (index 0-4)
+          }
+        }
       });
       expectValues = null;
       continue;
     }
   }
 
-  // 逃げシミュ結果をnige_2nd_ratesに変換 (boat番号2〜6 → course 2〜6 の想定)
+  // 逃げシミュ結果をnige_2nd_ratesに変換
   const nige2ndRates = {};
   simNige2nd.forEach((pct, i) => { nige2ndRates[i + 2] = pct; });
 
   result['sim'] = { 1: { nige_2nd_rates: nige2ndRates, nige_3rd_rates: {}, deme: simDeMe } };
   simNige3rd.forEach((pct, i) => { result['sim'][1].nige_3rd_rates[i + 2] = pct; });
 
-  // 期間データを格納
   Object.assign(result, periodData);
 
-  // バッジ更新: 1号艇だけ逃げ率を表示、他は'-'
+  // バッジ更新
   const period = document.getElementById('kimari-period')?.value || '直近6ヶ月';
   const pd = periodData[period] || periodData['直近6ヶ月'] || periodData['直近1年'] || {};
-  document.getElementById('kr-nige-1').textContent = `逃${(pd.nige1 || 0).toFixed(1)}%`;
-  document.getElementById('kr-mak-1').textContent  = `捲${(pd.makur || 0).toFixed(1)}%`;
-  document.getElementById('kr-maks-1').textContent = `捲差${(pd.makurS || 0).toFixed(1)}%`;
+
+  // 1号艇: 逃げ率・捲られ率・捲られ差し率
+  document.getElementById('kr-nige-1').textContent  = `逃${(pd.nige1 || 0).toFixed(1)}%`;
+  document.getElementById('kr-mak-1').textContent   = `捲${(pd.makur_passive ?? pd.makur ?? 0).toFixed(1)}%`;
+  document.getElementById('kr-maks-1').textContent  = `捲差${(pd.makurS_passive ?? pd.makurS ?? 0).toFixed(1)}%`;
+
+  // 2〜6号艇: 捲り率・捲り差し率・差し率
   for (let i = 2; i <= 6; i++) {
-    document.getElementById(`kr-nige-${i}`).textContent = '逃-';
-    document.getElementById(`kr-mak-${i}`).textContent  = '捲-';
-    document.getElementById(`kr-maks-${i}`).textContent = '捲差-';
+    const idx = i - 2; // boats 2-6 → index 0-4
+    const mak  = (pd.maki_active  || [])[idx] ?? 0;
+    const maks = (pd.makis_active || [])[idx] ?? 0;
+    const sas  = (pd.sashi_active || [])[idx] ?? 0;
+    document.getElementById(`kr-nige-${i}`).textContent  = `差${sas.toFixed(1)}%`;
+    document.getElementById(`kr-mak-${i}`).textContent   = `捲${mak.toFixed(1)}%`;
+    document.getElementById(`kr-maks-${i}`).textContent  = `捲差${maks.toFixed(1)}%`;
   }
 
-  // 出目確率を表示（1号艇のバッジ下に追加情報として）
   if (Object.keys(simDeMe).length > 0) {
     const demeStr = Object.entries(simDeMe).map(([k,v]) => `${k}:${v}%`).join(' ');
     document.getElementById('kr-maks-1').title = `出目確率: ${demeStr}`;
@@ -1183,13 +1204,19 @@ function applyKimariStats() {
   if (!kimariStats) return;
   const period = document.getElementById('kimari-period').value;
   const pd = kimariStats[period] || kimariStats['直近6ヶ月'] || kimariStats['直近1年'] || {};
-  document.getElementById('kr-nige-1').textContent = `逃${(pd.nige1 || 0).toFixed(1)}%`;
-  document.getElementById('kr-mak-1').textContent  = `捲${(pd.makur || 0).toFixed(1)}%`;
-  document.getElementById('kr-maks-1').textContent = `捲差${(pd.makurS || 0).toFixed(1)}%`;
+
+  document.getElementById('kr-nige-1').textContent  = `逃${(pd.nige1 || 0).toFixed(1)}%`;
+  document.getElementById('kr-mak-1').textContent   = `捲${(pd.makur_passive ?? pd.makur ?? 0).toFixed(1)}%`;
+  document.getElementById('kr-maks-1').textContent  = `捲差${(pd.makurS_passive ?? pd.makurS ?? 0).toFixed(1)}%`;
+
   for (let i = 2; i <= 6; i++) {
-    document.getElementById(`kr-nige-${i}`).textContent = '逃-';
-    document.getElementById(`kr-mak-${i}`).textContent  = '捲-';
-    document.getElementById(`kr-maks-${i}`).textContent = '捲差-';
+    const idx = i - 2;
+    const mak  = (pd.maki_active  || [])[idx] ?? 0;
+    const maks = (pd.makis_active || [])[idx] ?? 0;
+    const sas  = (pd.sashi_active || [])[idx] ?? 0;
+    document.getElementById(`kr-nige-${i}`).textContent  = `差${sas.toFixed(1)}%`;
+    document.getElementById(`kr-mak-${i}`).textContent   = `捲${mak.toFixed(1)}%`;
+    document.getElementById(`kr-maks-${i}`).textContent  = `捲差${maks.toFixed(1)}%`;
   }
 }
 
