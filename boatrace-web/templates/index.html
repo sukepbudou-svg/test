@@ -558,6 +558,19 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
 .slit-bar.st-na { background:var(--surface3); }
 .slit-st-val { width:38px; text-align:right; color:var(--text-muted); font-size:11px; flex-shrink:0; }
 .slit-note { font-size:10px; color:var(--text-muted); margin-top:6px; text-align:right; }
+
+/* ===== ODDS ===== */
+.odds-tag {
+  display:inline-block; font-size:11px; font-weight:700;
+  padding:1px 7px; border-radius:10px; margin-left:8px;
+  background:rgba(245,166,35,0.18); color:var(--accent2); border:1px solid rgba(245,166,35,0.3);
+}
+.odds-tag.low  { background:rgba(233,69,96,0.18); color:var(--accent);  border-color:rgba(233,69,96,0.3); }
+.odds-tag.high { background:rgba(90,106,128,0.18); color:var(--text-muted); border-color:var(--border); }
+.odds-table { width:100%; border-collapse:collapse; font-size:11px; margin-top:8px; }
+.odds-table th { color:var(--text-muted); padding:3px 4px; text-align:center; border-bottom:1px solid var(--border); }
+.odds-table td { padding:3px 4px; text-align:center; }
+.odds-table tr:nth-child(even) td { background:rgba(255,255,255,0.02); }
 </style>
 </head>
 <body>
@@ -673,8 +686,8 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
       </div>
 
       <div class="tab-pane" id="tab-odds">
-        <div class="tab-desc">オッズデータをコピー＆ペーストしてください（近日対応予定）</div>
-        <textarea id="paste-odds" rows="7" placeholder="ここにコピペ（近日対応予定）"></textarea>
+        <div class="tab-desc">オッズデータをコピー＆ペーストしてください</div>
+        <textarea id="paste-odds" rows="10" placeholder="ここにコピペ&#10;（1号艇から6号艇まで全部OK）"></textarea>
         <div style="display:flex;gap:8px;margin-top:8px;">
           <button class="btn btn-apply" onclick="parseData('odds')">適用</button>
         </div>
@@ -1192,6 +1205,93 @@ function applyExhibitInfo(data) {
   updateSlit();
 }
 
+// ======== オッズパーサー ========
+// oddsData: { byBoat: {1: {tan2: [1.4,5.9,...], minTri: 6.1}, ...}, triOdds: {'1-2-3': 6.1, ...} }
+let oddsData = null;
+
+function parseOdds(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const result = { byBoat: {}, triOdds: {} };
+
+  let currentBoat = null;
+  let dataLines = [];
+
+  const flush = () => {
+    if (!currentBoat || dataLines.length === 0) return;
+    // 2連単オッズ行を探す
+    const tan2Line = dataLines.find(l => l.startsWith('2単'));
+    let tan2 = [];
+    if (tan2Line) {
+      tan2 = tan2Line.split('\t').map(v => parseFloat(v.replace('2単',''))).filter(v => !isNaN(v));
+    }
+    // 列ヘッダーから2着コース順を取得（最初のデータ行）
+    const firstData = dataLines.find(l => !l.startsWith('合成') && !l.startsWith('2単') && /^\d/.test(l));
+    let cols = []; // 2着コース順
+    if (firstData) {
+      const parts = firstData.split('\t');
+      // 最初の行: [2着A] [3着] [odds] [2着B] [3着] [odds] ...
+      for (let i = 0; i < parts.length; i += 3) {
+        const v = parseInt(parts[i]);
+        if (!isNaN(v)) cols.push(v);
+      }
+    }
+    // 3連単オッズを収集
+    let minTri = Infinity;
+    const dataRows = dataLines.filter(l => !l.startsWith('合成') && !l.startsWith('2単') && /^\d/.test(l));
+    dataRows.forEach((line, rowIdx) => {
+      const parts = line.split('\t');
+      let ci = 0;
+      cols.forEach((col2, colIdx) => {
+        let third, odds;
+        if (rowIdx === 0) {
+          // 最初の行は [2着] [3着] [odds] の3列構成
+          third = parseInt(parts[ci + 1]);
+          odds  = parseFloat(parts[ci + 2]);
+          ci += 3;
+        } else {
+          // 残りは [3着] [odds] の2列構成
+          third = parseInt(parts[colIdx * 2]);
+          odds  = parseFloat(parts[colIdx * 2 + 1]);
+        }
+        if (!isNaN(third) && !isNaN(odds)) {
+          const key = `${currentBoat}-${col2}-${third}`;
+          result.triOdds[key] = odds;
+          if (odds < minTri) minTri = odds;
+        }
+      });
+    });
+    result.byBoat[currentBoat] = {
+      tan2,
+      cols,
+      minTri: minTri === Infinity ? null : minTri
+    };
+    dataLines = [];
+  };
+
+  for (const line of lines) {
+    // 艇番ヘッダー検出: "1\t三角哲男" など（数字+タブ+文字）
+    const headerMatch = line.match(/^([1-6])\t[　-鿿\w]/);
+    if (headerMatch) {
+      flush();
+      currentBoat = parseInt(headerMatch[1]);
+      continue;
+    }
+    if (currentBoat) dataLines.push(line);
+  }
+  flush();
+  return result;
+}
+
+function applyOdds() {
+  if (!oddsData) return;
+  // 予想結果にオッズを付与するため oddsData をグローバルに保持するだけ
+}
+
+function getTriOdds(combo) {
+  if (!oddsData) return null;
+  return oddsData.triOdds[combo] || null;
+}
+
 // ======== Main Dispatcher ========
 function parseData(name) {
   const statusEl = document.getElementById(`status-${name}`);
@@ -1243,8 +1343,15 @@ function parseData(name) {
       statusEl.textContent = '× 解析失敗: データ形式を確認してください';
     }
   } else if (name === 'odds') {
-    statusEl.style.color = 'var(--text-muted)';
-    statusEl.textContent = '近日対応予定です';
+    const text = document.getElementById('paste-odds').value;
+    oddsData = parseOdds(text);
+    const boatCount = Object.keys(oddsData.byBoat).length;
+    if (boatCount > 0) {
+      statusEl.textContent = `✓ オッズを取得しました（${boatCount}艇分）`;
+    } else {
+      statusEl.style.color = 'var(--accent)';
+      statusEl.textContent = '× 解析失敗: データ形式を確認してください';
+    }
   }
 }
 
@@ -1357,10 +1464,31 @@ function renderResult(data) {
   let html = '';
   for (const p of data.predictions) {
     const cls = typeClass[p.type] || 'pred-honmei';
+    const triOdds = getTriOdds(p.combo);
+    let oddsHtml = '';
+    if (triOdds !== null) {
+      const oddsClass = triOdds < 20 ? 'low' : triOdds < 100 ? '' : 'high';
+      oddsHtml = `<span class="odds-tag ${oddsClass}">${triOdds.toFixed(1)}倍</span>`;
+    }
     html += `<div class="pred-item ${cls}">
       <span class="pred-label">${p.type}</span>
-      <span class="pred-combo">${p.combo}</span>
+      <span class="pred-combo">${p.combo}</span>${oddsHtml}
     </div>`;
+  }
+  // 2連単オッズ一覧
+  if (oddsData && Object.keys(oddsData.byBoat).length > 0) {
+    html += `<div class="divider"></div><div class="score-title" style="margin-bottom:4px;">2連単オッズ（1着→2着）</div>
+    <table class="odds-table"><tr><th>1着</th><th>2着</th><th>オッズ</th></tr>`;
+    for (const [boat, bd] of Object.entries(oddsData.byBoat)) {
+      bd.cols.forEach((col2, i) => {
+        const o = bd.tan2[i];
+        if (o) {
+          const cls = o < 10 ? 'style="color:var(--accent);font-weight:700"' : o > 100 ? 'style="color:var(--text-muted)"' : '';
+          html += `<tr><td>${boat}号艇</td><td>${col2}号艇</td><td ${cls}>${o.toFixed(1)}</td></tr>`;
+        }
+      });
+    }
+    html += `</table>`;
   }
   if (data.chaos) {
     const c = data.chaos;
@@ -1426,7 +1554,7 @@ async function saveRecord() {
 
 // ======== Clear ========
 function allClear() {
-  avgStStats = null; playerStats = null; kimariStats = null; motorStats = null;
+  avgStStats = null; playerStats = null; kimariStats = null; motorStats = null; oddsData = null;
   lastPredictions = [];
   document.getElementById('btn-save').style.display = 'none';
   document.getElementById('status-save').textContent = '';
