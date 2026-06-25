@@ -1286,7 +1286,7 @@ function parseOdds(text) {
 
   for (const line of lines) {
     // 艇番ヘッダー検出: "1\t三角哲男" など（数字+タブ+文字）
-    const headerMatch = line.match(/^([1-6])\t[　-鿿\w]/);
+    const headerMatch = line.match(/^([1-6])\t[぀-鿿]/);  // 艇番+タブ+ひらがな/カタカナ/漢字
     if (headerMatch) {
       flush();
       currentBoat = parseInt(headerMatch[1]);
