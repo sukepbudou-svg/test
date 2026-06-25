@@ -1140,24 +1140,22 @@ function parseKimariStats(text) {
     // 値行
     if (expectValues && line.includes('%')) {
       const vals = line.split('\t').map(s => parseFloat(s.replace('%', '')));
-      // expectValues例: ['makur', 'maki'] → vals[0]=1号艇受動, vals[1-5]=2-6号艇能動
-      expectValues.forEach((key, i) => {
-        if (!key || isNaN(vals[i])) return;
-        // 単一値キー（逃げ/逃し）
-        if (['nige1','nige_oth','sasar'].includes(key)) {
-          periodData[curPeriod][key] = vals[i];
+      // vals[0]=1号艇受動, vals[1-5]=2-6号艇能動
+      // expectValues例: ['makur', 'maki'] — passiveKey=expectValues[0], activeKey=expectValues[1]
+      const passiveKey = expectValues[0];
+      const activeKey  = expectValues[1] || null;
+      // 受動値（vals[0]）
+      if (passiveKey) {
+        if (['nige1','nige_oth','sasar'].includes(passiveKey)) {
+          if (!isNaN(vals[0])) periodData[curPeriod][passiveKey] = vals[0];
         } else {
-          // 能動側（差し/捲り/捲り差し）は boats 2-6 の配列として保存
-          // expectValuesの2番目以降が能動キー
-          // i=0 が受動(1号艇), i=1〜5 が2〜6号艇の能動値
-          if (i === 0) {
-            periodData[curPeriod][key + '_passive'] = vals[0]; // 1号艇受動
-          } else {
-            if (!periodData[curPeriod][key + '_active']) periodData[curPeriod][key + '_active'] = [0,0,0,0,0];
-            periodData[curPeriod][key + '_active'][i - 1] = vals[i]; // boats 2-6 (index 0-4)
-          }
+          if (!isNaN(vals[0])) periodData[curPeriod][passiveKey + '_passive'] = vals[0];
         }
-      });
+      }
+      // 能動値（vals[1-5]）= 2〜6号艇
+      if (activeKey && !['nige1','nige_oth','sasar'].includes(activeKey)) {
+        periodData[curPeriod][activeKey + '_active'] = [1,2,3,4,5].map(j => isNaN(vals[j]) ? 0 : vals[j]);
+      }
       expectValues = null;
       continue;
     }
