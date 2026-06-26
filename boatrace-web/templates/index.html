@@ -1740,21 +1740,7 @@ function renderResult(data) {
     }
   }
 
-  // 2連単オッズ一覧
-  if (hasOdds) {
-    html += `<div class="divider"></div><div class="score-title" style="margin-bottom:4px;">2連単オッズ（1着→2着）</div>
-    <table class="odds-table"><tr><th>1着</th><th>2着</th><th>オッズ</th></tr>`;
-    for (const [boat, bd] of Object.entries(oddsData.byBoat)) {
-      bd.cols.forEach((col2, i) => {
-        const o = bd.tan2[i];
-        if (o) {
-          const sc = o < 10 ? 'style="color:var(--accent);font-weight:700"' : o > 100 ? 'style="color:var(--text-muted)"' : '';
-          html += `<tr><td>${boat}号艇</td><td>${col2}号艇</td><td ${sc}>${o.toFixed(1)}</td></tr>`;
-        }
-      });
-    }
-    html += `</table>`;
-  }
+  // 荒れ度（万舟予想の直下）
   if (data.chaos) {
     const c = data.chaos;
     const pct = Math.round(c.score / 10 * 100);
@@ -1769,6 +1755,22 @@ function renderResult(data) {
       </div>
       <div class="chaos-reasons">${reasons}</div>
     </div>`;
+  }
+
+  // 2連単オッズ一覧
+  if (hasOdds) {
+    html += `<div class="divider"></div><div class="score-title" style="margin-bottom:4px;">2連単オッズ（1着→2着）</div>
+    <table class="odds-table"><tr><th>1着</th><th>2着</th><th>オッズ</th></tr>`;
+    for (const [boat, bd] of Object.entries(oddsData.byBoat)) {
+      bd.cols.forEach((col2, i) => {
+        const o = bd.tan2[i];
+        if (o) {
+          const sc = o < 10 ? 'style="color:var(--accent);font-weight:700"' : o > 100 ? 'style="color:var(--text-muted)"' : '';
+          html += `<tr><td>${boat}号艇</td><td>${col2}号艇</td><td ${sc}>${o.toFixed(1)}</td></tr>`;
+        }
+      });
+    }
+    html += `</table>`;
   }
 
   if (data.score_order && data.score_order.length > 0) {
