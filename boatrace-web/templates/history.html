@@ -467,7 +467,7 @@ function renderPatternAnalysis() {
   withResult.forEach(r => {
     if (!r.predictions) return;
     const preds = typeof r.predictions === 'string' ? JSON.parse(r.predictions) : r.predictions;
-    const hitCombo = r.result_1st && r.result_2nd ? r.result_1st + '-' + r.result_2nd : null;
+    const hitCombo = r.result_1st && r.result_2nd && r.result_3rd ? r.result_1st + '-' + r.result_2nd + '-' + r.result_3rd : null;
     preds.forEach((p, idx) => {
       const t = p.type || typeByIndex[idx] || '';
       if (stats[t] !== undefined) {
