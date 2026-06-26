@@ -344,7 +344,7 @@ function renderRecords() {
     return `<tr>
       <td>${r.race_date}</td>
       <td>${r.venue}</td>
-      <td>${r.race_no}R</td>
+      <td>${r.race_no}R${r.nige_rate != null ? `<br><span style="font-size:9px;color:#aaa;">逃${r.nige_rate.toFixed(1)}%</span>` : ''}</td>
       <td><div class="pred-list">${predHtml}</div></td>
       <td>${resultStr}</td>
       <td>${hitBadge}</td>

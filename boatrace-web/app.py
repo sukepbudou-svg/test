@@ -29,10 +29,17 @@ def init_db():
             payout INTEGER,
             purchase INTEGER,
             is_hit INTEGER DEFAULT 0,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            nige_rate REAL
         )
     ''')
     conn.commit()
+    # 既存DBへのマイグレーション
+    try:
+        conn.execute('ALTER TABLE records ADD COLUMN nige_rate REAL')
+        conn.commit()
+    except Exception:
+        pass
     conn.close()
 
 init_db()
@@ -335,14 +342,15 @@ def save_record():
     data = request.get_json()
     conn = get_db()
     conn.execute('''
-        INSERT INTO records (race_date, venue, race_no, predictions, created_at)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO records (race_date, venue, race_no, predictions, created_at, nige_rate)
+        VALUES (?, ?, ?, ?, ?, ?)
     ''', (
         data.get('race_date', ''),
         data.get('venue', ''),
         data.get('race_no', 0),
         json.dumps(data.get('predictions', []), ensure_ascii=False),
-        datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        data.get('nige_rate')
     ))
     conn.commit()
     record_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]

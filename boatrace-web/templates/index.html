@@ -1528,6 +1528,8 @@ async function runPredict() {
   document.getElementById('status-save').textContent = '';
   const displayed = renderResult(data);
   lastPredictions = displayed;
+  const nigeEl = document.getElementById('nige-rate-value');
+  lastNigeRate = nigeEl ? parseFloat(nigeEl.textContent) || null : null;
   document.getElementById('btn-save').style.display = lastPredictions.length > 0 ? 'block' : 'none';
 }
 
@@ -1788,6 +1790,7 @@ function renderResult(data) {
 
 // ======== Save Record ========
 let lastPredictions = [];
+let lastNigeRate = null;
 
 async function saveRecord() {
   const venue   = document.getElementById('venue').value;
@@ -1802,7 +1805,7 @@ async function saveRecord() {
   const resp = await fetch('/save_record', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ race_date, venue, race_no: parseInt(race_no), predictions: lastPredictions })
+    body: JSON.stringify({ race_date, venue, race_no: parseInt(race_no), predictions: lastPredictions, nige_rate: lastNigeRate })
   });
   const data = await resp.json();
   if (data.success) {
