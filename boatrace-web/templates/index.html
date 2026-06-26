@@ -1516,7 +1516,7 @@ async function runPredict() {
   const resp = await fetch('/predict', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ boats, kimari: kimariPayload, venue, wind })
+    body: JSON.stringify({ boats, kimari: kimariPayload, venue, wind, nige_rate: lastNigeRate })
   });
   const data = await resp.json();
   document.getElementById('status-save').textContent = '';

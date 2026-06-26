@@ -142,7 +142,7 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
-def predict(boats, kimari=None, venue=None, wind=None):
+def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None):
     # 会場プロファイル取得
     vp = VENUE_PROFILES.get(venue, {"in_rate": 0.0, "upset": 0.5, "wind": 0.5})
     wind_bonus = WIND_UPSET_BONUS.get(wind, 0.0)
@@ -257,13 +257,22 @@ def predict(boats, kimari=None, venue=None, wind=None):
         'predictions': results,
         'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2)} for c in candidates[:60]],
         'score_order': [{'course': s['course'], 'boat_number': s['boat']['boat_number'], 'score': round(s['score'], 2)} for s in scores],
-        'chaos': calc_chaos(scores, boats, vp, wind_effect)
+        'chaos': calc_chaos(scores, boats, vp, wind_effect, nige_rate)
     }
 
 
-def calc_chaos(scores, boats, vp, wind_effect):
+def calc_chaos(scores, boats, vp, wind_effect, nige_rate=None):
     reasons = []
     chaos = 0.0
+
+    # イン逃げ率
+    if nige_rate is not None:
+        if nige_rate < 40:
+            chaos += 3.0
+            reasons.append(f"イン逃げ率が極めて低い({nige_rate:.1f}%)")
+        elif nige_rate < 50:
+            chaos += 1.5
+            reasons.append(f"イン逃げ率が低い({nige_rate:.1f}%)")
 
     # スコア差：1位と2位の差が小さいほど荒れやすい
     if len(scores) >= 2:
@@ -335,7 +344,8 @@ def predict_route():
     kimari = data.get('kimari', None)
     venue = data.get('venue', None)
     wind = data.get('wind', None)
-    result = predict(boats, kimari, venue=venue, wind=wind)
+    nige_rate = data.get('nige_rate', None)
+    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate)
     return jsonify(result)
 
 
