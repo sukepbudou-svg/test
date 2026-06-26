@@ -620,7 +620,8 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
     <div class="card">
       <h2>データ貼り付け</h2>
       <div class="tab-buttons">
-        <button class="tab-btn active" onclick="switchTab('avg-st',this)">平均ST</button>
+        <button class="tab-btn active" onclick="switchTab('bulk',this)">一括貼り付け</button>
+        <button class="tab-btn" onclick="switchTab('avg-st',this)">平均ST</button>
         <button class="tab-btn" onclick="switchTab('player',this)">選手成績</button>
         <button class="tab-btn" onclick="switchTab('kimari',this)">決まり手</button>
         <button class="tab-btn" onclick="switchTab('motor',this)">モーター</button>
@@ -629,7 +630,38 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
         <button class="tab-btn" onclick="allClear()" style="margin-left:auto;color:var(--accent);border-color:var(--accent);">オールクリア</button>
       </div>
 
-      <div class="tab-pane active" id="tab-avg-st">
+      <div class="tab-pane active" id="tab-bulk">
+        <div class="tab-desc">ボートレース日和の「枠別情報」ページ全体をそのままコピー＆ペーストしてください。平均ST・選手成績・決まり手を自動で抜き出して適用します。</div>
+        <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+          <select class="period-select" id="bulk-st-period">
+            <option value="今期">平均ST: 今期</option>
+            <option value="直近6ヶ月">平均ST: 直近6ヶ月</option>
+            <option value="直近3ヶ月">平均ST: 直近3ヶ月</option>
+            <option value="直近1ヶ月">平均ST: 直近1ヶ月</option>
+            <option value="当地">平均ST: 当地</option>
+            <option value="一般戦">平均ST: 一般戦</option>
+          </select>
+          <select class="period-select" id="bulk-player-period">
+            <option value="今期">選手成績: 今期</option>
+            <option value="直近6ヶ月">選手成績: 直近6ヶ月</option>
+            <option value="直近3ヶ月">選手成績: 直近3ヶ月</option>
+            <option value="直近1ヶ月">選手成績: 直近1ヶ月</option>
+            <option value="当地">選手成績: 当地</option>
+            <option value="一般戦">選手成績: 一般戦</option>
+          </select>
+          <select class="period-select" id="bulk-kimari-period">
+            <option value="直近6ヶ月">決まり手: 直近6ヶ月</option>
+            <option value="直近1年">決まり手: 直近1年</option>
+          </select>
+        </div>
+        <textarea id="paste-bulk" rows="12" placeholder="ここにコピペ（枠別情報ページ全体をそのまま貼り付けてOKです）"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-apply" onclick="parseBulk()">一括適用</button>
+        </div>
+        <div class="status-msg" id="status-bulk"></div>
+      </div>
+
+      <div class="tab-pane" id="tab-avg-st">
         <div class="tab-desc">ボートレース日和の「平均ST」表をそのままコピー＆ペーストしてください</div>
         <select class="period-select" id="st-period" onchange="applyAvgST()">
           <option value="今期">今期</option>
@@ -1435,6 +1467,43 @@ function applyOdds() {
 function getTriOdds(combo) {
   if (!oddsData) return null;
   return oddsData.triOdds[combo] || null;
+}
+
+// ======== 一括貼り付け ========
+function parseBulk() {
+  var text = document.getElementById('paste-bulk').value;
+  var statusEl = document.getElementById('status-bulk');
+  var results = [];
+
+  // 平均ST
+  var stPeriod = document.getElementById('bulk-st-period').value;
+  avgStStats = parseAvgST(text);
+  if (avgStStats && avgStStats[stPeriod]) {
+    document.getElementById('st-period').value = stPeriod;
+    applyAvgST();
+    results.push('平均ST(' + stPeriod + ')');
+  }
+
+  // 選手成績
+  var playerPeriod = document.getElementById('bulk-player-period').value;
+  playerStats = parsePlayerStats(text);
+  if (playerStats && Object.keys(playerStats.win1).length > 0) {
+    document.getElementById('player-period').value = playerPeriod;
+    applyPlayerStats();
+    results.push('選手成績(' + playerPeriod + ')');
+  }
+
+  // 決まり手
+  var kimariPeriod = document.getElementById('bulk-kimari-period').value;
+  kimariStats = parseKimariStats(text);
+  document.getElementById('kimari-period').value = kimariPeriod;
+  applyKimariStats();
+  if (kimariStats) results.push('決まり手(' + kimariPeriod + ')');
+
+  statusEl.style.color = results.length > 0 ? 'var(--green)' : 'var(--accent)';
+  statusEl.textContent = results.length > 0
+    ? '✓ 適用済み: ' + results.join(' / ')
+    : '× 解析失敗: データ形式を確認してください';
 }
 
 // ======== Main Dispatcher ========
