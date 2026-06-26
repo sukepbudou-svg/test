@@ -170,6 +170,30 @@ h1 {
 .bar-fill.hit-bar { background: linear-gradient(90deg,var(--green),#00a854); }
 .bar-fill.profit-bar { background: linear-gradient(90deg,var(--accent3),#0099bb); }
 .bar-val { font-size: 10px; font-weight: 700; color: #000; white-space: nowrap; }
+.bar-label-btn { cursor: pointer; text-decoration: underline dotted; color: var(--accent3); }
+.bar-label-btn:hover { color: #fff; }
+
+/* 会場別詳細パネル */
+#venue-detail-panel {
+  display: none;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 12px 16px;
+  padding: 16px;
+}
+.vd-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.vd-title { font-size: 16px; font-weight: bold; color: var(--accent3); }
+.vd-close { background: none; border: 1px solid var(--border); color: var(--text-muted); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+.vd-close:hover { color: #fff; }
+.vd-stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.vd-stat-box { background: var(--surface3); border-radius: 8px; padding: 10px 16px; text-align: center; flex: 1; min-width: 80px; }
+.vd-stat-label { font-size: 10px; color: var(--text-muted); margin-bottom: 4px; }
+.vd-stat-value { font-size: 18px; font-weight: bold; }
+.vd-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.vd-table th { background: var(--surface3); color: var(--text-muted); padding: 5px 6px; text-align: center; white-space: nowrap; }
+.vd-table td { padding: 5px 6px; border-bottom: 1px solid var(--border); text-align: center; white-space: nowrap; }
+.vd-table tr:last-child td { border-bottom: none; }
 </style>
 </head>
 <body>
@@ -211,6 +235,19 @@ h1 {
       <div class="chart-title">会場別 的中数</div>
       <div class="bar-chart" id="venue-chart"></div>
     </div>
+  </div>
+
+  <!-- 会場別詳細パネル -->
+  <div id="venue-detail-panel">
+    <div class="vd-header">
+      <div class="vd-title" id="vd-title"></div>
+      <button class="vd-close" onclick="closeVenueDetail()">✕ 閉じる</button>
+    </div>
+    <div class="vd-stats" id="vd-stats"></div>
+    <div style="overflow-x:auto;"><table class="vd-table" id="vd-table">
+      <thead><tr><th>日付</th><th>R</th><th>逃げ率</th><th>予想</th><th>結果</th><th>的中</th><th>払戻</th><th>収支</th></tr></thead>
+      <tbody id="vd-tbody"></tbody>
+    </table></div>
   </div>
 
   <!-- フィルター -->
@@ -396,13 +433,81 @@ function renderVenueChart() {
 
   document.getElementById('venue-chart').innerHTML = sorted.map(([venue, v]) => `
     <div class="bar-row">
-      <div class="bar-label">${venue}</div>
+      <div class="bar-label"><span class="bar-label-btn" onclick="openVenueDetail('${venue}')">${venue}</span></div>
       <div class="bar-track">
         <div class="bar-fill hit-bar" style="width:${v.hit/maxHit*100}%">
           <span class="bar-val">${v.hit}/${v.total}</span>
         </div>
       </div>
     </div>`).join('');
+}
+
+// ======== 会場別詳細パネル ========
+function openVenueDetail(venue) {
+  const records = allRecords.filter(r => r.venue === venue);
+  const withResult = records.filter(r => r.result_1st);
+  const hits = withResult.filter(r => r.is_hit);
+  const hitRate = withResult.length > 0 ? (hits.length / withResult.length * 100).toFixed(1) : '-';
+  const totalProfit = withResult.reduce((sum, r) => {
+    const purchase = r.purchase || 100;
+    return sum + (r.is_hit ? (r.payout || 0) - purchase : -purchase);
+  }, 0);
+  const totalPurchase = withResult.reduce((sum, r) => sum + (r.purchase || 100), 0);
+  const roi = totalPurchase > 0 ? (((totalPurchase + totalProfit) / totalPurchase) * 100).toFixed(1) : '-';
+
+  document.getElementById('vd-title').textContent = `${venue} 詳細`;
+  document.getElementById('vd-stats').innerHTML = `
+    <div class="vd-stat-box">
+      <div class="vd-stat-label">レース数</div>
+      <div class="vd-stat-value" style="color:var(--text);">${records.length}</div>
+    </div>
+    <div class="vd-stat-box">
+      <div class="vd-stat-label">的中率</div>
+      <div class="vd-stat-value" style="color:var(--green);">${hitRate}%</div>
+    </div>
+    <div class="vd-stat-box">
+      <div class="vd-stat-label">的中数</div>
+      <div class="vd-stat-value" style="color:var(--green);">${hits.length}/${withResult.length}</div>
+    </div>
+    <div class="vd-stat-box">
+      <div class="vd-stat-label">収支合計</div>
+      <div class="vd-stat-value" style="color:${totalProfit >= 0 ? 'var(--green)' : 'var(--accent)'};">${totalProfit >= 0 ? '+' : ''}${totalProfit.toLocaleString()}円</div>
+    </div>
+    <div class="vd-stat-box">
+      <div class="vd-stat-label">回収率</div>
+      <div class="vd-stat-value" style="color:${roi >= 100 ? 'var(--green)' : 'var(--accent)'};">${roi}%</div>
+    </div>
+  `;
+
+  const tbody = document.getElementById('vd-tbody');
+  tbody.innerHTML = records.slice().reverse().map(r => {
+    const preds = r.predictions || [];
+    const predHtml = preds.map(p => `<span style="font-size:10px;background:var(--surface3);padding:1px 5px;border-radius:3px;">${p.combo}</span>`).join(' ');
+    const resultStr = r.result_1st ? `${r.result_1st}-${r.result_2nd}-${r.result_3rd}` : '-';
+    const hitBadge = r.is_hit ? '<span style="color:var(--green);font-weight:bold;">✓</span>' : (r.result_1st ? '<span style="color:var(--accent);">✗</span>' : '-');
+    const purchase = r.purchase || 100;
+    const profit = r.result_1st ? (r.is_hit ? `<span style="color:var(--green);">+${((r.payout||0)-purchase).toLocaleString()}</span>` : `<span style="color:var(--accent);">-${purchase.toLocaleString()}</span>`) : '-';
+    const payout = r.is_hit && r.payout ? `${r.payout.toLocaleString()}円` : (r.result_1st && r.payout ? `<span style="color:var(--text-muted);font-size:10px;">(${r.payout.toLocaleString()})</span>` : '-');
+    const nige = r.nige_rate != null ? `${r.nige_rate.toFixed(1)}%` : '-';
+    return `<tr>
+      <td>${r.race_date}</td>
+      <td>${r.race_no}R</td>
+      <td>${nige}</td>
+      <td>${predHtml}</td>
+      <td>${resultStr}</td>
+      <td>${hitBadge}</td>
+      <td>${payout}</td>
+      <td>${profit}</td>
+    </tr>`;
+  }).join('');
+
+  const panel = document.getElementById('venue-detail-panel');
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeVenueDetail() {
+  document.getElementById('venue-detail-panel').style.display = 'none';
 }
 
 // ======== モーダル ========
