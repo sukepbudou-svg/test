@@ -743,6 +743,34 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
       </div>
     </div>
 
+    <!-- ランキング2列 -->
+    <div style="display:flex;gap:12px;margin-top:12px;">
+      <div class="card" style="flex:1;">
+        <h2>🏆 1コース勝率</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr>
+            <th style="text-align:center;padding:3px 4px;color:var(--text-muted);font-weight:normal;border-bottom:1px solid var(--border);width:1.8em;">順位</th>
+            <th style="text-align:left;padding:3px 4px;color:var(--text-muted);font-weight:normal;border-bottom:1px solid var(--border);">会場</th>
+            <th style="text-align:right;padding:3px 4px;color:var(--text-muted);font-weight:normal;border-bottom:1px solid var(--border);">勝率</th>
+          </tr></thead>
+          <tbody id="venue-rank-tbody"></tbody>
+        </table>
+      </div>
+      <div class="card" style="flex:1;">
+        <h2>🌊 荒れやすさ</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr>
+            <th style="text-align:center;padding:3px 4px;color:var(--text-muted);font-weight:normal;border-bottom:1px solid var(--border);width:1.8em;">順位</th>
+            <th style="text-align:left;padding:3px 4px;color:var(--text-muted);font-weight:normal;border-bottom:1px solid var(--border);">会場</th>
+            <th style="text-align:right;padding:3px 4px;color:var(--text-muted);font-weight:normal;border-bottom:1px solid var(--border);">指数</th>
+          </tr></thead>
+          <tbody id="venue-upset-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /left-panel -->
+
   <!-- メモ -->
   <div class="card" style="margin-top:12px;">
     <h2>📝 メモ</h2>
@@ -756,22 +784,6 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
       </div>
     </div>
   </div>
-
-  <div class="card" style="margin-top:12px;">
-    <h2>🏆 1コース勝率ランキング</h2>
-    <table style="width:100%;border-collapse:collapse;font-size:13px;">
-      <thead>
-        <tr>
-          <th style="text-align:center;padding:4px 6px;color:var(--text-muted);font-weight:normal;border-bottom:1px solid var(--border);width:2em;">順位</th>
-          <th style="text-align:left;padding:4px 6px;color:var(--text-muted);font-weight:normal;border-bottom:1px solid var(--border);">会場</th>
-          <th style="text-align:right;padding:4px 6px;color:var(--text-muted);font-weight:normal;border-bottom:1px solid var(--border);">1コース勝率</th>
-        </tr>
-      </thead>
-      <tbody id="venue-rank-tbody"></tbody>
-    </table>
-  </div>
-
-  </div><!-- /left-panel -->
 
   <div class="right-panel">
     <!-- 会場情報 -->
@@ -2010,6 +2022,38 @@ function clearMemo() {
     html += '<div style="width:80px;height:8px;background:var(--surface3);border-radius:4px;overflow:hidden;">';
     html += '<div style="width:' + barWidth + '%;height:100%;background:' + barColor + ';border-radius:4px;"></div></div>';
     html += '<span style="min-width:40px;text-align:right;">' + rate.toFixed(1) + '%</span>';
+    html += '</div></td></tr>';
+  }
+  tbody.innerHTML = html;
+})();
+
+// ======== 荒れやすさランキング ========
+(function() {
+  var data = [
+    ["桐生",0.3],["戸田",0.5],["江戸川",1.5],["平和島",0.8],["多摩川",0.3],
+    ["浜名湖",0.8],["蒲郡",0.3],["常滑",0.2],["津",0.4],["三国",1.0],
+    ["びわこ",0.6],["住之江",0.1],["尼崎",0.2],["鳴門",0.5],["丸亀",0.5],
+    ["児島",0.4],["宮島",0.6],["徳山",0.2],["下関",0.4],["若松",0.6],
+    ["芦屋",0.2],["福岡",0.4],["唐津",0.5],["大村",0.0]
+  ];
+  data.sort(function(a, b) { return b[1] - a[1]; });
+  var tbody = document.getElementById('venue-upset-tbody');
+  if (!tbody) return;
+  var html = '';
+  for (var i = 0; i < data.length; i++) {
+    var rank = i + 1;
+    var val = data[i][1];
+    var rankColor = rank === 1 ? '#ffd700' : rank === 2 ? '#c0c0c0' : rank === 3 ? '#cd7f32' : 'var(--text-muted)';
+    var barWidth = Math.round((val / 1.5) * 100);
+    var barColor = val >= 1.0 ? '#e05050' : val >= 0.6 ? '#e08830' : val >= 0.3 ? '#50a0e0' : '#888888';
+    html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">';
+    html += '<td style="text-align:center;padding:5px 6px;color:' + rankColor + ';font-weight:bold;">' + rank + '</td>';
+    html += '<td style="padding:5px 6px;">' + data[i][0] + '</td>';
+    html += '<td style="padding:5px 6px;text-align:right;">';
+    html += '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">';
+    html += '<div style="width:60px;height:8px;background:var(--surface3);border-radius:4px;overflow:hidden;">';
+    html += '<div style="width:' + barWidth + '%;height:100%;background:' + barColor + ';border-radius:4px;"></div></div>';
+    html += '<span style="min-width:28px;text-align:right;">' + val.toFixed(1) + '</span>';
     html += '</div></td></tr>';
   }
   tbody.innerHTML = html;
