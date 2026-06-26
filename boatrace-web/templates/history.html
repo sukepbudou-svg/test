@@ -486,7 +486,7 @@ function openVenueDetail(venue) {
   const tbody = document.getElementById('vd-tbody');
   tbody.innerHTML = records.slice().reverse().map(r => {
     const preds = r.predictions || [];
-    const predHtml = preds.map(p => `<span style="font-size:10px;background:var(--surface3);padding:1px 5px;border-radius:3px;">${p.combo}</span>`).join(' ');
+    const predHtml = preds.map(p => '<span class="pred-tag ' + (p.type||'') + '" style="font-size:10px;">' + p.combo + '</span>').join(' ');
     const resultStr = r.result_1st ? `${r.result_1st}-${r.result_2nd}-${r.result_3rd}` : '-';
     const hitBadge = r.is_hit ? '<span style="color:var(--green);font-weight:bold;">✓</span>' : (r.result_1st ? '<span style="color:var(--accent);">✗</span>' : '-');
     const purchase = r.purchase || 100;
