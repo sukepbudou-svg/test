@@ -876,7 +876,6 @@ function buildBoatCards() {
       <div class="boat-inputs">
         <div class="input-row"><label>コース</label><input type="number" id="b${i}_course" value="${i}" min="1" max="6"></div>
         <div class="input-row"><label>展示タイム</label><input type="number" id="b${i}_exhibit_time" step="0.01" placeholder="6.70"></div>
-        <div class="input-row"><label>周回数</label><input type="number" id="b${i}_laps" placeholder="3"></div>
         <div class="input-row"><label>まわり足</label><input type="number" id="b${i}_mawariashi" step="0.01"></div>
         <div class="input-row"><label>チルト</label><input type="number" id="b${i}_tilt" step="0.5" value="0"></div>
         <div class="input-row" style="flex-direction:row;align-items:flex-end;gap:4px;">
@@ -1264,9 +1263,9 @@ function applyMotorStats() {
 
 // ======== 展示情報パーサー ========
 function parseExhibitInfo(text) {
-  const result = { courses:[], exhibit:[], laps:[], mawari:[], st:[], stF:[], weight:[], tilt:[] };
+  const result = { courses:[], exhibit:[], mawari:[], st:[], stF:[], weight:[], tilt:[] };
   const labelMap = {
-    '進入':'courses', '展示':'exhibit', '周回':'laps',
+    '進入':'courses', '展示':'exhibit',
     '周り足':'mawari', 'ST':'st', '体重':'weight', 'チルト':'tilt'
   };
   for (const line of text.split('\n').map(l => l.trim()).filter(l => l.length > 0)) {
@@ -1286,7 +1285,7 @@ function parseExhibitInfo(text) {
         return num;
       });
       result.stF = vals.map(v => v.toUpperCase().startsWith('F'));
-    } else if (key === 'courses' || key === 'weight' || key === 'exhibit' || key === 'laps' || key === 'mawari' || key === 'tilt') {
+    } else if (key === 'courses' || key === 'weight' || key === 'exhibit' || key === 'mawari' || key === 'tilt') {
       result[key] = vals.map(v => {
         const n = parseFloat(v);
         return isNaN(n) ? v : n;
@@ -1312,11 +1311,6 @@ function applyExhibitInfo(data) {
     if (data.exhibit[idx] !== undefined) {
       const el = document.getElementById(`b${boatNo}_exhibit_time`);
       if (el) el.value = data.exhibit[idx];
-    }
-    // 周回
-    if (data.laps[idx] !== undefined) {
-      const el = document.getElementById(`b${boatNo}_laps`);
-      if (el) el.value = data.laps[idx];
     }
     // まわり足
     if (data.mawari[idx] !== undefined) {
