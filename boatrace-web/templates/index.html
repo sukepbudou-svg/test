@@ -1584,34 +1584,51 @@ function updateSlit() {
     return;
   }
 
-  const chipBg  = ['#ccc','#333','#e03000','#0050dd','#ddaa00','#00aa44'];
-  const chipFg  = ['#333','#fff','#fff','#fff','#333','#fff'];
+  const chipBg = ['#cccccc', '#222222', '#e03000', '#0050dd', '#ddaa00', '#00aa44'];
+  const chipFg = ['#333333', '#ffffff', '#ffffff', '#ffffff', '#333333', '#ffffff'];
+  const chipBorder = ['', 'border:1px solid #555;', '', '', '', ''];
 
-  // ST昇順にソート（小さいほど前）
-  const sorted = rows.filter(r => r.st !== null).sort((a, b) => a.st - b.st);
-  const noData = rows.filter(r => r.st === null);
-
-  let chips = sorted.map((r, rank) => {
-    const bg = chipBg[r.boat - 1];
-    const fg = chipFg[r.boat - 1];
-    const label = rank === 0 ? '前' : (rank === sorted.length - 1 && noData.length === 0 ? '後' : '');
-    return `<span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;">${label ? '<span style="font-size:9px;color:var(--text-muted)">'+label+'</span>' : '<span style="font-size:9px;">&nbsp;</span>'}<span style="background:${bg};color:${fg};border-radius:50%;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;font-size:13px;">${r.boat}</span><span style="font-size:9px;color:var(--text-muted);">${r.st.toFixed(3)}</span></span>`;
-  });
-
-  const arrowSep = '<span style="font-size:16px;color:var(--text-muted);align-self:center;margin-top:10px;">→</span>';
-  let rankHtml = chips.join(arrowSep);
-
-  if (noData.length > 0) {
-    const nochips = noData.map(r => {
-      const bg = chipBg[r.boat - 1];
-      const fg = chipFg[r.boat - 1];
-      return `<span style="background:${bg};color:${fg};border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;opacity:0.4;">${r.boat}</span>`;
-    }).join(' ');
-    rankHtml += `<span style="font-size:11px;color:var(--text-muted);margin-left:8px;">/ ST未入力: ${nochips}</span>`;
-  }
-
+  const sorted = rows.filter(function(r) { return r.st !== null; }).sort(function(a, b) { return a.st - b.st; });
+  const noData = rows.filter(function(r) { return r.st === null; });
   const modeLabel = slitMode === 'ex' ? '展示ST' : '平均ST';
-  body.innerHTML = `<div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:4px;justify-content:center;padding:4px 0;">${rankHtml}</div><div style="font-size:10px;color:var(--text-muted);text-align:center;margin-top:4px;">※ ${modeLabel}ベース　左が前・右が後ろ</div>`;
+
+  var html = '<table style="width:100%;border-collapse:collapse;">';
+  for (var i = 0; i < sorted.length; i++) {
+    var r = sorted[i];
+    var rank = i + 1;
+    var bg = chipBg[r.boat - 1];
+    var fg = chipFg[r.boat - 1];
+    var bd = chipBorder[r.boat - 1];
+    var rankColor = rank === 1 ? '#ffd740' : (rank === 2 ? '#aaaaaa' : (rank === 3 ? '#cd7f32' : '#556677'));
+    var rankLabel = rank === 1 ? '1位' : (rank === 2 ? '2位' : (rank === 3 ? '3位' : rank + '位'));
+    html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.06);">';
+    html += '<td style="padding:5px 4px;text-align:center;width:28px;font-size:11px;font-weight:bold;color:' + rankColor + ';">' + rankLabel + '</td>';
+    html += '<td style="padding:5px 6px;text-align:center;width:34px;">';
+    html += '<span style="background:' + bg + ';color:' + fg + ';' + bd + 'border-radius:50%;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;font-size:13px;">' + r.boat + '</span>';
+    html += '</td>';
+    html += '<td style="padding:5px 4px;font-size:11px;color:#aabbcc;">ST ' + r.st.toFixed(3) + '</td>';
+    html += '<td style="padding:5px 4px;font-size:10px;color:#556677;">' + r.course + 'コース</td>';
+    html += '</tr>';
+  }
+  if (noData.length > 0) {
+    for (var j = 0; j < noData.length; j++) {
+      var nr = noData[j];
+      var nbg = chipBg[nr.boat - 1];
+      var nfg = chipFg[nr.boat - 1];
+      var nbd = chipBorder[nr.boat - 1];
+      html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);opacity:0.4;">';
+      html += '<td style="padding:5px 4px;text-align:center;font-size:11px;color:#445566;">-</td>';
+      html += '<td style="padding:5px 6px;text-align:center;">';
+      html += '<span style="background:' + nbg + ';color:' + nfg + ';' + nbd + 'border-radius:50%;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;font-size:13px;">' + nr.boat + '</span>';
+      html += '</td>';
+      html += '<td style="padding:5px 4px;font-size:11px;color:#445566;">ST未入力</td>';
+      html += '<td style="padding:5px 4px;font-size:10px;color:#445566;">' + nr.course + 'コース</td>';
+      html += '</tr>';
+    }
+  }
+  html += '</table>';
+  html += '<div style="font-size:10px;color:#445566;text-align:center;margin-top:6px;">※ ' + modeLabel + 'ベース　上が前・下が後ろ</div>';
+  body.innerHTML = html;
 }
 
 // オッズ帯からタイプを決定
