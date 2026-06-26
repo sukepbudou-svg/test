@@ -461,17 +461,18 @@ function renderPatternAnalysis() {
   const stats = {};
   types.forEach(t => { stats[t] = { hit: 0, total: 0 }; });
 
+  // typeがない場合は順番から推定（本命×2,対抗×3,中穴×1,万舟×2）
+  const typeByIndex = ['本命','本命','対抗','対抗','対抗','中穴','万舟','万舟'];
+
   withResult.forEach(r => {
     if (!r.predictions) return;
     const preds = typeof r.predictions === 'string' ? JSON.parse(r.predictions) : r.predictions;
     const hitCombo = r.result_1st && r.result_2nd ? r.result_1st + '-' + r.result_2nd : null;
-    const hitPred = hitCombo ? preds.find(p => p.combo === hitCombo) : null;
-    const hitType = hitPred ? (hitPred.type || '') : null;
-    preds.forEach(p => {
-      const t = p.type || '';
+    preds.forEach((p, idx) => {
+      const t = p.type || typeByIndex[idx] || '';
       if (stats[t] !== undefined) {
         stats[t].total++;
-        if (hitType && p.combo === (hitCombo) && t === hitType) stats[t].hit++;
+        if (hitCombo && p.combo === hitCombo) stats[t].hit++;
       }
     });
   });
