@@ -173,6 +173,17 @@ h1 {
 .bar-label-btn { cursor: pointer; text-decoration: underline dotted; color: var(--accent3); }
 .bar-label-btn:hover { color: #fff; }
 
+/* 的中パターン・収支グラフ */
+.analysis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.pattern-bars { display: flex; flex-direction: column; gap: 8px; }
+.pattern-row { display: flex; align-items: center; gap: 8px; }
+.pattern-label { font-size: 11px; width: 40px; text-align: right; flex-shrink: 0; }
+.pattern-track { flex: 1; background: var(--surface3); border-radius: 3px; height: 18px; overflow: hidden; position: relative; }
+.pattern-fill { height: 100%; border-radius: 3px; transition: width 0.8s ease; }
+.pattern-val { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font-size: 10px; font-weight: 700; color: var(--text-muted); white-space: nowrap; }
+.profit-line-chart { position: relative; height: 100px; }
+.profit-line-chart svg { width: 100%; height: 100%; }
+
 /* 会場別詳細パネル */
 #venue-detail-panel {
   display: none;
@@ -234,6 +245,23 @@ h1 {
     <div class="chart-card">
       <div class="chart-title">会場別 的中数</div>
       <div class="bar-chart" id="venue-chart"></div>
+    </div>
+  </div>
+
+  <!-- 的中パターン分析・収支グラフ -->
+  <div class="analysis-grid" id="analysis-section" style="display:none;">
+    <div class="chart-card">
+      <div class="chart-title">的中パターン分析</div>
+      <div class="pattern-bars" id="pattern-bars"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">累計収支推移</div>
+      <div class="profit-line-chart" id="profit-chart-wrap">
+        <svg id="profit-svg" viewBox="0 0 300 100" preserveAspectRatio="none"></svg>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:4px;">
+        <span id="profit-oldest"></span><span id="profit-latest"></span>
+      </div>
     </div>
   </div>
 
@@ -334,6 +362,9 @@ async function loadRecords() {
   renderRecords();
   renderSummary();
   renderVenueChart();
+  const hasResult = allRecords.some(r => r.result_1st);
+  document.getElementById('analysis-section').style.display = hasResult ? 'grid' : 'none';
+  if (hasResult) { renderPatternAnalysis(); renderProfitChart(); }
 }
 
 // ======== フィルター ========
@@ -418,6 +449,92 @@ function renderSummary() {
   balEl.textContent = `${balance >= 0 ? '+' : ''}${balance.toLocaleString()}`;
   balEl.style.color = balance >= 0 ? 'var(--green)' : 'var(--accent)';
   document.getElementById('sum-payout-detail').textContent = `払戻: ${totalPayout.toLocaleString()}円`;
+}
+
+// ======== 的中パターン分析 ========
+function renderPatternAnalysis() {
+  const withResult = allRecords.filter(r => r.result_1st);
+  if (withResult.length === 0) return;
+
+  const types = ['本命','対抗','中穴','万舟'];
+  const typeColors = { '本命':'#40c4ff', '対抗':'#00e676', '中穴':'#ffd740', '万舟':'#e94560' };
+  const stats = {};
+  types.forEach(t => { stats[t] = { hit: 0, total: 0 }; });
+
+  withResult.forEach(r => {
+    if (!r.predictions) return;
+    const preds = typeof r.predictions === 'string' ? JSON.parse(r.predictions) : r.predictions;
+    const hitCombo = r.result_1st && r.result_2nd ? r.result_1st + '-' + r.result_2nd : null;
+    const hitPred = hitCombo ? preds.find(p => p.combo === hitCombo) : null;
+    const hitType = hitPred ? (hitPred.type || '') : null;
+    preds.forEach(p => {
+      const t = p.type || '';
+      if (stats[t] !== undefined) {
+        stats[t].total++;
+        if (hitType && p.combo === (hitCombo) && t === hitType) stats[t].hit++;
+      }
+    });
+  });
+
+  const maxTotal = Math.max(...types.map(t => stats[t].total), 1);
+  document.getElementById('pattern-bars').innerHTML = types.map(t => {
+    const s = stats[t];
+    if (s.total === 0) return '';
+    const hitRate = (s.hit / s.total * 100).toFixed(1);
+    const barW = Math.round(s.total / maxTotal * 100);
+    const hitBarW = s.total > 0 ? Math.round(s.hit / s.total * 100) : 0;
+    return `<div class="pattern-row">
+      <div class="pattern-label" style="color:${typeColors[t]};font-weight:bold;">${t}</div>
+      <div style="flex:1;">
+        <div class="pattern-track" style="width:${barW}%;min-width:60px;">
+          <div class="pattern-fill" style="width:${hitBarW}%;background:${typeColors[t]};opacity:0.85;"></div>
+          <div class="pattern-val">${s.hit}/${s.total}（${hitRate}%）</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ======== 収支グラフ ========
+function renderProfitChart() {
+  const withResult = allRecords.filter(r => r.result_1st).slice().sort((a,b) => {
+    if (a.race_date < b.race_date) return -1;
+    if (a.race_date > b.race_date) return 1;
+    return a.id - b.id;
+  });
+  if (withResult.length < 2) return;
+
+  let cumulative = 0;
+  const points = withResult.map(r => {
+    const purchase = r.purchase || 0;
+    const payout = r.is_hit ? (r.payout || 0) : 0;
+    cumulative += payout - purchase;
+    return cumulative;
+  });
+
+  const minV = Math.min(...points, 0);
+  const maxV = Math.max(...points, 0);
+  const range = maxV - minV || 1;
+  const W = 300, H = 100, pad = 6;
+
+  const toX = i => pad + (i / (points.length - 1)) * (W - pad * 2);
+  const toY = v => H - pad - ((v - minV) / range) * (H - pad * 2);
+
+  const polyline = points.map((v,i) => toX(i) + ',' + toY(v)).join(' ');
+  const zeroY = toY(0);
+  const lastX = toX(points.length - 1);
+  const fillPath = 'M ' + pad + ',' + zeroY + ' L ' + points.map((v,i) => toX(i) + ',' + toY(v)).join(' L ') + ' L ' + lastX + ',' + zeroY + ' Z';
+  const lastVal = points[points.length - 1];
+  const lineColor = lastVal >= 0 ? '#00e676' : '#e94560';
+  const fillColor = lastVal >= 0 ? 'rgba(0,230,118,0.15)' : 'rgba(233,69,96,0.15)';
+
+  document.getElementById('profit-svg').innerHTML =
+    '<line x1="' + pad + '" y1="' + zeroY + '" x2="' + (W-pad) + '" y2="' + zeroY + '" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>' +
+    '<path d="' + fillPath + '" fill="' + fillColor + '"/>' +
+    '<polyline points="' + polyline + '" fill="none" stroke="' + lineColor + '" stroke-width="2" stroke-linejoin="round"/>';
+
+  document.getElementById('profit-oldest').textContent = withResult[0].race_date;
+  document.getElementById('profit-latest').textContent = withResult[withResult.length-1].race_date + '  累計: ' + (lastVal >= 0 ? '+' : '') + lastVal.toLocaleString() + '円';
 }
 
 // ======== 会場別グラフ ========
