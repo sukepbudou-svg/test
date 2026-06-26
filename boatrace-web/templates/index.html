@@ -759,6 +759,20 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
     </div>
   </div>
 
+  <div class="card" style="margin-top:12px;">
+    <h2>🏆 1コース勝率ランキング</h2>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr>
+          <th style="text-align:center;padding:4px 6px;color:var(--text-muted);font-weight:normal;border-bottom:1px solid var(--border);width:2em;">順位</th>
+          <th style="text-align:left;padding:4px 6px;color:var(--text-muted);font-weight:normal;border-bottom:1px solid var(--border);">会場</th>
+          <th style="text-align:right;padding:4px 6px;color:var(--text-muted);font-weight:normal;border-bottom:1px solid var(--border);">1コース勝率</th>
+        </tr>
+      </thead>
+      <tbody id="venue-rank-tbody"></tbody>
+    </table>
+  </div>
+
   <div class="right-panel">
     <!-- 会場情報 -->
     <div class="card" id="venue-info-card" style="display:none;">
@@ -1968,6 +1982,38 @@ function clearMemo() {
   localStorage.removeItem(MEMO_KEY);
   document.getElementById('memo-status').textContent = '';
 }
+
+// ======== 1コース勝率ランキング ========
+(function() {
+  var data = [
+    ["桐生",49.9],["戸田",39.6],["江戸川",48.8],["平和島",49.1],["多摩川",54.0],
+    ["浜名湖",55.2],["蒲郡",56.4],["常滑",55.7],["津",58.1],["三国",49.1],
+    ["びわこ",52.5],["住之江",61.8],["尼崎",61.4],["鳴門",47.2],["丸亀",59.1],
+    ["児島",57.8],["宮島",58.1],["徳山",65.0],["下関",64.5],["若松",59.3],
+    ["芦屋",61.8],["福岡",62.0],["唐津",57.9],["大村",59.0]
+  ];
+  data.sort(function(a, b) { return b[1] - a[1]; });
+  var tbody = document.getElementById('venue-rank-tbody');
+  if (!tbody) return;
+  var html = '';
+  for (var i = 0; i < data.length; i++) {
+    var rank = i + 1;
+    var rate = data[i][1];
+    var rankColor = rank === 1 ? '#ffd700' : rank === 2 ? '#c0c0c0' : rank === 3 ? '#cd7f32' : 'var(--text-muted)';
+    var barWidth = Math.round((rate / 65) * 100);
+    var barColor = rate >= 60 ? '#e05050' : rate >= 55 ? '#e08830' : rate >= 50 ? '#50a0e0' : '#888888';
+    html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">';
+    html += '<td style="text-align:center;padding:5px 6px;color:' + rankColor + ';font-weight:bold;">' + rank + '</td>';
+    html += '<td style="padding:5px 6px;">' + data[i][0] + '</td>';
+    html += '<td style="padding:5px 6px;text-align:right;">';
+    html += '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">';
+    html += '<div style="width:80px;height:8px;background:var(--surface3);border-radius:4px;overflow:hidden;">';
+    html += '<div style="width:' + barWidth + '%;height:100%;background:' + barColor + ';border-radius:4px;"></div></div>';
+    html += '<span style="min-width:40px;text-align:right;">' + rate.toFixed(1) + '%</span>';
+    html += '</div></td></tr>';
+  }
+  tbody.innerHTML = html;
+})();
 
 function allClear() {
   avgStStats = null; playerStats = null; kimariStats = null; motorStats = null; oddsData = null;
