@@ -1578,50 +1578,80 @@ function updateSlit() {
     return;
   }
 
-  const chipBg = ['#cccccc', '#222222', '#e03000', '#0050dd', '#ddaa00', '#00aa44'];
-  const chipFg = ['#333333', '#ffffff', '#ffffff', '#ffffff', '#333333', '#ffffff'];
-  const chipBorder = ['', 'border:1px solid #555;', '', '', '', ''];
+  var chipBg = ['#cccccc', '#222222', '#e03000', '#0050dd', '#ddaa00', '#00aa44'];
+  var chipFg = ['#333333', '#ffffff', '#ffffff', '#ffffff', '#333333', '#ffffff'];
+  var chipBd = ['', 'border:1px solid #555;', '', '', '', ''];
 
-  const sorted = rows.filter(function(r) { return r.st !== null; }).sort(function(a, b) { return a.st - b.st; });
-  const noData = rows.filter(function(r) { return r.st === null; });
-  const modeLabel = slitMode === 'ex' ? '展示ST' : '平均ST';
+  var minSt = validSts[0];
+  var maxSt = validSts[0];
+  for (var k = 1; k < validSts.length; k++) {
+    if (validSts[k] < minSt) minSt = validSts[k];
+    if (validSts[k] > maxSt) maxSt = validSts[k];
+  }
+  var range = maxSt - minSt;
+  if (range < 0.001) range = 0.001;
 
-  var html = '<table style="width:100%;border-collapse:collapse;">';
-  for (var i = 0; i < sorted.length; i++) {
-    var r = sorted[i];
-    var rank = i + 1;
+  var modeLabel = slitMode === 'ex' ? '展示ST' : '平均ST';
+
+  // コース順（1〜6）に並べ替え
+  var laneRows = rows.slice().sort(function(a, b) { return a.course - b.course; });
+
+  var html = '<div style="position:relative;padding:18px 8px 8px 8px;">';
+
+  // STARTラベル（右端上部）
+  html += '<div style="position:absolute;right:8px;top:2px;font-size:9px;color:rgba(255,255,255,0.35);letter-spacing:1px;">START</div>';
+
+  for (var i = 0; i < laneRows.length; i++) {
+    var r = laneRows[i];
     var bg = chipBg[r.boat - 1];
     var fg = chipFg[r.boat - 1];
-    var bd = chipBorder[r.boat - 1];
-    var rankColor = rank === 1 ? '#ffd740' : (rank === 2 ? '#aaaaaa' : (rank === 3 ? '#cd7f32' : '#556677'));
-    var rankLabel = rank === 1 ? '1位' : (rank === 2 ? '2位' : (rank === 3 ? '3位' : rank + '位'));
-    html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.06);">';
-    html += '<td style="padding:5px 4px;text-align:center;width:28px;font-size:11px;font-weight:bold;color:' + rankColor + ';">' + rankLabel + '</td>';
-    html += '<td style="padding:5px 6px;text-align:center;width:34px;">';
-    html += '<span style="background:' + bg + ';color:' + fg + ';' + bd + 'border-radius:50%;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;font-size:13px;">' + r.boat + '</span>';
-    html += '</td>';
-    html += '<td style="padding:5px 4px;font-size:11px;color:#aabbcc;">ST ' + r.st.toFixed(3) + '</td>';
-    html += '<td style="padding:5px 4px;font-size:10px;color:#556677;">' + r.course + 'コース</td>';
-    html += '</tr>';
-  }
-  if (noData.length > 0) {
-    for (var j = 0; j < noData.length; j++) {
-      var nr = noData[j];
-      var nbg = chipBg[nr.boat - 1];
-      var nfg = chipFg[nr.boat - 1];
-      var nbd = chipBorder[nr.boat - 1];
-      html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);opacity:0.4;">';
-      html += '<td style="padding:5px 4px;text-align:center;font-size:11px;color:#445566;">-</td>';
-      html += '<td style="padding:5px 6px;text-align:center;">';
-      html += '<span style="background:' + nbg + ';color:' + nfg + ';' + nbd + 'border-radius:50%;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;font-size:13px;">' + nr.boat + '</span>';
-      html += '</td>';
-      html += '<td style="padding:5px 4px;font-size:11px;color:#445566;">ST未入力</td>';
-      html += '<td style="padding:5px 4px;font-size:10px;color:#445566;">' + nr.course + 'コース</td>';
-      html += '</tr>';
+    var bd = chipBd[r.boat - 1];
+
+    html += '<div style="display:flex;align-items:center;height:34px;margin:2px 0;">';
+    // コース番号ラベル
+    html += '<div style="width:24px;font-size:10px;color:#556677;text-align:center;flex-shrink:0;">' + r.course + 'C</div>';
+    // レーントラック
+    html += '<div style="flex:1;position:relative;height:2px;background:rgba(255,255,255,0.08);border-radius:1px;margin:0 4px;">';
+
+    if (r.st !== null) {
+      // STが小さいほど右寄り（スタートラインに近い）
+      var leftPct = 85 - ((r.st - minSt) / range) * 65;
+      if (leftPct < 5) leftPct = 5;
+      if (leftPct > 88) leftPct = 88;
+      var leftStr = leftPct.toFixed(1);
+
+      // 艇番チップ
+      html += '<div style="position:absolute;left:' + leftStr + '%;top:50%;transform:translate(-50%,-50%);';
+      html += 'width:26px;height:26px;border-radius:50%;';
+      html += 'background:' + bg + ';color:' + fg + ';' + bd;
+      html += 'display:inline-flex;align-items:center;justify-content:center;';
+      html += 'font-weight:bold;font-size:13px;z-index:1;"></div>';
+      // チップの中の艇番（別要素で重ねる）
+      html += '<div style="position:absolute;left:' + leftStr + '%;top:50%;transform:translate(-50%,-50%);';
+      html += 'width:26px;height:26px;border-radius:50%;';
+      html += 'background:' + bg + ';color:' + fg + ';' + bd;
+      html += 'display:flex;align-items:center;justify-content:center;';
+      html += 'font-weight:bold;font-size:13px;z-index:2;">' + r.boat + '</div>';
+      // ST値
+      html += '<div style="position:absolute;left:' + leftStr + '%;top:18px;transform:translateX(-50%);';
+      html += 'font-size:9px;color:#556677;white-space:nowrap;">' + r.st.toFixed(3) + '</div>';
+    } else {
+      html += '<div style="position:absolute;left:5%;top:50%;transform:translateY(-50%);';
+      html += 'width:22px;height:22px;border-radius:50%;';
+      html += 'background:' + bg + ';color:' + fg + ';opacity:0.3;';
+      html += 'display:flex;align-items:center;justify-content:center;';
+      html += 'font-weight:bold;font-size:11px;">' + r.boat + '</div>';
     }
+
+    html += '</div>';
+    html += '</div>';
   }
-  html += '</table>';
-  html += '<div style="font-size:10px;color:#445566;text-align:center;margin-top:6px;">※ ' + modeLabel + 'ベース　上が前・下が後ろ</div>';
+
+  // スタートライン縦棒（右端）
+  html += '<div style="position:absolute;right:8px;top:18px;bottom:8px;width:2px;background:rgba(255,255,255,0.2);"></div>';
+
+  html += '</div>';
+  html += '<div style="font-size:10px;color:#445566;text-align:center;margin-top:2px;">※ ' + modeLabel + 'ベース　右がスタートライン</div>';
   body.innerHTML = html;
 }
 
