@@ -1584,58 +1584,34 @@ function updateSlit() {
     return;
   }
 
-  const chipBg = ['#cccccc','#222222','#e03000','#0050dd','#ddaa00','#00aa44'];
-  const chipFg = ['#333333','#ffffff','#ffffff','#ffffff','#333333','#ffffff'];
+  const chipBg  = ['#ccc','#333','#e03000','#0050dd','#ddaa00','#00aa44'];
+  const chipFg  = ['#333','#fff','#fff','#fff','#333','#fff'];
 
-  // コース順（1〜6）で並べる。前付けでコースが変わっていても対応
-  const byCoure = rows.slice().sort((a, b) => a.course - b.course);
+  // ST昇順にソート（小さいほど前）
+  const sorted = rows.filter(r => r.st !== null).sort((a, b) => a.st - b.st);
+  const noData = rows.filter(r => r.st === null);
 
-  const validSts = rows.filter(r => r.st !== null).map(r => r.st);
-  const minSt = Math.min(...validSts);
-  const maxSt = Math.max(...validSts);
-  const range = maxSt - minSt || 0.01;
-
-  // スタートラインを右端基準(90%)に固定、遅いほど左寄り
-  // STが小さい(速い)ほど右寄り: left% = 90 - ((st - minSt) / range) * 60
-  const trackW = 60; // 使用幅60%
-  const rightEdge = 88;
-
-  let laneHtml = '';
-  byCoure.forEach(r => {
+  let chips = sorted.map((r, rank) => {
     const bg = chipBg[r.boat - 1];
     const fg = chipFg[r.boat - 1];
-    const border = r.boat === 2 ? 'border:1px solid #555;' : '';
-    if (r.st === null) {
-      laneHtml += `<div style="display:flex;align-items:center;height:30px;margin:3px 0;position:relative;">` +
-        `<div style="width:22px;font-size:10px;color:var(--text-muted);text-align:center;flex-shrink:0;">${r.course}C</div>` +
-        `<div style="flex:1;position:relative;height:2px;background:rgba(255,255,255,0.08);border-radius:1px;">` +
-        `<span style="position:absolute;right:0;top:50%;transform:translateY(-50%);font-size:9px;color:var(--text-muted);opacity:0.5;">-</span>` +
-        `</div></div>`;
-    } else {
-      const leftPct = rightEdge - ((r.st - minSt) / range) * trackW;
-      laneHtml += `<div style="display:flex;align-items:center;height:30px;margin:3px 0;position:relative;">` +
-        `<div style="width:22px;font-size:10px;color:var(--text-muted);text-align:center;flex-shrink:0;">${r.course}C</div>` +
-        `<div style="flex:1;position:relative;height:2px;background:rgba(255,255,255,0.08);border-radius:1px;">` +
-        `<div style="position:absolute;left:${leftPct.toFixed(1)}%;top:50%;transform:translate(-50%,-50%);` +
-        `width:26px;height:26px;border-radius:50%;background:${bg};color:${fg};${border}` +
-        `display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:13px;` +
-        `box-shadow:0 0 6px ${bg}88;z-index:1;">${r.boat}</div>` +
-        `<div style="position:absolute;left:${leftPct.toFixed(1)}%;top:50%;transform:translate(-50%,10px);` +
-        `font-size:9px;color:var(--text-muted);white-space:nowrap;">${r.st.toFixed(3)}</div>` +
-        `</div></div>`;
-    }
+    const label = rank === 0 ? '前' : (rank === sorted.length - 1 && noData.length === 0 ? '後' : '');
+    return `<span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;">${label ? '<span style="font-size:9px;color:var(--text-muted)">'+label+'</span>' : '<span style="font-size:9px;">&nbsp;</span>'}<span style="background:${bg};color:${fg};border-radius:50%;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;font-size:13px;">${r.boat}</span><span style="font-size:9px;color:var(--text-muted);">${r.st.toFixed(3)}</span></span>`;
   });
 
-  // スタートライン縦棒
-  const startLine = `<div style="position:absolute;right:${(100 - rightEdge).toFixed(1)}%;top:0;bottom:0;width:2px;background:rgba(255,255,255,0.2);pointer-events:none;"></div>`;
-  const startLabel = `<div style="position:absolute;right:${(100 - rightEdge).toFixed(1)}%;top:-16px;transform:translateX(50%);font-size:9px;color:rgba(255,255,255,0.35);white-space:nowrap;">START</div>`;
+  const arrowSep = '<span style="font-size:16px;color:var(--text-muted);align-self:center;margin-top:10px;">→</span>';
+  let rankHtml = chips.join(arrowSep);
+
+  if (noData.length > 0) {
+    const nochips = noData.map(r => {
+      const bg = chipBg[r.boat - 1];
+      const fg = chipFg[r.boat - 1];
+      return `<span style="background:${bg};color:${fg};border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;font-size:12px;opacity:0.4;">${r.boat}</span>`;
+    }).join(' ');
+    rankHtml += `<span style="font-size:11px;color:var(--text-muted);margin-left:8px;">/ ST未入力: ${nochips}</span>`;
+  }
 
   const modeLabel = slitMode === 'ex' ? '展示ST' : '平均ST';
-  body.innerHTML =
-    `<div style="position:relative;padding:18px 8px 8px 8px;">` +
-    startLabel + startLine + laneHtml +
-    `</div>` +
-    `<div style="font-size:10px;color:var(--text-muted);text-align:center;margin-top:2px;">※ ${modeLabel}ベース　右がスタートライン</div>`;
+  body.innerHTML = `<div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:4px;justify-content:center;padding:4px 0;">${rankHtml}</div><div style="font-size:10px;color:var(--text-muted);text-align:center;margin-top:4px;">※ ${modeLabel}ベース　左が前・右が後ろ</div>`;
 }
 
 // オッズ帯からタイプを決定
