@@ -461,11 +461,11 @@ def get_records():
     period = request.args.get('period', 'all')
     conn = get_db()
     if period == 'week':
-        rows = conn.execute("SELECT * FROM records WHERE race_date >= date('now', '-7 days') ORDER BY race_date DESC, race_no DESC").fetchall()
+        rows = conn.execute("SELECT * FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
     elif period == 'month':
-        rows = conn.execute("SELECT * FROM records WHERE race_date >= date('now', '-30 days') ORDER BY race_date DESC, race_no DESC").fetchall()
+        rows = conn.execute("SELECT * FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
     else:
-        rows = conn.execute("SELECT * FROM records ORDER BY race_date DESC, race_no DESC").fetchall()
+        rows = conn.execute("SELECT * FROM records ORDER BY id DESC").fetchall()
     conn.close()
 
     records = []
