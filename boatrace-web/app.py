@@ -3,6 +3,8 @@ import itertools
 import sqlite3
 import json
 import os
+import re
+import urllib.request
 from datetime import datetime
 
 app = Flask(__name__)
@@ -356,6 +358,63 @@ def save_record():
     record_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
     conn.close()
     return jsonify({'success': True, 'id': record_id})
+
+
+VENUE_CODES = {
+    "桐生": "01", "戸田": "02", "江戸川": "03", "平和島": "04",
+    "多摩川": "05", "浜名湖": "06", "蒲郡": "07", "常滑": "08",
+    "津": "09", "三国": "10", "びわこ": "11", "住之江": "12",
+    "尼崎": "13", "鳴門": "14", "丸亀": "15", "児島": "16",
+    "宮島": "17", "徳山": "18", "下関": "19", "若松": "20",
+    "芦屋": "21", "福岡": "22", "唐津": "23", "大村": "24",
+}
+
+@app.route('/fetch_result', methods=['POST'])
+def fetch_result():
+    data = request.get_json()
+    venue = data.get('venue', '')
+    race_no = data.get('race_no', 1)
+    race_date = data.get('race_date', '')  # YYYY-MM-DD
+
+    jcd = VENUE_CODES.get(venue)
+    if not jcd:
+        return jsonify({'success': False, 'error': '会場コードが見つかりません'})
+
+    hd = race_date.replace('-', '')
+    url = 'https://www.boatrace.jp/owpc/pc/race/raceresult?rno=' + str(race_no) + '&jcd=' + jcd + '&hd=' + hd
+
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            html = resp.read().decode('utf-8', errors='ignore')
+    except Exception as e:
+        return jsonify({'success': False, 'error': '取得失敗: ' + str(e)})
+
+    # 1〜3着の艇番を取得
+    # 着順テーブル: <td class="is-boatColor*">艇番</td>
+    rank_matches = re.findall(r'class="is-boatColor(\d)"[^>]*>\s*(\d)\s*<', html)
+    if len(rank_matches) < 3:
+        # 別パターン試行
+        rank_matches2 = re.findall(r'<td[^>]*is-boatColor[^>]*>\s*<span[^>]*>(\d)</span>', html)
+        if len(rank_matches2) < 3:
+            return jsonify({'success': False, 'error': '着順データが見つかりません。手動で入力してください。'})
+        r1, r2, r3 = int(rank_matches2[0]), int(rank_matches2[1]), int(rank_matches2[2])
+    else:
+        r1, r2, r3 = int(rank_matches[0][1]), int(rank_matches[1][1]), int(rank_matches[2][1])
+
+    # 三連単払戻金を取得
+    # パターン: 三連単の払戻金額
+    payout = 0
+    trio_match = re.search(r'3連単.*?(\d[\d,]+)円', html, re.DOTALL)
+    if trio_match:
+        payout = int(trio_match.group(1).replace(',', ''))
+    else:
+        # 別パターン
+        payout_match = re.search(r'is-type3["\s][^>]*>.*?(\d[\d,]+)', html, re.DOTALL)
+        if payout_match:
+            payout = int(payout_match.group(1).replace(',', ''))
+
+    return jsonify({'success': True, 'r1': r1, 'r2': r2, 'r3': r3, 'payout': payout})
 
 
 @app.route('/update_result', methods=['POST'])

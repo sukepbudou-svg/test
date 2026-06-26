@@ -312,6 +312,10 @@ h1 {
         <input type="number" id="r-purchase" placeholder="100" min="0" value="100">
       </div>
     </div>
+    <div style="margin-bottom:10px;">
+      <button id="btn-auto-fetch" onclick="autoFetchResult()" style="width:100%;padding:8px;background:linear-gradient(135deg,#0050dd,#0099ff);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;">🌐 公式サイトから結果を自動取得</button>
+      <div id="auto-fetch-status" style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:4px;"></div>
+    </div>
     <div class="modal-btns">
       <button class="btn-modal-cancel" onclick="closeModal()">キャンセル</button>
       <button class="btn-modal-save" onclick="submitResult()">保存する</button>
@@ -511,20 +515,65 @@ function closeVenueDetail() {
 }
 
 // ======== モーダル ========
+let modalVenue = '';
+let modalRaceNo = 1;
+let modalRaceDate = '';
+
 function openModal(id, venue, race_no, race_date) {
   document.getElementById('modal-record-id').value = id;
-  document.getElementById('modal-race-info').textContent = `${race_date} ${venue} ${race_no}R`;
+  document.getElementById('modal-race-info').textContent = race_date + ' ' + venue + ' ' + race_no + 'R';
   document.getElementById('r1st').value = '';
   document.getElementById('r2nd').value = '';
   document.getElementById('r3rd').value = '';
   document.getElementById('r-payout').value = '';
-  document.getElementById('r-purchase').value = '100';
   document.getElementById('modal-combo').textContent = '?-?-?';
+  document.getElementById('auto-fetch-status').textContent = '';
+
+  // 購入金額を予想点数×100円に自動設定
+  const rec = allRecords.find(function(r) { return r.id === id; });
+  const predCount = rec && rec.predictions ? rec.predictions.length : 8;
+  document.getElementById('r-purchase').value = predCount * 100;
+
+  modalVenue = venue;
+  modalRaceNo = race_no;
+  modalRaceDate = race_date;
   document.getElementById('modal').classList.add('open');
 
-  ['r1st','r2nd','r3rd'].forEach(id => {
-    document.getElementById(id).addEventListener('input', updateComboDisplay);
+  ['r1st','r2nd','r3rd'].forEach(function(fid) {
+    document.getElementById(fid).addEventListener('input', updateComboDisplay);
   });
+}
+
+async function autoFetchResult() {
+  const statusEl = document.getElementById('auto-fetch-status');
+  statusEl.style.color = 'var(--text-muted)';
+  statusEl.textContent = '取得中...';
+  document.getElementById('btn-auto-fetch').disabled = true;
+
+  try {
+    const resp = await fetch('/fetch_result', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ venue: modalVenue, race_no: modalRaceNo, race_date: modalRaceDate })
+    });
+    const data = await resp.json();
+    if (data.success) {
+      document.getElementById('r1st').value = data.r1;
+      document.getElementById('r2nd').value = data.r2;
+      document.getElementById('r3rd').value = data.r3;
+      if (data.payout > 0) document.getElementById('r-payout').value = data.payout;
+      updateComboDisplay();
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = '✓ 取得成功！内容を確認して保存してください';
+    } else {
+      statusEl.style.color = 'var(--accent)';
+      statusEl.textContent = '❌ ' + data.error;
+    }
+  } catch (e) {
+    statusEl.style.color = 'var(--accent)';
+    statusEl.textContent = '❌ 通信エラー。手動で入力してください';
+  }
+  document.getElementById('btn-auto-fetch').disabled = false;
 }
 
 function updateComboDisplay() {
