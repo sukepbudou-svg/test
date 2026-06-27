@@ -1631,8 +1631,15 @@ async function runPredict() {
   document.getElementById('status-save').textContent = '';
   const displayed = renderResult(data);
   lastPredictions = displayed;
-  const nigeEl = document.getElementById('nige-rate-value');
-  lastNigeRate = nigeEl ? parseFloat(nigeEl.textContent) || null : null;
+  // kimariStatsから直接nige_rateを取得（DOMより確実）
+  if (kimariStats) {
+    const kperiod = document.getElementById('kimari-period')?.value || '直近6ヶ月';
+    const kpd = kimariStats[kperiod] || kimariStats['直近6ヶ月'] || kimariStats['直近1年'] || {};
+    lastNigeRate = kpd.nige1 > 0 ? kpd.nige1 : null;
+  } else {
+    const nigeEl = document.getElementById('nige-rate-value');
+    lastNigeRate = nigeEl ? parseFloat(nigeEl.textContent) || null : null;
+  }
   document.getElementById('btn-save').style.display = lastPredictions.length > 0 ? 'block' : 'none';
 }
 
