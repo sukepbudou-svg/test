@@ -601,7 +601,7 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
     <select id="race_no" onchange="allClear()">
       {% for i in range(1,13) %}<option value="{{ i }}">{{ i }}R</option>{% endfor %}
     </select>
-    <select id="wind">
+    <select id="wind" onchange="updateVenueInfo()">
       <option value="">風向き</option>
       {% for w in wind_options %}<option value="{{ w }}">{{ w }}</option>{% endfor %}
     </select>
@@ -885,7 +885,18 @@ function updateVenueInfo() {
   if (p.upset >= 4)   tags.push(`<span class="venue-tag venue-tag-wild">荒れやすい</span>`);
   if (p.wind >= 4)    tags.push(`<span class="venue-tag venue-tag-wind">風影響大</span>`);
 
+  const wind = document.getElementById('wind').value;
+  const windLabel = wind ? `<span style="font-family:'Orbitron',monospace;font-size:12px;color:var(--accent3)">${wind}</span>` : '<span style="color:var(--text-muted);font-size:12px;">未選択</span>';
+
   body.innerHTML = `
+    <div class="venue-stat">
+      <span class="venue-stat-label">📍 会場</span>
+      <span style="font-family:'Orbitron',monospace;font-size:13px;font-weight:900;color:var(--accent2)">${venue}</span>
+    </div>
+    <div class="venue-stat">
+      <span class="venue-stat-label">💨 風向き</span>
+      ${windLabel}
+    </div>
     <div class="venue-stat">
       <span class="venue-stat-label">🏁 1コース勝率</span>
       <span style="font-family:'Orbitron',monospace;font-size:12px;color:var(--accent2)">${p.in_pct}</span>
@@ -2119,6 +2130,9 @@ function allClear() {
     document.getElementById(`mr-${i}`).textContent = '';
   }
   document.getElementById('result-area').innerHTML = '<div style="color:var(--text-muted);font-size:12px;margin-top:12px;text-align:center;letter-spacing:1px;">データを入力して予想するを押してください</div>';
+  document.getElementById('nige-rate-banner').style.display = 'none';
+  document.getElementById('nige-rate-value').textContent = '-';
+  document.getElementById('nige-rate-comment').textContent = '';
   updateSlit();
   ['avg-st','player','kimari','motor','exhibit','odds'].forEach(n => {
     const el = document.getElementById(`status-${n}`); if (el) el.textContent = '';
