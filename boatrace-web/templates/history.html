@@ -416,7 +416,7 @@ function renderRecords() {
     return `<tr>
       <td>${r.race_date}</td>
       <td>${r.venue}</td>
-      <td>${r.race_no}R${r.nige_rate != null ? `<br><span style="font-size:9px;color:#aaa;">逃${r.nige_rate.toFixed(1)}%</span>` : ''}${r.wind ? `<br><span style="font-size:9px;color:var(--accent3);">💨${r.wind}</span>` : ''}</td>
+      <td>${r.race_no}R${(r.nige_rate != null || r.wind) ? `<br><span style="font-size:9px;color:#aaa;white-space:nowrap;">${r.nige_rate != null ? `逃${r.nige_rate.toFixed(1)}%` : ''}${r.nige_rate != null && r.wind ? ' ' : ''}${r.wind ? `💨${r.wind}` : ''}</span>` : ''}</td>
       <td><div class="pred-list">${predHtml}</div></td>
       <td>${resultStr}</td>
       <td>${hitBadge}</td>
