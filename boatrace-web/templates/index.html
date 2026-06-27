@@ -1603,7 +1603,7 @@ async function runPredict() {
       boat_number:   i,
       course:        parseFloat(document.getElementById(`b${i}_course`).value) || i,
       exhibit_time:  parseFloat(document.getElementById(`b${i}_exhibit_time`).value) || 0,
-      laps:          parseFloat(document.getElementById(`b${i}_laps`).value) || 0,
+      laps:          0,
       mawariashi:    parseFloat(document.getElementById(`b${i}_mawariashi`).value) || 0,
       tilt:          parseFloat(document.getElementById(`b${i}_tilt`).value) || 0,
       avg_st:        parseFloat(document.getElementById(`b${i}_avg_st`).value) || 0,
