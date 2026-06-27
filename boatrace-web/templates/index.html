@@ -1619,6 +1619,13 @@ async function runPredict() {
   let kimariPayload = null;
   if (kimariStats && kimariStats.sim) kimariPayload = { sim: kimariStats.sim };
 
+  // 予想送信前にkimariStatsから最新のnige_rateを取得
+  if (kimariStats) {
+    const kperiod = document.getElementById('kimari-period')?.value || '直近6ヶ月';
+    const kpd = kimariStats[kperiod] || kimariStats['直近6ヶ月'] || kimariStats['直近1年'] || {};
+    lastNigeRate = kpd.nige1 > 0 ? kpd.nige1 : null;
+  }
+
   const venue = document.getElementById('venue').value;
   const wind  = document.getElementById('wind').value;
 
