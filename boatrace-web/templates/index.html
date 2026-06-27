@@ -1662,8 +1662,6 @@ async function runPredict() {
     lastNigeRate = nigeEl ? parseFloat(nigeEl.textContent) || null : null;
   }
   document.getElementById('btn-save').style.display = lastPredictions.length > 0 ? 'block' : 'none';
-  document.getElementById('status-save').textContent = lastNigeRate != null ? `[デバッグ] 保存予定イン逃げ率: ${lastNigeRate.toFixed(1)}%` : '[デバッグ] イン逃げ率: 未取得(null)';
-  document.getElementById('status-save').style.color = lastNigeRate != null ? 'var(--green)' : 'var(--accent)';
 }
 
 // ======== スリット隊形 ========

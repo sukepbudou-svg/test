@@ -502,6 +502,7 @@ def get_records():
             'purchase': r['purchase'],
             'is_hit': r['is_hit'],
             'created_at': r['created_at'],
+            'nige_rate': r['nige_rate'],
         })
     return jsonify(records)
 
