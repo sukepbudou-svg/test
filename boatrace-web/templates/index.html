@@ -1996,7 +1996,7 @@ async function saveRecord() {
   const resp = await fetch('/save_record', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ race_date, venue, race_no: parseInt(race_no), predictions: lastPredictions, nige_rate: lastNigeRate })
+    body: JSON.stringify({ race_date, venue, race_no: parseInt(race_no), predictions: lastPredictions, nige_rate: lastNigeRate, wind: document.getElementById('wind').value || null })
   });
   const data = await resp.json();
   if (data.success) {

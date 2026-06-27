@@ -32,13 +32,19 @@ def init_db():
             purchase INTEGER,
             is_hit INTEGER DEFAULT 0,
             created_at TEXT NOT NULL,
-            nige_rate REAL
+            nige_rate REAL,
+            wind TEXT
         )
     ''')
     conn.commit()
     # 既存DBへのマイグレーション
     try:
         conn.execute('ALTER TABLE records ADD COLUMN nige_rate REAL')
+        conn.commit()
+    except Exception:
+        pass
+    try:
+        conn.execute('ALTER TABLE records ADD COLUMN wind TEXT')
         conn.commit()
     except Exception:
         pass
@@ -354,15 +360,16 @@ def save_record():
     data = request.get_json()
     conn = get_db()
     conn.execute('''
-        INSERT INTO records (race_date, venue, race_no, predictions, created_at, nige_rate)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO records (race_date, venue, race_no, predictions, created_at, nige_rate, wind)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     ''', (
         data.get('race_date', ''),
         data.get('venue', ''),
         data.get('race_no', 0),
         json.dumps(data.get('predictions', []), ensure_ascii=False),
         datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        data.get('nige_rate')
+        data.get('nige_rate'),
+        data.get('wind')
     ))
     conn.commit()
     record_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
@@ -503,6 +510,7 @@ def get_records():
             'is_hit': r['is_hit'],
             'created_at': r['created_at'],
             'nige_rate': r['nige_rate'],
+            'wind': r['wind'],
         })
     return jsonify(records)
 
