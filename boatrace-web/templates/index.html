@@ -978,7 +978,7 @@ function switchTab(name, btn) {
 }
 
 // ======== Parse: 平均ST ========
-const ST_PERIODS = ['今期','直近6ヶ月','直近3ヶ月','直近1ヶ月','当地','一般戦','SG/G1','初日','最終日','ナイター','F持'];
+const ST_PERIODS = ['今期','直近6ヶ月','直近3ヶ月','直近1ヶ月','当地','一般戦','SG/G1','初日','最終日','ナイター','F持','F持ち'];
 
 function parseAvgST(text) {
   const result = {};
@@ -986,8 +986,9 @@ function parseAvgST(text) {
   for (const line of lines) {
     const cols = line.split('\t');
     if (cols.length < 2) continue;
-    const periodLabel = cols[0].trim();
+    let periodLabel = cols[0].trim();
     if (!ST_PERIODS.includes(periodLabel)) continue;
+    if (periodLabel === 'F持ち') periodLabel = 'F持';
     const values = [];
     for (let c = 1; c < cols.length && values.length < 6; c++) {
       const v = cols[c].trim();
@@ -1048,10 +1049,18 @@ function applyFST(i) {
   if (!avgStStats) return;
   const sel = document.getElementById(`b${i}_fst_period`);
   const period = sel ? sel.value : '';
-  if (!period || !avgStStats[period]) return;
-  const v = avgStStats[period][i-1];
   const el = document.getElementById(`b${i}_avg_st`);
-  if (el && v !== '') el.value = v;
+  if (!el) return;
+  if (period && avgStStats[period]) {
+    const v = avgStStats[period][i-1];
+    if (v !== '') { el.value = v; return; }
+  }
+  // F持ちデータが'-'の場合は通常ST期間の値で補完
+  const normalPeriod = document.getElementById('st-period')?.value;
+  if (normalPeriod && avgStStats[normalPeriod]) {
+    const vn = avgStStats[normalPeriod][i-1];
+    if (vn !== '') el.value = vn;
+  }
 }
 
 // ======== Parse: 選手成績 ========
