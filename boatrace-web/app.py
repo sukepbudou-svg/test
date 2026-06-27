@@ -400,17 +400,36 @@ def fetch_result():
     except Exception as e:
         return jsonify({'success': False, 'error': '取得失敗: ' + str(e)})
 
-    # 1〜3着の艇番を取得
-    # 着順テーブル: <td class="is-boatColor*">艇番</td>
-    rank_matches = re.findall(r'class="is-boatColor(\d)"[^>]*>\s*(\d)\s*<', html)
-    if len(rank_matches) < 3:
-        # 別パターン試行
-        rank_matches2 = re.findall(r'<td[^>]*is-boatColor[^>]*>\s*<span[^>]*>(\d)</span>', html)
-        if len(rank_matches2) < 3:
-            return jsonify({'success': False, 'error': '着順データが見つかりません。手動で入力してください。'})
-        r1, r2, r3 = int(rank_matches2[0]), int(rank_matches2[1]), int(rank_matches2[2])
-    else:
-        r1, r2, r3 = int(rank_matches[0][1]), int(rank_matches[1][1]), int(rank_matches[2][1])
+    # 1〜3着の艇番を取得（複数パターン試行）
+    boats_found = []
+
+    # パターン1: <td class="is-boatColor1">1</td>
+    m1 = re.findall(r'is-boatColor\d[^>]*>\s*(\d)\s*<', html)
+    if len(m1) >= 3:
+        boats_found = [int(x) for x in m1[:3]]
+
+    # パターン2: spanタグ内
+    if len(boats_found) < 3:
+        m2 = re.findall(r'is-boatColor\d[^>]*>\s*<span[^>]*>\s*(\d)\s*</span>', html)
+        if len(m2) >= 3:
+            boats_found = [int(x) for x in m2[:3]]
+
+    # パターン3: 着順テーブルの艇番列を直接探す
+    if len(boats_found) < 3:
+        m3 = re.findall(r'<(?:td|span)[^>]*boatColor[^>]*>\D*(\d)\D*</(?:td|span)>', html)
+        if len(m3) >= 3:
+            boats_found = [int(x) for x in m3[:3]]
+
+    # パターン4: 3連単の出目から逆算（例: 1-3-2）
+    if len(boats_found) < 3:
+        m4 = re.search(r'[\s>]([1-6])-([1-6])-([1-6])[\s<]', html)
+        if m4:
+            boats_found = [int(m4.group(1)), int(m4.group(2)), int(m4.group(3))]
+
+    if len(boats_found) < 3:
+        return jsonify({'success': False, 'error': '着順データが見つかりません。手動で入力してください。', 'url': url})
+
+    r1, r2, r3 = boats_found[0], boats_found[1], boats_found[2]
 
     # 三連単払戻金を取得
     # パターン: 三連単の払戻金額
