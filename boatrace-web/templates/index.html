@@ -1060,11 +1060,11 @@ function applyFST(i) {
     const v = avgStStats[period][i-1];
     if (v !== '') { el.value = v; return; }
   }
-  // F持ちデータが'-'の場合は通常ST期間の値で補完
+  // F持ちデータが'-'の場合は通常ST期間の値＋0.02秒の慎重スタート補正
   const normalPeriod = document.getElementById('st-period')?.value;
   if (normalPeriod && avgStStats[normalPeriod]) {
     const vn = avgStStats[normalPeriod][i-1];
-    if (vn !== '') el.value = vn;
+    if (vn !== '') el.value = (Math.round((vn + 0.02) * 1000) / 1000).toFixed(3);
   }
 }
 
