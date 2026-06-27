@@ -983,7 +983,12 @@ const ST_PERIODS = ['今期','直近6ヶ月','直近3ヶ月','直近1ヶ月','�
 function parseAvgST(text) {
   const result = {};
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  // 「平均ST」ヘッダーから「ST順位」ヘッダーまでの範囲だけを対象にする
+  let inSection = false;
   for (const line of lines) {
+    if (line === '平均ST') { inSection = true; continue; }
+    if (inSection && (line === 'ST順位' || line === 'ST考察' || line === 'ST履歴')) break;
+    if (!inSection) continue;
     const cols = line.split('\t');
     if (cols.length < 2) continue;
     let periodLabel = cols[0].trim();
