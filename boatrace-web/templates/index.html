@@ -2119,6 +2119,17 @@ function allClear() {
     const el = document.getElementById(`status-${n}`); if (el) el.textContent = '';
     const ta = document.getElementById(`paste-${n}`); if (ta) ta.value = '';
   });
+  const bulkEl = document.getElementById('paste-bulk');
+  if (bulkEl) bulkEl.value = '';
+  const statusBulk = document.getElementById('status-bulk');
+  if (statusBulk) statusBulk.textContent = '';
+  // タブを一括貼り付けに切り替え
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  const bulkPane = document.getElementById('tab-bulk');
+  if (bulkPane) bulkPane.classList.add('active');
+  const bulkBtn = document.querySelector('.tab-btn[onclick*="bulk"]');
+  if (bulkBtn) bulkBtn.classList.add('active');
 }
 
 // ======== Init ========
