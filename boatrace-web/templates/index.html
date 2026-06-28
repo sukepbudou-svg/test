@@ -2153,7 +2153,9 @@ function allClear() {
 
 // ======== Init ========
 buildBoatCards();
-document.getElementById('race_date').value = new Date().toISOString().slice(0,10);
+const _now = new Date();
+const _jst = new Date(_now.getTime() + 9 * 60 * 60 * 1000);
+document.getElementById('race_date').value = _jst.toISOString().slice(0,10);
 </script>
 </body>
 </html>
