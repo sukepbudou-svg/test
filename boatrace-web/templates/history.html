@@ -200,6 +200,41 @@ h1 {
 .daily-chart { position: relative; height: 60px; margin-bottom: 6px; }
 .daily-chart svg { width: 100%; height: 100%; }
 
+/* 絞り込みパネル */
+.filter-panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px; margin-bottom: 14px;
+}
+.filter-panel-title {
+  font-size: 10px; color: var(--text-muted); letter-spacing: 2px; text-transform: uppercase;
+  margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;
+}
+.filter-panel-title span { color: var(--accent3); font-size: 11px; cursor: pointer; }
+.filter-panel-title span:hover { color: #fff; }
+.filter-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.filter-label { font-size: 11px; color: var(--text-muted); white-space: nowrap; min-width: 80px; }
+.venue-chips { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; }
+.venue-chip {
+  font-size: 11px; padding: 3px 10px; border-radius: 20px; cursor: pointer; font-weight: 700;
+  background: var(--surface3); border: 1px solid var(--border); color: var(--text-muted);
+  transition: all 0.15s; user-select: none;
+}
+.venue-chip.selected { background: rgba(0,212,255,0.15); border-color: var(--accent3); color: var(--accent3); }
+.venue-chip:hover:not(.selected) { border-color: var(--text-muted); color: var(--text); }
+.nige-slider-wrap { display: flex; align-items: center; gap: 8px; flex: 1; }
+.nige-slider { flex: 1; accent-color: var(--accent3); cursor: pointer; }
+.nige-val { font-family: 'Orbitron',monospace; font-size: 13px; font-weight: 700; color: var(--accent3); min-width: 50px; }
+.filter-apply-bar {
+  display: flex; align-items: center; justify-content: space-between; margin-top: 6px;
+  padding-top: 10px; border-top: 1px solid var(--border);
+}
+.filter-active-label { font-size: 11px; color: var(--accent2); }
+.btn-filter-reset {
+  font-size: 11px; background: none; border: 1px solid var(--border); color: var(--text-muted);
+  border-radius: 5px; padding: 3px 10px; cursor: pointer; font-family: inherit;
+}
+.btn-filter-reset:hover { border-color: var(--accent); color: var(--accent); }
+
 /* 会場別詳細パネル */
 #venue-detail-panel {
   display: none;
@@ -231,6 +266,28 @@ h1 {
 </div>
 
 <div class="main">
+
+  <!-- 絞り込みパネル -->
+  <div class="filter-panel" id="filter-panel" style="display:none;">
+    <div class="filter-panel-title">
+      🔍 集計絞り込み
+      <span onclick="resetFilter()">リセット</span>
+    </div>
+    <div class="filter-row">
+      <div class="filter-label">会場選択</div>
+      <div class="venue-chips" id="venue-chips"></div>
+    </div>
+    <div class="filter-row">
+      <div class="filter-label">イン逃げ率</div>
+      <div class="nige-slider-wrap">
+        <input type="range" class="nige-slider" id="nige-filter-slider" min="0" max="80" step="5" value="0" oninput="onNigeSlider()">
+        <div class="nige-val" id="nige-filter-val">制限なし</div>
+      </div>
+    </div>
+    <div class="filter-apply-bar">
+      <div class="filter-active-label" id="filter-active-label"></div>
+    </div>
+  </div>
 
   <!-- サマリー -->
   <div class="summary-grid">
@@ -378,21 +435,87 @@ h1 {
 <script>
 let currentFilter = 'all';
 let allRecords = [];
+let selectedVenues = new Set();
+let nigeFilterMin = 0;
+
+// ======== 絞り込みロジック ========
+function getFilteredRecords() {
+  return allRecords.filter(r => {
+    if (selectedVenues.size > 0 && !selectedVenues.has(r.venue)) return false;
+    if (nigeFilterMin > 0) {
+      if (r.nige_rate == null || r.nige_rate < nigeFilterMin) return false;
+    }
+    return true;
+  });
+}
+
+function buildFilterPanel() {
+  const venues = [...new Set(allRecords.map(r => r.venue))].sort();
+  if (venues.length === 0) return;
+  document.getElementById('filter-panel').style.display = 'block';
+  document.getElementById('venue-chips').innerHTML = venues.map(v =>
+    `<div class="venue-chip${selectedVenues.has(v) ? ' selected' : ''}" onclick="toggleVenue('${v}')">${v}</div>`
+  ).join('');
+  updateFilterLabel();
+}
+
+function toggleVenue(v) {
+  if (selectedVenues.has(v)) selectedVenues.delete(v);
+  else selectedVenues.add(v);
+  document.querySelectorAll('.venue-chip').forEach(el => {
+    el.classList.toggle('selected', selectedVenues.has(el.textContent));
+  });
+  applyFilter();
+}
+
+function onNigeSlider() {
+  nigeFilterMin = parseInt(document.getElementById('nige-filter-slider').value);
+  document.getElementById('nige-filter-val').textContent = nigeFilterMin > 0 ? nigeFilterMin + '%以上' : '制限なし';
+  applyFilter();
+}
+
+function resetFilter() {
+  selectedVenues.clear();
+  nigeFilterMin = 0;
+  document.getElementById('nige-filter-slider').value = 0;
+  document.getElementById('nige-filter-val').textContent = '制限なし';
+  document.querySelectorAll('.venue-chip').forEach(el => el.classList.remove('selected'));
+  applyFilter();
+}
+
+function updateFilterLabel() {
+  const filtered = getFilteredRecords();
+  const total = allRecords.length;
+  const isFiltered = selectedVenues.size > 0 || nigeFilterMin > 0;
+  const label = document.getElementById('filter-active-label');
+  if (isFiltered) {
+    label.textContent = `絞り込み中: 全${total}件 → ${filtered.length}件対象`;
+  } else {
+    label.textContent = `全${total}件（絞り込みなし）`;
+  }
+}
+
+function applyFilter() {
+  updateFilterLabel();
+  const filtered = getFilteredRecords();
+  renderSummaryWith(filtered);
+  renderVenueChartWith(filtered);
+  const hasResult = filtered.some(r => r.result_1st);
+  document.getElementById('analysis-section').style.display = hasResult ? 'grid' : 'none';
+  if (hasResult) { renderPatternAnalysisWith(filtered); renderProfitChartWith(filtered); }
+  renderDailyWith(filtered);
+}
 
 // ======== 初期化 ========
 async function loadRecords() {
   const resp = await fetch(`/get_records?period=${currentFilter}`);
   allRecords = await resp.json();
   renderRecords();
-  renderSummary();
-  renderVenueChart();
-  const hasResult = allRecords.some(r => r.result_1st);
-  document.getElementById('analysis-section').style.display = hasResult ? 'grid' : 'none';
-  if (hasResult) { renderPatternAnalysis(); renderProfitChart(); }
-  renderDaily();
+  buildFilterPanel();
+  applyFilter();
 }
 
-// ======== フィルター ========
+// ======== 期間フィルター ========
 function setFilter(period, btn) {
   currentFilter = period;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -456,8 +579,8 @@ function renderRecords() {
 }
 
 // ======== サマリー ========
-function renderSummary() {
-  const withResult = allRecords.filter(r => r.result_1st);
+function renderSummaryWith(records) {
+  const withResult = records.filter(r => r.result_1st);
   const hits = withResult.filter(r => r.is_hit);
   const rate = withResult.length > 0 ? Math.round(hits.length / withResult.length * 100) : 0;
   const totalPayout = hits.reduce((s,r) => s + (r.payout || 0), 0);
@@ -466,7 +589,7 @@ function renderSummary() {
   const recover = totalPurchase > 0 ? Math.round(totalPayout / totalPurchase * 100) : 0;
 
   document.getElementById('sum-hit').textContent = hits.length;
-  document.getElementById('sum-total-races').textContent = `全${allRecords.length}レース`;
+  document.getElementById('sum-total-races').textContent = `全${records.length}レース`;
   document.getElementById('sum-rate').textContent = `${rate}%`;
   document.getElementById('sum-recover').textContent = `${recover}%`;
   document.getElementById('sum-profit-detail').textContent = `収支: ${balance >= 0 ? '+' : ''}${balance.toLocaleString()}円`;
@@ -477,8 +600,8 @@ function renderSummary() {
 }
 
 // ======== 的中パターン分析 ========
-function renderPatternAnalysis() {
-  const withResult = allRecords.filter(r => r.result_1st);
+function renderPatternAnalysisWith(records) {
+  const withResult = records.filter(r => r.result_1st);
   if (withResult.length === 0) return;
 
   const types = ['本命','対抗','中穴','万舟'];
@@ -522,8 +645,8 @@ function renderPatternAnalysis() {
 }
 
 // ======== 収支グラフ ========
-function renderProfitChart() {
-  const withResult = allRecords.filter(r => r.result_1st).slice().sort((a,b) => {
+function renderProfitChartWith(records) {
+  const withResult = records.filter(r => r.result_1st).slice().sort((a,b) => {
     if (a.race_date < b.race_date) return -1;
     if (a.race_date > b.race_date) return 1;
     return a.id - b.id;
@@ -564,8 +687,8 @@ function renderProfitChart() {
 }
 
 // ======== 日毎収支 ========
-function renderDaily() {
-  const withResult = allRecords.filter(r => r.result_1st && r.purchase);
+function renderDailyWith(records) {
+  const withResult = records.filter(r => r.result_1st && r.purchase);
   const sec = document.getElementById('daily-section');
   if (withResult.length === 0) { sec.style.display = 'none'; return; }
   sec.style.display = 'block';
@@ -661,8 +784,8 @@ function toggleDailyDetail(id) {
 }
 
 // ======== 会場別グラフ ========
-function renderVenueChart() {
-  const withResult = allRecords.filter(r => r.result_1st);
+function renderVenueChartWith(records) {
+  const withResult = records.filter(r => r.result_1st);
   if (withResult.length === 0) { document.getElementById('chart-section').style.display='none'; return; }
   document.getElementById('chart-section').style.display='block';
 
