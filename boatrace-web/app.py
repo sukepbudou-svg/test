@@ -401,56 +401,92 @@ def fetch_result():
     url = 'https://www.boatrace.jp/owpc/pc/race/raceresult?rno=' + str(race_no) + '&jcd=' + jcd + '&hd=' + hd
 
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'ja,en;q=0.5',
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
             html = resp.read().decode('utf-8', errors='ignore')
     except Exception as e:
-        return jsonify({'success': False, 'error': '取得失敗: ' + str(e)})
+        return jsonify({'success': False, 'error': '取得失敗: ' + str(e), 'url': url})
 
-    # 1〜3着の艇番を取得（複数パターン試行）
     boats_found = []
+    payout = 0
 
-    # パターン1: <td class="is-boatColor1">1</td>
-    m1 = re.findall(r'is-boatColor\d[^>]*>\s*(\d)\s*<', html)
-    if len(m1) >= 3:
-        boats_found = [int(x) for x in m1[:3]]
+    # --- 方法1: 3連単ペイアウト行から直接コンボを取得（最も信頼性が高い）---
+    # 例: "3連単</td><td>1-3-2</td><td>2,340円"
+    m_trio = re.search(r'(?:3連単|三連単)[^1-6]{0,100}([1-6])-([1-6])-([1-6])', html, re.DOTALL)
+    if m_trio:
+        boats_found = [int(m_trio.group(1)), int(m_trio.group(2)), int(m_trio.group(3))]
 
-    # パターン2: spanタグ内
+    # --- 方法2: 着順結果テーブルから艇番を順番に取得 ---
+    # まず結果テーブルのセクションだけ抽出（ページ後半のほうが結果テーブル）
     if len(boats_found) < 3:
-        m2 = re.findall(r'is-boatColor\d[^>]*>\s*<span[^>]*>\s*(\d)\s*</span>', html)
+        # 着順テーブルのセクションを特定（is-w495 や table1 など）
+        result_section_match = re.search(r'(?:is-w495|raceresult|着順)[^§]{0,5000}', html, re.DOTALL)
+        search_html = result_section_match.group(0) if result_section_match else html
+
+        # boat color td/span 内の艇番（ネストタグ対応）
+        m2 = re.findall(
+            r'<td[^>]+is-boatColor\d[^>]*>\s*(?:<[^>]+>\s*)*([1-6])\s*(?:</[^>]+>\s*)*</td>',
+            search_html, re.DOTALL
+        )
         if len(m2) >= 3:
             boats_found = [int(x) for x in m2[:3]]
 
-    # パターン3: 着順テーブルの艇番列を直接探す
+    # --- 方法3: boatColor属性内の数字（より緩いマッチ）---
     if len(boats_found) < 3:
-        m3 = re.findall(r'<(?:td|span)[^>]*boatColor[^>]*>\D*(\d)\D*</(?:td|span)>', html)
+        m3 = re.findall(r'boatColor\d["\s][^>]*>(?:\s*<[^/][^>]*>)*\s*([1-6])\s*', html)
         if len(m3) >= 3:
             boats_found = [int(x) for x in m3[:3]]
 
-    # パターン4: 3連単の出目から逆算（例: 1-3-2）
+    # --- 方法4: 連続するboatColor td（インラインテキスト）---
     if len(boats_found) < 3:
-        m4 = re.search(r'[\s>]([1-6])-([1-6])-([1-6])[\s<]', html)
-        if m4:
-            boats_found = [int(m4.group(1)), int(m4.group(2)), int(m4.group(3))]
+        m4 = re.findall(r'is-boatColor\d[^>]*>\s*([1-6])\s*<', html)
+        if len(m4) >= 3:
+            boats_found = [int(x) for x in m4[:3]]
+
+    # --- 方法5: >X-Y-Z< パターン（ページ内の出目表記）---
+    if len(boats_found) < 3:
+        # ページ内の "X-Y-Z" パターンを全部収集してうち3着完結のものを探す
+        all_combos = re.findall(r'(?<![0-9])([1-6])-([1-6])-([1-6])(?![0-9])', html)
+        if all_combos:
+            # 3連単ペイアウト行の近くにある最初のコンボを使う
+            boats_found = [int(all_combos[0][0]), int(all_combos[0][1]), int(all_combos[0][2])]
 
     if len(boats_found) < 3:
-        return jsonify({'success': False, 'error': '着順データが見つかりません。手動で入力してください。', 'url': url})
+        return jsonify({
+            'success': False,
+            'error': '着順データが見つかりません。手動で入力してください。',
+            'url': url,
+            'html_length': len(html),
+            'html_snippet': html[1000:2000] if len(html) > 1000 else html
+        })
 
     r1, r2, r3 = boats_found[0], boats_found[1], boats_found[2]
 
-    # 三連単払戻金を取得
-    # パターン: 三連単の払戻金額
-    payout = 0
-    trio_match = re.search(r'3連単.*?(\d[\d,]+)円', html, re.DOTALL)
-    if trio_match:
-        payout = int(trio_match.group(1).replace(',', ''))
-    else:
-        # 別パターン
-        payout_match = re.search(r'is-type3["\s][^>]*>.*?(\d[\d,]+)', html, re.DOTALL)
-        if payout_match:
-            payout = int(payout_match.group(1).replace(',', ''))
+    # --- 払戻金取得（複数パターン） ---
+    payout_patterns = [
+        r'3連単[^0-9]{0,200}([\d,]+)円',
+        r'三連単[^0-9]{0,200}([\d,]+)円',
+        r'is-type3[^0-9]{0,100}([\d,]+)',
+        r'([1-6])-([1-6])-([1-6])[^0-9]{0,50}([\d,]+)円',
+    ]
+    for pat in payout_patterns:
+        pm = re.search(pat, html, re.DOTALL)
+        if pm:
+            try:
+                # 最後のグループを金額として取得
+                amount_str = pm.group(pm.lastindex).replace(',', '')
+                val = int(amount_str)
+                if 100 <= val <= 9999999:
+                    payout = val
+                    break
+            except Exception:
+                continue
 
-    return jsonify({'success': True, 'r1': r1, 'r2': r2, 'r3': r3, 'payout': payout})
+    return jsonify({'success': True, 'r1': r1, 'r2': r2, 'r3': r3, 'payout': payout, 'url': url})
 
 
 @app.route('/update_result', methods=['POST'])

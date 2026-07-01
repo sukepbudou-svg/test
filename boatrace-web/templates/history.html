@@ -892,10 +892,18 @@ function openModal(id, venue, race_no, race_date) {
   document.getElementById('modal-combo').textContent = '?-?-?';
   document.getElementById('auto-fetch-status').textContent = '';
 
-  // 購入金額を予想点数×100円に自動設定
+  // 購入金額を自動計算：イン逃げ率60%以上→500円、未満→800円
+  // 本命予想が抜けている場合は100円×不足数を減算
   const rec = allRecords.find(function(r) { return r.id === id; });
-  const predCount = rec && rec.predictions ? rec.predictions.length : 8;
-  document.getElementById('r-purchase').value = predCount * 100;
+  if (rec) {
+    const nigeRate = rec.nige_rate;
+    const base = (nigeRate != null && nigeRate >= 60) ? 500 : 800;
+    const honmeiCount = rec.predictions ? rec.predictions.filter(function(p) { return p.type === '本命'; }).length : 2;
+    const missingHonmei = Math.max(0, 2 - honmeiCount);
+    document.getElementById('r-purchase').value = Math.max(100, base - missingHonmei * 100);
+  } else {
+    document.getElementById('r-purchase').value = 800;
+  }
 
   modalVenue = venue;
   modalRaceNo = race_no;
