@@ -478,11 +478,12 @@ def fetch_result():
             boats_found = [int(x) for x in m_boats2[:3]]
 
     if len(boats_found) < 3:
-        return jsonify({
-            'success': False,
-            'error': '着順データが見つかりません。手動で入力してください。',
-            'url': url,
-        })
+        # 結果未確定か判断するヒントをHTMLから探す
+        if 'boatColor' not in html:
+            msg = 'レース結果がまだ公開されていません。終了後1〜3分待ってから再試行してください。'
+        else:
+            msg = '着順データが見つかりません。結果が反映されていないか、特殊なレース（中止・欠場等）の可能性があります。手動で入力してください。'
+        return jsonify({'success': False, 'error': msg, 'url': url})
 
     r1, r2, r3 = boats_found[0], boats_found[1], boats_found[2]
 
