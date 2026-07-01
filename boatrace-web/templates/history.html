@@ -767,10 +767,11 @@ function renderDailyWith(records) {
         r.wind ? `💨${r.wind}` : ''
       ].filter(Boolean).join(' ');
       return `<tr style="border-bottom:1px solid var(--border);font-size:11px;">
-        <td style="padding:4px 6px;">${r.venue} ${r.race_no}R${subInfo ? `　<span style="font-size:9px;color:#aaa;">${subInfo}</span>` : ''}</td>
-        <td style="padding:4px 6px;font-family:'Orbitron',monospace;color:var(--accent3);">${result}</td>
-        <td style="padding:4px 6px;">${hitMark}</td>
-        <td style="padding:4px 6px;text-align:right;">${profit}</td>
+        <td style="padding:4px 6px;white-space:nowrap;">${r.venue} ${r.race_no}R</td>
+        <td style="padding:4px 6px;font-size:9px;color:#aaa;white-space:nowrap;">${subInfo}</td>
+        <td style="padding:4px 6px;font-family:'Orbitron',monospace;color:var(--accent3);white-space:nowrap;">${result}</td>
+        <td style="padding:4px 6px;white-space:nowrap;">${hitMark}</td>
+        <td style="padding:4px 6px;text-align:right;white-space:nowrap;">${profit}</td>
       </tr>`;
     }).join('');
 
@@ -786,7 +787,8 @@ function renderDailyWith(records) {
         ${chartHtml}
         <table style="width:100%;border-collapse:collapse;">
           <thead><tr style="font-size:10px;color:var(--text-muted);">
-            <th style="padding:3px 6px;text-align:left;">レース</th>
+            <th style="padding:3px 6px;text-align:left;white-space:nowrap;">レース</th>
+            <th style="padding:3px 6px;text-align:left;">条件</th>
             <th style="padding:3px 6px;text-align:left;">結果</th>
             <th style="padding:3px 6px;">的中</th>
             <th style="padding:3px 6px;text-align:right;">収支</th>
