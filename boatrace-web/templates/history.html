@@ -279,9 +279,17 @@ h1 {
     </div>
     <div class="filter-row">
       <div class="filter-label">イン逃げ率</div>
-      <div class="nige-slider-wrap">
-        <input type="range" class="nige-slider" id="nige-filter-slider" min="0" max="80" step="5" value="0" oninput="onNigeSlider()">
-        <div class="nige-val" id="nige-filter-val">制限なし</div>
+      <div style="display:flex;flex-direction:column;gap:6px;flex:1;">
+        <div class="nige-slider-wrap">
+          <span style="font-size:10px;color:var(--text-muted);width:28px;flex-shrink:0;">以上</span>
+          <input type="range" class="nige-slider" id="nige-filter-min" min="0" max="100" step="5" value="0" oninput="onNigeSlider()">
+          <div class="nige-val" id="nige-filter-min-val">制限なし</div>
+        </div>
+        <div class="nige-slider-wrap">
+          <span style="font-size:10px;color:var(--text-muted);width:28px;flex-shrink:0;">以下</span>
+          <input type="range" class="nige-slider" id="nige-filter-max" min="0" max="100" step="5" value="100" oninput="onNigeSlider()">
+          <div class="nige-val" id="nige-filter-max-val">制限なし</div>
+        </div>
       </div>
     </div>
     <div class="filter-row">
@@ -443,14 +451,17 @@ let currentFilter = 'all';
 let allRecords = [];
 let selectedVenues = new Set();
 let nigeFilterMin = 0;
+let nigeFilterMax = 100;
 let manzokuOnly = false;
 
 // ======== 絞り込みロジック ========
 function getFilteredRecords() {
   return allRecords.filter(r => {
     if (selectedVenues.size > 0 && !selectedVenues.has(r.venue)) return false;
-    if (nigeFilterMin > 0) {
-      if (r.nige_rate == null || r.nige_rate < nigeFilterMin) return false;
+    if (nigeFilterMin > 0 || nigeFilterMax < 100) {
+      if (r.nige_rate == null) return false;
+      if (r.nige_rate < nigeFilterMin) return false;
+      if (r.nige_rate > nigeFilterMax) return false;
     }
     if (manzokuOnly) {
       if (!r.payout || r.payout < 10000) return false;
@@ -479,8 +490,15 @@ function toggleVenue(v) {
 }
 
 function onNigeSlider() {
-  nigeFilterMin = parseInt(document.getElementById('nige-filter-slider').value);
-  document.getElementById('nige-filter-val').textContent = nigeFilterMin > 0 ? nigeFilterMin + '%以上' : '制限なし';
+  nigeFilterMin = parseInt(document.getElementById('nige-filter-min').value);
+  nigeFilterMax = parseInt(document.getElementById('nige-filter-max').value);
+  // 以上 > 以下 になったら自動補正
+  if (nigeFilterMin > nigeFilterMax) {
+    nigeFilterMax = nigeFilterMin;
+    document.getElementById('nige-filter-max').value = nigeFilterMax;
+  }
+  document.getElementById('nige-filter-min-val').textContent = nigeFilterMin > 0 ? nigeFilterMin + '%以上' : '制限なし';
+  document.getElementById('nige-filter-max-val').textContent = nigeFilterMax < 100 ? nigeFilterMax + '%以下' : '制限なし';
   applyFilter();
 }
 
@@ -494,9 +512,12 @@ function toggleManzoku() {
 function resetFilter() {
   selectedVenues.clear();
   nigeFilterMin = 0;
+  nigeFilterMax = 100;
   manzokuOnly = false;
-  document.getElementById('nige-filter-slider').value = 0;
-  document.getElementById('nige-filter-val').textContent = '制限なし';
+  document.getElementById('nige-filter-min').value = 0;
+  document.getElementById('nige-filter-max').value = 100;
+  document.getElementById('nige-filter-min-val').textContent = '制限なし';
+  document.getElementById('nige-filter-max-val').textContent = '制限なし';
   document.querySelectorAll('.venue-chip').forEach(el => el.classList.remove('selected'));
   const btn = document.getElementById('manzoku-toggle');
   if (btn) btn.classList.remove('selected');
@@ -506,7 +527,7 @@ function resetFilter() {
 function updateFilterLabel() {
   const filtered = getFilteredRecords();
   const total = allRecords.length;
-  const isFiltered = selectedVenues.size > 0 || nigeFilterMin > 0 || manzokuOnly;
+  const isFiltered = selectedVenues.size > 0 || nigeFilterMin > 0 || nigeFilterMax < 100 || manzokuOnly;
   const label = document.getElementById('filter-active-label');
   if (isFiltered) {
     label.textContent = `絞り込み中: 全${total}件 → ${filtered.length}件対象`;
