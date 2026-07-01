@@ -466,19 +466,40 @@ def fetch_result():
 
     r1, r2, r3 = boats_found[0], boats_found[1], boats_found[2]
 
-    # --- 払戻金取得（複数パターン） ---
+    # --- 払戻金取得 ---
+    # boatrace.jp の払戻テーブルは「3連単」→コンボ→金額 の順に並ぶ
+    # 金額は "2,340" 形式（円なし）または "2,340円" のどちらもある
+    payout = 0
+    payout_debug = ''
+
+    # 3連単セクションの前後テキストを抽出してデバッグ用に返す
+    trio_idx = html.find('3連単')
+    if trio_idx == -1:
+        trio_idx = html.find('三連単')
+    if trio_idx >= 0:
+        payout_debug = html[trio_idx:trio_idx+300].replace('\n','').replace('\r','')
+
     payout_patterns = [
-        r'3連単[^0-9]{0,200}([\d,]+)円',
-        r'三連単[^0-9]{0,200}([\d,]+)円',
-        r'is-type3[^0-9]{0,100}([\d,]+)',
-        r'([1-6])-([1-6])-([1-6])[^0-9]{0,50}([\d,]+)円',
+        # コンボ直後の金額（円あり）
+        (r'(?:3連単|三連単)[^1-6]{0,100}[1-6]-[1-6]-[1-6][^0-9]{0,80}([\d,]{3,})円', -1),
+        # コンボ直後の金額（円なし、3桁以上）
+        (r'(?:3連単|三連単)[^1-6]{0,100}[1-6]-[1-6]-[1-6][^0-9]{0,80}([\d,]{3,})', -1),
+        # 3連単 直後の3桁以上の数字（円あり）
+        (r'(?:3連単|三連単)[^0-9]{0,200}([\d,]{3,})円', -1),
+        # 3連単 直後の3桁以上の数字（円なし）
+        (r'(?:3連単|三連単)[^0-9]{0,200}([\d,]{3,})', -1),
+        # is-payout クラス
+        (r'is-payout\d?[^>]*>([\d,]{3,})', -1),
+        # is-pay クラス
+        (r'is-pay[^>]*>¥?([\d,]{3,})', -1),
+        # クラス名 type3（3連単のtype）
+        (r'is-type3[^0-9]{0,200}([\d,]{3,})', -1),
     ]
-    for pat in payout_patterns:
+    for pat, grp in payout_patterns:
         pm = re.search(pat, html, re.DOTALL)
         if pm:
             try:
-                # 最後のグループを金額として取得
-                amount_str = pm.group(pm.lastindex).replace(',', '')
+                amount_str = pm.group(pm.lastindex if grp == -1 else grp).replace(',', '')
                 val = int(amount_str)
                 if 100 <= val <= 9999999:
                     payout = val
@@ -486,7 +507,13 @@ def fetch_result():
             except Exception:
                 continue
 
-    return jsonify({'success': True, 'r1': r1, 'r2': r2, 'r3': r3, 'payout': payout, 'url': url})
+    return jsonify({
+        'success': True,
+        'r1': r1, 'r2': r2, 'r3': r3,
+        'payout': payout,
+        'payout_debug': payout_debug if payout == 0 else '',
+        'url': url
+    })
 
 
 @app.route('/update_result', methods=['POST'])

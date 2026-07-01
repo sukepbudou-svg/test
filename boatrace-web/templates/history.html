@@ -932,10 +932,16 @@ async function autoFetchResult() {
       document.getElementById('r1st').value = data.r1;
       document.getElementById('r2nd').value = data.r2;
       document.getElementById('r3rd').value = data.r3;
-      if (data.payout > 0) document.getElementById('r-payout').value = data.payout;
+      if (data.payout > 0) {
+        document.getElementById('r-payout').value = data.payout;
+        statusEl.style.color = 'var(--green)';
+        statusEl.textContent = '✓ 取得成功！内容を確認して保存してください';
+      } else {
+        statusEl.style.color = '#ffd740';
+        statusEl.textContent = '⚠️ 着順取得OK・払戻金が取得できませんでした。手動で入力してください。';
+        if (data.payout_debug) console.log('[払戻デバッグ]', data.payout_debug);
+      }
       updateComboDisplay();
-      statusEl.style.color = 'var(--green)';
-      statusEl.textContent = '✓ 取得成功！内容を確認して保存してください';
     } else {
       statusEl.style.color = 'var(--accent)';
       statusEl.textContent = '❌ ' + data.error;
