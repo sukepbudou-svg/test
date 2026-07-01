@@ -488,32 +488,38 @@ def fetch_result():
 
     # 3連単セクションを切り出す
     payout_debug = ''
-    trio_idx = html.find('3連単')
-    if trio_idx < 0:
-        trio_idx = html.find('三連単')
+    # 3連単の払戻金: numberSet1コンボdivの閉じタグ直後のtdに金額がある
+    # 構造: 3連単</td><td>[numberSet1_row...</div></div></td><td>金額</td>
+    m_payout = re.search(
+        r'(?:3連単|三連単).{0,2000}?</div>\s*</div>\s*</td>\s*<td[^>]*>\s*([\d,]+)\s*</td>',
+        html, re.DOTALL
+    )
+    if m_payout:
+        try:
+            val = int(m_payout.group(1).replace(',', ''))
+            if val >= 100:
+                payout = val
+        except Exception:
+            pass
 
-    if trio_idx >= 0:
-        # 3連単から次の券種（3連複/2連単/単勝など）までを抽出
-        trio_end = len(html)
-        for marker in ['3連複', '2連単', '2連複', '単勝', '複勝', '拡連複']:
-            idx = html.find(marker, trio_idx + 5)
-            if 0 < idx < trio_end:
-                trio_end = idx
-        trio_html = html[trio_idx:trio_end]
-        payout_debug = trio_html[:800].replace('\n', '').replace('\r', '')
-
-        # 3連単セクション内の3桁以上の数字を探す（艇番1-6は除外）
-        amounts_in_trio = re.findall(r'>(\d[\d,]*)<', trio_html)
-        for a in amounts_in_trio:
-            try:
-                val = int(a.replace(',', ''))
-                if val >= 100:  # 払戻金は最低100円以上
-                    payout = val
+    # フォールバック1: 3連単から1500文字以内の最初の100以上の数字
+    if payout == 0:
+        for keyword in ['3連単', '三連単']:
+            idx = html.find(keyword)
+            if idx >= 0:
+                area = html[idx:idx+1500]
+                for a in re.findall(r'>(\d[\d,]*)<', area):
+                    try:
+                        val = int(a.replace(',', ''))
+                        if val >= 100:
+                            payout = val
+                            break
+                    except Exception:
+                        pass
+                if payout:
                     break
-            except Exception:
-                continue
 
-    # フォールバック: is-payout / is-pay クラスから取得
+    # フォールバック2: is-payout / is-pay クラスから取得
     if payout == 0:
         for pat in [r'is-payout\d*[^>]*>([\d,]+)', r'is-pay[^>]*>[\s¥]*([\d,]+)']:
             pm = re.search(pat, html)
