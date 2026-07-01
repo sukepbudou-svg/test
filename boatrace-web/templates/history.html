@@ -284,6 +284,10 @@ h1 {
         <div class="nige-val" id="nige-filter-val">制限なし</div>
       </div>
     </div>
+    <div class="filter-row">
+      <div class="filter-label">万舟</div>
+      <div id="manzoku-toggle" class="venue-chip" onclick="toggleManzoku()" style="background:rgba(180,0,255,0.1);border-color:rgba(180,0,255,0.4);color:#b400ff;cursor:pointer;">💜 払戻1万円以上のみ</div>
+    </div>
     <div class="filter-apply-bar">
       <div class="filter-active-label" id="filter-active-label"></div>
     </div>
@@ -439,6 +443,7 @@ let currentFilter = 'all';
 let allRecords = [];
 let selectedVenues = new Set();
 let nigeFilterMin = 0;
+let manzokuOnly = false;
 
 // ======== 絞り込みロジック ========
 function getFilteredRecords() {
@@ -446,6 +451,9 @@ function getFilteredRecords() {
     if (selectedVenues.size > 0 && !selectedVenues.has(r.venue)) return false;
     if (nigeFilterMin > 0) {
       if (r.nige_rate == null || r.nige_rate < nigeFilterMin) return false;
+    }
+    if (manzokuOnly) {
+      if (!r.payout || r.payout < 10000) return false;
     }
     return true;
   });
@@ -476,19 +484,29 @@ function onNigeSlider() {
   applyFilter();
 }
 
+function toggleManzoku() {
+  manzokuOnly = !manzokuOnly;
+  const btn = document.getElementById('manzoku-toggle');
+  btn.classList.toggle('selected', manzokuOnly);
+  applyFilter();
+}
+
 function resetFilter() {
   selectedVenues.clear();
   nigeFilterMin = 0;
+  manzokuOnly = false;
   document.getElementById('nige-filter-slider').value = 0;
   document.getElementById('nige-filter-val').textContent = '制限なし';
   document.querySelectorAll('.venue-chip').forEach(el => el.classList.remove('selected'));
+  const btn = document.getElementById('manzoku-toggle');
+  if (btn) btn.classList.remove('selected');
   applyFilter();
 }
 
 function updateFilterLabel() {
   const filtered = getFilteredRecords();
   const total = allRecords.length;
-  const isFiltered = selectedVenues.size > 0 || nigeFilterMin > 0;
+  const isFiltered = selectedVenues.size > 0 || nigeFilterMin > 0 || manzokuOnly;
   const label = document.getElementById('filter-active-label');
   if (isFiltered) {
     label.textContent = `絞り込み中: 全${total}件 → ${filtered.length}件対象`;
