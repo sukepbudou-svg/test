@@ -259,12 +259,123 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None):
     for i, c in enumerate(candidates[:len(type_labels)]):
         results.append({'combo': c['combo'], 'type': type_labels[i], 'combined': round(c['combined'], 2)})
 
+    chaos = calc_chaos(scores, boats, vp, wind_effect, nige_rate)
+
+    # 荒れモード: イン逃げ率が50%未満のとき別予想を追加
+    if nige_rate is not None and nige_rate < 50:
+        arekote = predict_arekote(scores, candidates, wind, wind_effect)
+        return {
+            'predictions': results,
+            'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2)} for c in candidates[:60]],
+            'score_order': [{'course': s['course'], 'boat_number': s['boat']['boat_number'], 'score': round(s['score'], 2)} for s in scores],
+            'chaos': chaos,
+            'arekote_mode': True,
+            'arekote_predictions': arekote,
+        }
+
     return {
         'predictions': results,
         'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2)} for c in candidates[:60]],
         'score_order': [{'course': s['course'], 'boat_number': s['boat']['boat_number'], 'score': round(s['score'], 2)} for s in scores],
-        'chaos': calc_chaos(scores, boats, vp, wind_effect, nige_rate)
+        'chaos': chaos,
     }
+
+
+def predict_arekote(scores, candidates, wind, wind_effect):
+    """
+    荒れモード予想（イン逃げ率 < 50% 時）
+    万舟×2 + 裏熊×3（展開重視、1号艇除外）+ 裏熊×1（差し/まくり判断で1号艇2or3着）
+    """
+    # 万舟×2: 既存候補リストの最後尾（低スコア＝高倍率）上位2点
+    # candidatesはスコア降順なので末尾から取る（ただし候補が少ない場合は後半から）
+    manzoku = []
+    seen_manzoku = set()
+    for c in reversed(candidates):
+        if c['combo'] not in seen_manzoku:
+            manzoku.append({'combo': c['combo'], 'type': '万舟'})
+            seen_manzoku.add(c['combo'])
+        if len(manzoku) >= 2:
+            break
+
+    # 展開スコア算出（1号艇除外）
+    # 追い風/横風: 3-4コース加点、向かい風: 2号艇加点
+    wind_str = wind or ''
+    is_mukai = '向かい風' in wind_str
+    is_oi_or_yoko = any(w in wind_str for w in ['追い風', '横風'])
+
+    outer_boats = [s for s in scores if s['course'] != 1]
+    tenkai_scores = []
+    for s in outer_boats:
+        ts = s['score']
+        c = s['course']
+        if is_mukai and c == 2:
+            ts += wind_effect * 1.5
+        if is_oi_or_yoko and c in (3, 4):
+            ts += wind_effect * 1.2
+        tenkai_scores.append({'course': c, 'boat_number': s['boat']['boat_number'], 'ts': ts})
+
+    tenkai_scores.sort(key=lambda x: x['ts'], reverse=True)
+    top_tenkai = tenkai_scores[:4]
+
+    # 裏熊×3: 展開スコア上位4艇の3連単コンボ（スコア上位3点）
+    import itertools
+    ura_combos = []
+    seen_ura = set()
+    top_bns = [t['boat_number'] for t in top_tenkai]
+    for perm in itertools.permutations(top_bns, 3):
+        combo_str = f"{perm[0]}-{perm[1]}-{perm[2]}"
+        if combo_str in seen_ura:
+            continue
+        seen_ura.add(combo_str)
+        # スコア = 1着TS×3 + 2着TS×2 + 3着TS
+        ts_map = {t['boat_number']: t['ts'] for t in top_tenkai}
+        combined = ts_map[perm[0]] * 3 + ts_map[perm[1]] * 2 + ts_map[perm[2]]
+        ura_combos.append({'combo': combo_str, 'combined': combined})
+
+    ura_combos.sort(key=lambda x: x['combined'], reverse=True)
+    ura_3 = [{'combo': u['combo'], 'type': '裏熊'} for u in ura_combos[:3]]
+
+    # 裏熊×1: 差し/まくり判断で1号艇を2着or3着に配置
+    # まくり要因: 追い風/横風 + 3-4コースが上位スコア → 1号艇3着
+    # 差し要因: 向かい風 + 2コース上位 → 1号艇2着
+    outer_top3_courses = [s['course'] for s in outer_boats[:3]]
+    makuri_score = 0
+    sashi_score = 0
+    if is_oi_or_yoko:
+        makuri_score += wind_effect
+    if is_mukai:
+        sashi_score += wind_effect
+    if 3 in outer_top3_courses or 4 in outer_top3_courses:
+        makuri_score += 1.0
+    if 2 in outer_top3_courses:
+        sashi_score += 1.0
+
+    # 1号艇の配置決定
+    boat1_bn = None
+    for s in scores:
+        if s['course'] == 1:
+            boat1_bn = s['boat']['boat_number']
+            break
+    if boat1_bn is None:
+        boat1_bn = 1
+
+    # 最も展開スコアが高い非1号艇を1着に
+    best_first = top_tenkai[0]['boat_number'] if top_tenkai else 2
+    # 2着候補（1着・1号艇以外）
+    seconds = [t['boat_number'] for t in top_tenkai if t['boat_number'] not in (best_first, boat1_bn)]
+
+    if makuri_score >= sashi_score:
+        # まくり: 1号艇3着
+        second_bn = seconds[0] if seconds else (top_tenkai[1]['boat_number'] if len(top_tenkai) > 1 else 2)
+        ura_1_combo = f"{best_first}-{second_bn}-{boat1_bn}"
+    else:
+        # 差し: 1号艇2着
+        third_bn = seconds[0] if seconds else (top_tenkai[1]['boat_number'] if len(top_tenkai) > 1 else 3)
+        ura_1_combo = f"{best_first}-{boat1_bn}-{third_bn}"
+
+    ura_1 = [{'combo': ura_1_combo, 'type': '裏熊'}]
+
+    return manzoku + ura_3 + ura_1
 
 
 def calc_chaos(scores, boats, vp, wind_effect, nige_rate=None):

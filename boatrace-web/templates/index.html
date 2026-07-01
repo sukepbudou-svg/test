@@ -1893,6 +1893,41 @@ function renderResult(data) {
     }
   }
 
+  // 荒れモード
+  if (data.arekote_mode) {
+    html += `<div style="background:linear-gradient(135deg,rgba(255,80,80,0.18),rgba(180,0,180,0.12));border:1.5px solid #ff5050;border-radius:10px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+      <span style="font-size:18px;">⚠️</span>
+      <span style="font-weight:900;color:#ff5050;letter-spacing:1px;font-size:14px;">荒れモード発動中</span>
+      <span style="font-size:11px;color:#aaa;margin-left:4px;">イン逃げ率50%未満 — 1号艇飛びを想定した特別予想</span>
+    </div>`;
+    const arekote = data.arekote_predictions || [];
+    const manzokuItems = arekote.filter(p => p.type === '万舟');
+    const uraItems = arekote.filter(p => p.type === '裏熊');
+    for (const item of manzokuItems) {
+      const oddsVal = getTriOdds(item.combo);
+      let oddsHtml = '';
+      if (oddsVal !== null) {
+        const oc = oddsVal > 100 ? 'high' : '';
+        oddsHtml = `<span class="odds-tag ${oc}">${oddsVal.toFixed(1)}倍</span>`;
+      }
+      html += `<div class="pred-item pred-manshu">
+        <span class="pred-label">万舟</span>
+        <span class="pred-combo">${item.combo}</span>${oddsHtml}
+      </div>`;
+    }
+    for (const item of uraItems) {
+      const oddsVal = getTriOdds(item.combo);
+      let oddsHtml = '';
+      if (oddsVal !== null) {
+        const oc = oddsVal < 20 ? 'low' : oddsVal > 100 ? 'high' : '';
+        oddsHtml = `<span class="odds-tag ${oc}">${oddsVal.toFixed(1)}倍</span>`;
+      }
+      html += `<div class="pred-item" style="background:linear-gradient(135deg,rgba(180,0,220,0.18),rgba(100,0,180,0.10));border-color:#b000dc;">
+        <span class="pred-label" style="background:linear-gradient(135deg,#b000dc,#7000b0);color:#fff;">裏熊</span>
+        <span class="pred-combo">${item.combo}</span>${oddsHtml}
+      </div>`;
+    }
+  } else {
   // 各タイプ表示
   for (const type of TYPE_ORDER) {
     const items = classified[type] || [];
@@ -1917,6 +1952,7 @@ function renderResult(data) {
       </div>`;
     }
   }
+  } // end else (normal mode)
 
   // 荒れ度（万舟予想の直下）
   if (data.chaos) {
