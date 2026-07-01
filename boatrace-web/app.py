@@ -492,28 +492,35 @@ def fetch_result():
     # 例: <span class="numberSet1_number is-type1">1</span>...<span is-type6>6</span>...<span is-type2>2</span>
     # 金額は別の td に "2,340" 形式で入る
 
-    # 3連単セクションを切り出す
-    payout_debug = ''
-    # 3連単から2000文字以内で、100以上の数値（払戻金）を取得
-    # td内に改行・スペースがある形式に対応: >\s*1,230\s*<
-    for keyword in ['3連単', '三連単']:
-        idx = html.find(keyword)
-        if idx >= 0:
-            area = html[idx:idx+2000]
-            for a in re.findall(r'>\s*(\d[\d,]*)\s*<', area):
-                try:
-                    val = int(a.replace(',', ''))
-                    if val >= 100:
-                        payout = val
-                        break
-                except Exception:
-                    pass
-            if payout:
-                break
+    # 実際の形式: <span class="is-payout1">&yen;420</span>
+    # &yen; (¥記号のHTMLエンティティ) の後に金額が入っている
+    m_payout = re.search(r'is-payout1[^>]*>\s*(?:&yen;|¥|￥)\s*([\d,]+)', html)
+    if m_payout:
+        try:
+            payout = int(m_payout.group(1).replace(',', ''))
+        except Exception:
+            pass
 
-    # フォールバック: is-payout / is-pay クラスから取得
+    # フォールバック: &yen; を含む数字を3連単セクションから取得
     if payout == 0:
-        for pat in [r'is-payout\d*[^>]*>\s*([\d,]+)', r'is-pay[^>]*>\s*[\s¥]*([\d,]+)']:
+        for keyword in ['3連単', '三連単']:
+            idx = html.find(keyword)
+            if idx >= 0:
+                area = html[idx:idx+2000]
+                for a in re.findall(r'(?:&yen;|¥|￥)\s*([\d,]+)', area):
+                    try:
+                        val = int(a.replace(',', ''))
+                        if val >= 100:
+                            payout = val
+                            break
+                    except Exception:
+                        pass
+                if payout:
+                    break
+
+    # 最終フォールバック: is-payout / is-pay クラスから取得
+    if payout == 0:
+        for pat in [r'is-payout\d*[^>]*>\s*(?:&yen;|¥|￥)?\s*([\d,]+)', r'is-pay[^>]*>\s*(?:&yen;|¥|￥)?\s*([\d,]+)']:
             pm = re.search(pat, html)
             if pm:
                 try:
