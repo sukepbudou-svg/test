@@ -488,40 +488,26 @@ def fetch_result():
 
     # 3連単セクションを切り出す
     payout_debug = ''
-    # 3連単の払戻金: numberSet1コンボdivの閉じタグ直後のtdに金額がある
-    # 構造: 3連単</td><td>[numberSet1_row...</div></div></td><td>金額</td>
-    m_payout = re.search(
-        r'(?:3連単|三連単).{0,2000}?</div>\s*</div>\s*</td>\s*<td[^>]*>\s*([\d,]+)\s*</td>',
-        html, re.DOTALL
-    )
-    if m_payout:
-        try:
-            val = int(m_payout.group(1).replace(',', ''))
-            if val >= 100:
-                payout = val
-        except Exception:
-            pass
+    # 3連単から2000文字以内で、100以上の数値（払戻金）を取得
+    # td内に改行・スペースがある形式に対応: >\s*1,230\s*<
+    for keyword in ['3連単', '三連単']:
+        idx = html.find(keyword)
+        if idx >= 0:
+            area = html[idx:idx+2000]
+            for a in re.findall(r'>\s*(\d[\d,]*)\s*<', area):
+                try:
+                    val = int(a.replace(',', ''))
+                    if val >= 100:
+                        payout = val
+                        break
+                except Exception:
+                    pass
+            if payout:
+                break
 
-    # フォールバック1: 3連単から1500文字以内の最初の100以上の数字
+    # フォールバック: is-payout / is-pay クラスから取得
     if payout == 0:
-        for keyword in ['3連単', '三連単']:
-            idx = html.find(keyword)
-            if idx >= 0:
-                area = html[idx:idx+1500]
-                for a in re.findall(r'>(\d[\d,]*)<', area):
-                    try:
-                        val = int(a.replace(',', ''))
-                        if val >= 100:
-                            payout = val
-                            break
-                    except Exception:
-                        pass
-                if payout:
-                    break
-
-    # フォールバック2: is-payout / is-pay クラスから取得
-    if payout == 0:
-        for pat in [r'is-payout\d*[^>]*>([\d,]+)', r'is-pay[^>]*>[\s¥]*([\d,]+)']:
+        for pat in [r'is-payout\d*[^>]*>\s*([\d,]+)', r'is-pay[^>]*>\s*[\s¥]*([\d,]+)']:
             pm = re.search(pat, html)
             if pm:
                 try:
