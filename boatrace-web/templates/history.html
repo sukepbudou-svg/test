@@ -559,11 +559,8 @@ function renderRecords() {
       ? `<span style="font-family:'Orbitron',monospace;font-weight:700;color:var(--accent3)">${r.result_1st}-${r.result_2nd}-${r.result_3rd}</span>`
       : '<span style="color:var(--text-muted)">未入力</span>';
 
-    const missPayoutStr = (!r.is_hit && r.result_1st && r.payout)
-      ? `<br><span style="font-size:10px;color:var(--text-muted);">(${r.payout.toLocaleString()}円)</span>`
-      : '';
     const hitBadge = r.result_1st
-      ? (r.is_hit ? '<span class="badge-hit">◎ 的中</span>' : `<span class="badge-miss">× 不的中</span>${missPayoutStr}`)
+      ? (r.is_hit ? '<span class="badge-hit">◎ 的中</span>' : '<span class="badge-miss">× 不的中</span>')
       : '<span class="badge-none">-</span>';
 
     let payout;
