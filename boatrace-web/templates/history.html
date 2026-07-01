@@ -767,7 +767,7 @@ function renderDailyWith(records) {
         r.wind ? `💨${r.wind}` : ''
       ].filter(Boolean).join(' ');
       return `<tr style="border-bottom:1px solid var(--border);font-size:11px;">
-        <td style="padding:4px 6px;">${r.venue} ${r.race_no}R${subInfo ? `<br><span style="font-size:9px;color:#aaa;">${subInfo}</span>` : ''}</td>
+        <td style="padding:4px 6px;">${r.venue} ${r.race_no}R${subInfo ? `　<span style="font-size:9px;color:#aaa;">${subInfo}</span>` : ''}</td>
         <td style="padding:4px 6px;font-family:'Orbitron',monospace;color:var(--accent3);">${result}</td>
         <td style="padding:4px 6px;">${hitMark}</td>
         <td style="padding:4px 6px;text-align:right;">${profit}</td>
