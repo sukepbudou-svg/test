@@ -148,7 +148,7 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
-def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None):
+def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_arekote=False):
     # 会場プロファイル取得
     vp = VENUE_PROFILES.get(venue, {"in_rate": 0.0, "upset": 0.5, "wind": 0.5})
     wind_bonus = WIND_UPSET_BONUS.get(wind, 0.0)
@@ -261,8 +261,8 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None):
 
     chaos = calc_chaos(scores, boats, vp, wind_effect, nige_rate)
 
-    # 荒れモード: イン逃げ率が50%未満のとき別予想を追加
-    if nige_rate is not None and nige_rate < 50:
+    # 荒れモード: イン逃げ率が50%未満、または強制フラグ
+    if force_arekote or (nige_rate is not None and nige_rate < 50):
         arekote = predict_arekote(scores, candidates, wind, wind_effect)
         return {
             'predictions': results,
@@ -462,7 +462,8 @@ def predict_route():
     venue = data.get('venue', None)
     wind = data.get('wind', None)
     nige_rate = data.get('nige_rate', None)
-    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate)
+    force_arekote = data.get('force_arekote', False)
+    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote)
     return jsonify(result)
 
 

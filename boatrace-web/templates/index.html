@@ -812,6 +812,7 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
         <div id="nige-rate-comment" style="font-size:10px;margin-top:4px;"></div>
       </div>
       <button class="btn btn-predict" onclick="runPredict()">🎯 予想する</button>
+      <button class="btn" onclick="runPredict(true)" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#7000b0,#b000dc);color:#fff;font-weight:900;letter-spacing:1px;border:none;border-radius:8px;padding:10px 0;font-size:14px;">🐻 裏熊予想</button>
       <button class="btn" id="btn-save" onclick="saveRecord()" style="display:none;width:100%;margin-top:8px;background:linear-gradient(135deg,var(--green),#00a854);color:#000;font-weight:900;">💾 予想を保存</button>
       <div style="margin-top:8px;text-align:right;">
         <a href="/history" target="_blank" style="font-size:11px;color:var(--accent3);text-decoration:none;letter-spacing:1px;">📊 記録・成績を見る →</a>
@@ -1618,7 +1619,7 @@ function parseData(name) {
 }
 
 // ======== Predict ========
-async function runPredict() {
+async function runPredict(forceArekote = false) {
   const area = document.getElementById('result-area');
   area.innerHTML = `<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div><span>予想計算中...</span></div>`;
 
@@ -1657,7 +1658,7 @@ async function runPredict() {
   const resp = await fetch('/predict', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ boats, kimari: kimariPayload, venue, wind, nige_rate: lastNigeRate })
+    body: JSON.stringify({ boats, kimari: kimariPayload, venue, wind, nige_rate: lastNigeRate, force_arekote: forceArekote })
   });
   const data = await resp.json();
   document.getElementById('status-save').textContent = '';
