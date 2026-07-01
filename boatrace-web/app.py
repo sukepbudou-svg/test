@@ -418,15 +418,21 @@ def debug_html():
         if len(snippets) >= 10:
             break
 
-    # 3連単セクション
+    # HTMLをファイルに保存（直接確認用）
+    save_path = os.path.join(os.path.dirname(__file__), 'debug_result.html')
+    with open(save_path, 'w', encoding='utf-8') as f:
+        f.write(html)
+
+    # 3連単セクション（2000文字）
     trio_idx = html.find('3連単')
-    trio_snippet = html[trio_idx:trio_idx+400].replace('\n', ' ') if trio_idx >= 0 else '(3連単 not found)'
+    trio_snippet = html[trio_idx:trio_idx+2000].replace('\n', ' ') if trio_idx >= 0 else '(3連単 not found)'
 
     return jsonify({
         'url': url,
         'html_length': len(html),
         'boatcolor_snippets': snippets,
         'trio_section': trio_snippet,
+        'saved_to': save_path,
     })
 
 
