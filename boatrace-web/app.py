@@ -500,7 +500,7 @@ def fetch_result():
             if 0 < idx < trio_end:
                 trio_end = idx
         trio_html = html[trio_idx:trio_end]
-        payout_debug = trio_html[:300].replace('\n', '').replace('\r', '')
+        payout_debug = trio_html[:800].replace('\n', '').replace('\r', '')
 
         # 3連単セクション内の3桁以上の数字を探す（艇番1-6は除外）
         amounts_in_trio = re.findall(r'>(\d[\d,]*)<', trio_html)
