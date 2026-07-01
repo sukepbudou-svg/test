@@ -423,7 +423,9 @@ h1 {
     </div>
     <div style="margin-bottom:10px;">
       <button id="btn-auto-fetch" onclick="autoFetchResult()" style="width:100%;padding:8px;background:linear-gradient(135deg,#0050dd,#0099ff);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;">🌐 公式サイトから結果を自動取得</button>
-      <div id="auto-fetch-status" style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:4px;"></div>
+      <div id="auto-fetch-status" style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:4px;min-height:16px;"></div>
+      <button onclick="debugHtml()" style="width:100%;padding:4px;background:#333;color:#aaa;border:1px solid #555;border-radius:4px;font-size:10px;cursor:pointer;margin-top:4px;">🔍 HTML構造を確認（開発者向け）</button>
+      <pre id="debug-output" style="display:none;font-size:9px;color:#aaa;background:#111;padding:6px;border-radius:4px;overflow:auto;max-height:200px;white-space:pre-wrap;margin-top:4px;"></pre>
     </div>
     <div class="modal-btns">
       <button class="btn-modal-cancel" onclick="closeModal()">キャンセル</button>
@@ -951,6 +953,23 @@ async function autoFetchResult() {
     statusEl.textContent = '❌ 通信エラー。手動で入力してください';
   }
   document.getElementById('btn-auto-fetch').disabled = false;
+}
+
+async function debugHtml() {
+  const out = document.getElementById('debug-output');
+  out.style.display = 'block';
+  out.textContent = '取得中...';
+  try {
+    const resp = await fetch('/debug_html', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ venue: modalVenue, race_no: modalRaceNo, race_date: modalRaceDate })
+    });
+    const data = await resp.json();
+    out.textContent = JSON.stringify(data, null, 2);
+  } catch(e) {
+    out.textContent = 'エラー: ' + e.message;
+  }
 }
 
 function updateComboDisplay() {

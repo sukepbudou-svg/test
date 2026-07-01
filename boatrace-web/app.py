@@ -386,6 +386,50 @@ VENUE_CODES = {
     "芦屋": "21", "福岡": "22", "唐津": "23", "大村": "24",
 }
 
+@app.route('/debug_html', methods=['POST'])
+def debug_html():
+    """boatrace.jp から生HTML を取得して重要部分だけ返すデバッグ用エンドポイント"""
+    data = request.get_json()
+    venue = data.get('venue', '')
+    race_no = data.get('race_no', 1)
+    race_date = data.get('race_date', '')
+    jcd = VENUE_CODES.get(venue)
+    if not jcd:
+        return jsonify({'error': '会場コード不明'})
+    hd = race_date.replace('-', '')
+    url = 'https://www.boatrace.jp/owpc/pc/race/raceresult?rno=' + str(race_no) + '&jcd=' + jcd + '&hd=' + hd
+    try:
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'ja,en;q=0.5',
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read().decode('utf-8', errors='ignore')
+    except Exception as e:
+        return jsonify({'error': str(e), 'url': url})
+
+    # boatColorが登場する前後50文字のスニペット
+    snippets = []
+    for m in re.finditer(r'boatColor', html):
+        start = max(0, m.start() - 20)
+        end = min(len(html), m.end() + 80)
+        snippets.append(html[start:end].replace('\n', ' ').replace('\r', ''))
+        if len(snippets) >= 10:
+            break
+
+    # 3連単セクション
+    trio_idx = html.find('3連単')
+    trio_snippet = html[trio_idx:trio_idx+400].replace('\n', ' ') if trio_idx >= 0 else '(3連単 not found)'
+
+    return jsonify({
+        'url': url,
+        'html_length': len(html),
+        'boatcolor_snippets': snippets,
+        'trio_section': trio_snippet,
+    })
+
+
 @app.route('/fetch_result', methods=['POST'])
 def fetch_result():
     data = request.get_json()
