@@ -2008,9 +2008,15 @@ function renderResult(data) {
   }, 100);
   // 表示した予想を返す（saveRecordで使用）
   const displayed = [];
-  for (const type of TYPE_ORDER) {
-    for (const item of (classified[type] || [])) {
-      displayed.push({ combo: item.combo, type });
+  if (data.arekote_mode) {
+    for (const item of (data.arekote_predictions || [])) {
+      displayed.push({ combo: item.combo, type: item.type });
+    }
+  } else {
+    for (const type of TYPE_ORDER) {
+      for (const item of (classified[type] || [])) {
+        displayed.push({ combo: item.combo, type });
+      }
     }
   }
   return displayed;
