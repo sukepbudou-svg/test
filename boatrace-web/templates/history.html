@@ -760,7 +760,8 @@ function renderDailyWith(records) {
     const raceRows = races.map(r => {
       const profit = r.is_hit ? `<span style="color:var(--green);">+${((r.payout||0)-(r.purchase||0)).toLocaleString()}</span>` : `<span style="color:var(--accent);">-${(r.purchase||0).toLocaleString()}</span>`;
       const result = `${r.result_1st}-${r.result_2nd}-${r.result_3rd}`;
-      const hitMark = r.is_hit ? '<span style="color:var(--green);">◎</span>' : '<span style="color:var(--accent);">✗</span>';
+      const missAmt = (!r.is_hit && r.payout) ? ` <span style="color:var(--text-muted);font-size:10px;">(${r.payout.toLocaleString()}円)</span>` : '';
+      const hitMark = r.is_hit ? '<span style="color:var(--green);">◎</span>' : `<span style="color:var(--accent);">✗</span>${missAmt}`;
       return `<tr style="border-bottom:1px solid var(--border);font-size:11px;">
         <td style="padding:4px 6px;">${r.venue} ${r.race_no}R</td>
         <td style="padding:4px 6px;font-family:'Orbitron',monospace;color:var(--accent3);">${result}</td>
