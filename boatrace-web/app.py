@@ -836,12 +836,10 @@ def stats_summary():
     # 推奨度判定
     if total < 5:
         level = 'unknown'
-    elif recovery >= 120 and hit_rate >= 25:
+    elif recovery >= 100 and hit_rate >= 25:
         level = 'hot'
-    elif recovery >= 100:
+    elif recovery >= 90 and hit_rate >= 20:
         level = 'watch'
-    elif recovery >= 80:
-        level = 'caution'
     else:
         level = 'pass'
 
