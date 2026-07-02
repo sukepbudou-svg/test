@@ -771,25 +771,32 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
 
   </div><!-- /left-panel -->
 
-  <!-- メモ -->
-  <div class="card" style="margin-top:12px;">
-    <h2>📝 メモ</h2>
-    <textarea id="memo-area" placeholder="レース選択の理由・気になる点など自由にメモできます" style="width:100%;min-height:120px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;outline:none;line-height:1.6;"></textarea>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
-      <span style="font-size:10px;color:var(--text-muted);">※ 入力中は自動保存されます</span>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span id="memo-status" style="font-size:11px;color:var(--green);"></span>
-        <button onclick="saveMemo()" style="padding:4px 14px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;">メモを保存</button>
-        <button onclick="clearMemo()" style="padding:4px 14px;background:transparent;color:var(--text-muted);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;">クリア</button>
+  <!-- 中間カラム（メモ＋過去データ） -->
+  <div style="width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:0;">
+
+    <!-- メモ -->
+    <div class="card">
+      <h2>📝 メモ</h2>
+      <textarea id="memo-area" placeholder="レース選択の理由・気になる点など自由にメモできます" style="width:100%;min-height:120px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;outline:none;line-height:1.6;"></textarea>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
+        <span style="font-size:10px;color:var(--text-muted);">※ 入力中は自動保存されます</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span id="memo-status" style="font-size:11px;color:var(--green);"></span>
+          <button onclick="saveMemo()" style="padding:4px 14px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;">メモを保存</button>
+          <button onclick="clearMemo()" style="padding:4px 14px;background:transparent;color:var(--text-muted);border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;">クリア</button>
+        </div>
       </div>
     </div>
-  <!-- 過去データサマリーパネル（メモ欄の下・左カラム内） -->
-  <div class="card" id="stats-panel" style="margin-top:12px;">
-    <h2>📊 過去データ</h2>
-    <div id="stats-body" style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">
-      予想するを押すと<br>この会場の過去データが表示されます
+
+    <!-- 過去データサマリーパネル -->
+    <div class="card" id="stats-panel">
+      <h2>📊 過去データ</h2>
+      <div id="stats-body" style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">
+        予想するを押すと<br>この会場の過去データが表示されます
+      </div>
     </div>
-  </div>
+
+  </div><!-- /中間カラム -->
 
   <div class="right-panel">
     <!-- 会場情報 -->
