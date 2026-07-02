@@ -1806,12 +1806,21 @@ function renderStatsSummary(d) {
 
       <!-- 直近5戦 -->
       <div style="background:var(--surface2);border-radius:6px;padding:6px 10px;">
-        <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">📈 直近5戦</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:10px;color:var(--text-muted);">📈 直近5戦</span>
+          <span style="font-size:9px;color:var(--text-muted);">古い → 新しい</span>
+        </div>
         <div style="display:flex;gap:4px;">
-          ${(d.recent5 && d.recent5.length > 0) ? d.recent5.map(r =>
-            `<span style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;background:${r === 'hit' ? 'var(--green)' : 'var(--surface3)'};color:${r === 'hit' ? '#000' : 'var(--text-muted)'};">${r === 'hit' ? '◎' : '✗'}</span>`
-          ).join('') : '<span style="font-size:10px;color:var(--text-muted);">データなし</span>'}
-          ${d.recent5 && d.recent5.length < 5 ? Array(5 - d.recent5.length).fill('<span style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;background:var(--surface3);color:var(--text-muted);">-</span>').join('') : ''}
+          ${(d.recent5 && d.recent5.length > 0) ? (() => {
+            const padded = [...Array(5 - d.recent5.length).fill('empty'), ...d.recent5.slice().reverse()];
+            return padded.map(r =>
+              r === 'empty'
+                ? `<span style="width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;background:var(--surface3);color:var(--border);">-</span>`
+                : r === 'hit'
+                ? `<span style="width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;background:var(--green);color:#000;box-shadow:0 0 6px rgba(0,230,118,0.5);">◎</span>`
+                : `<span style="width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;background:var(--accent);color:#fff;box-shadow:0 0 6px rgba(233,69,96,0.5);">✗</span>`
+            ).join('');
+          })() : '<span style="font-size:10px;color:var(--text-muted);">データなし</span>'}
         </div>
       </div>
 
