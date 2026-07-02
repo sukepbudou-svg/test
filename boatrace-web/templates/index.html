@@ -1789,6 +1789,46 @@ function renderStatsSummary(d) {
     </div>
     ${typeBars}
 
+    <!-- 追加統計 -->
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px;">
+
+      <!-- 平均収支 -->
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:6px;padding:6px 10px;">
+        <span style="font-size:10px;color:var(--text-muted);">💰 平均収支（1レース）</span>
+        <span style="font-size:13px;font-weight:900;color:${d.avg_profit >= 0 ? 'var(--green)' : 'var(--accent)'};">${d.avg_profit >= 0 ? '+' : ''}${d.avg_profit.toLocaleString()}円</span>
+      </div>
+
+      <!-- 的中時の平均払戻 -->
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:6px;padding:6px 10px;">
+        <span style="font-size:10px;color:var(--text-muted);">🎯 的中時の平均払戻</span>
+        <span style="font-size:13px;font-weight:900;color:var(--yellow);">${d.avg_payout_on_hit > 0 ? d.avg_payout_on_hit.toLocaleString() + '円' : 'データなし'}</span>
+      </div>
+
+      <!-- 直近5戦 -->
+      <div style="background:var(--surface2);border-radius:6px;padding:6px 10px;">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;">📈 直近5戦</div>
+        <div style="display:flex;gap:4px;">
+          ${(d.recent5 && d.recent5.length > 0) ? d.recent5.map(r =>
+            `<span style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;background:${r === 'hit' ? 'var(--green)' : 'var(--surface3)'};color:${r === 'hit' ? '#000' : 'var(--text-muted)'};">${r === 'hit' ? '◎' : '✗'}</span>`
+          ).join('') : '<span style="font-size:10px;color:var(--text-muted);">データなし</span>'}
+          ${d.recent5 && d.recent5.length < 5 ? Array(5 - d.recent5.length).fill('<span style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;background:var(--surface3);color:var(--text-muted);">-</span>').join('') : ''}
+        </div>
+      </div>
+
+      <!-- 最後に的中した日 -->
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:6px;padding:6px 10px;">
+        <span style="font-size:10px;color:var(--text-muted);">📅 最終的中日</span>
+        <span style="font-size:12px;font-weight:700;color:var(--text);">${d.last_hit_date || 'なし'}</span>
+      </div>
+
+      <!-- 荒れ率（1コース以外が1着になった率） -->
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:6px;padding:6px 10px;">
+        <span style="font-size:10px;color:var(--text-muted);">🌀 1コース以外1着率</span>
+        <span style="font-size:13px;font-weight:900;color:${d.upset_rate >= 40 ? 'var(--accent)' : d.upset_rate >= 25 ? 'var(--yellow)' : 'var(--text-muted)'};">${d.upset_rate != null ? d.upset_rate + '%' : 'データなし'}</span>
+      </div>
+
+    </div>
+
     ${(d.wind_hit_rates && d.wind_hit_rates.length > 0) ? `
     <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">
       <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;letter-spacing:1px;">💨 風向き別 的中実績</div>

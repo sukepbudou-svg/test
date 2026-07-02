@@ -730,7 +730,7 @@ def stats_summary():
         return jsonify({'error': '会場未指定'})
 
     rows = conn.execute(
-        "SELECT predictions, is_hit, payout, purchase, nige_rate, wind, result_1st, result_2nd, result_3rd FROM records WHERE venue=? AND purchase IS NOT NULL",
+        "SELECT predictions, is_hit, payout, purchase, nige_rate, wind, result_1st, result_2nd, result_3rd, race_date FROM records WHERE venue=? AND purchase IS NOT NULL",
         (venue,)
     ).fetchall()
     conn.close()
@@ -833,6 +833,36 @@ def stats_summary():
                 'rate': round(s['hit'] / s['count'] * 100, 1) if s['count'] > 0 else 0,
             })
 
+    # 平均収支（1レースあたり）
+    avg_profit = round((total_payout - total_purchase) / total, 0) if total > 0 else 0
+
+    # 的中した時の平均払戻
+    hit_records = [r for r in filtered if r['is_hit'] and r['payout']]
+    avg_payout_on_hit = round(sum(r['payout'] for r in hit_records) / len(hit_records), 0) if hit_records else 0
+
+    # 直近5戦の結果（新しい順）
+    recent5 = []
+    sorted_filtered = sorted(filtered, key=lambda r: r['race_date'] if 'race_date' in r.keys() else '', reverse=True)
+    for r in sorted_filtered[:5]:
+        recent5.append('hit' if r['is_hit'] else 'miss')
+
+    # 最後に的中した日付
+    last_hit_date = None
+    for r in sorted_filtered:
+        if r['is_hit']:
+            last_hit_date = r['race_date'] if 'race_date' in r.keys() else None
+            break
+
+    # 1コース以外が1着になった率（荒れ率）
+    upset_count = 0
+    result_total = 0
+    for r in filtered:
+        if r['result_1st']:
+            result_total += 1
+            if str(r['result_1st']) != '1':
+                upset_count += 1
+    upset_rate = round(upset_count / result_total * 100, 1) if result_total > 0 else None
+
     # 推奨度判定
     if total < 5:
         level = 'unknown'
@@ -851,6 +881,11 @@ def stats_summary():
         'hits': hits,
         'hit_rate': hit_rate,
         'recovery': recovery,
+        'avg_profit': avg_profit,
+        'avg_payout_on_hit': avg_payout_on_hit,
+        'recent5': recent5,
+        'last_hit_date': last_hit_date,
+        'upset_rate': upset_rate,
         'type_hit_rates': type_hit_rates,
         'wind_hit_rates': wind_hit_rates,
         'level': level,
