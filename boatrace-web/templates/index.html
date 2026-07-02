@@ -771,19 +771,8 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
 
   </div><!-- /left-panel -->
 
-  <!-- 過去データサマリー + メモ 横並び -->
-  <div style="margin-top:12px;display:flex;gap:12px;align-items:flex-start;">
-
-  <!-- 過去データサマリーパネル -->
-  <div class="card" id="stats-panel" style="flex:1;min-width:0;">
-    <h2>📊 過去データ</h2>
-    <div id="stats-body" style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">
-      予想するを押すと<br>この会場の過去データが表示されます
-    </div>
-  </div>
-
   <!-- メモ -->
-  <div class="card" style="flex:1;min-width:0;">
+  <div class="card" style="margin-top:12px;">
     <h2>📝 メモ</h2>
     <textarea id="memo-area" placeholder="レース選択の理由・気になる点など自由にメモできます" style="width:100%;min-height:120px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;outline:none;line-height:1.6;"></textarea>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
@@ -795,9 +784,8 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
       </div>
     </div>
   </div>
-  </div><!-- /stats+memo flex row -->
 
-  <div class="right-panel">
+  <div class="right-panel" style="display:flex;flex-direction:column;gap:12px;">
     <!-- 会場情報 -->
     <div class="card" id="venue-info-card" style="display:none;">
       <h2>会場情報</h2>
@@ -816,7 +804,19 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
       </div>
     </div>
 
-    <div class="card">
+    <!-- 過去データ + 予想結果 横並び -->
+    <div style="display:flex;gap:12px;align-items:flex-start;">
+
+    <!-- 過去データサマリーパネル -->
+    <div class="card" id="stats-panel" style="flex:1;min-width:0;">
+      <h2>📊 過去データ</h2>
+      <div id="stats-body" style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">
+        予想するを押すと<br>この会場の過去データが表示されます
+      </div>
+    </div>
+
+    <!-- 予想結果 -->
+    <div class="card" style="flex:1;min-width:0;">
       <h2>予想結果</h2>
       <div id="nige-rate-banner" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);text-align:center;">
         <div style="font-size:10px;color:var(--text-muted);letter-spacing:1px;margin-bottom:4px;">1号艇 イン逃げ率</div>
@@ -836,6 +836,8 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
         </div>
       </div>
     </div>
+    </div><!-- /過去データ+予想結果 横並び -->
+
     <div class="card" style="padding:10px;">
       <button class="btn btn-clear" onclick="allClear()">全クリア</button>
     </div>
