@@ -1780,7 +1780,11 @@ function renderStatsSummary(d) {
         <div style="font-size:18px;font-weight:900;color:var(--text);">${d.total}戦</div>
       </div>
     </div>
-    <div style="font-size:9px;color:var(--text-muted);margin-bottom:8px;text-align:center;">${d.venue} / イン逃げ率 ${nigeLabel}</div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:10px;">
+      <span style="font-size:11px;font-weight:700;color:var(--accent3);">📍 ${d.venue}</span>
+      <span style="color:var(--border);">|</span>
+      <span style="font-size:11px;color:var(--text-muted);">イン逃げ率 <span style="color:var(--yellow);font-weight:700;">${nigeLabel}</span></span>
+    </div>
     ${typeBars}
   `;
 }
