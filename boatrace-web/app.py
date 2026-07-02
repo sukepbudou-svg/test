@@ -172,6 +172,7 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
         avg_straight = safe_float(b.get('avg_straight', 0))
         mawariashi = safe_float(b.get('mawariashi', 0))
         avg_mawari = safe_float(b.get('avg_mawari', 0))
+        player_class = b.get('player_class', '')
 
         # Base score: lower exhibit time = better, lower avg ST = better
         base = 0.0
@@ -184,6 +185,12 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
         # F持ちペナルティ
         if is_f:
             base -= 1.5
+
+        # 級別ST修正能力補正（展示STが悪い時ほど級の差が出る）
+        exhibit_st = safe_float(b.get('exhibit_st', 0))
+        st_penalty = max(0, (exhibit_st - 0.15)) if exhibit_st > 0 else 0
+        class_bonus = {'A1': 0.8, 'A2': 0.4, 'B1': 0.0, 'B2': -0.5}.get(player_class, 0.0)
+        base += class_bonus * (1 + st_penalty * 10)
 
         # 周回タイム: 当日×0.6 + 平均×0.4 (大きいほど良い)
         if lap > 0 and avg_lap > 0:

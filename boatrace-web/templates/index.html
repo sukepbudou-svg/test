@@ -849,6 +849,7 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
   <input type="hidden" id="b{{ i }}_win2_rate" value="">
   <input type="hidden" id="b{{ i }}_motor_win1" value="">
   <input type="hidden" id="b{{ i }}_motor_contrib" value="">
+  <input type="hidden" id="b{{ i }}_player_class" value="">
   {% endfor %}
 </form>
 
@@ -951,7 +952,7 @@ function buildBoatCards() {
       <div class="boat-header">
         <div class="boat-num ${BOAT_COLORS[i-1]}">${i}</div>
         <div>
-          <div class="motor-info">Motor: <span id="mn-${i}">-</span> <span id="mr-${i}"></span></div>
+          <div class="motor-info">Motor: <span id="mn-${i}">-</span> <span id="mr-${i}"></span> <span id="pc-${i}" style="font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;display:none;"></span></div>
           <div class="motor-info" id="mi-${i}"></div>
         </div>
       </div>
@@ -1346,10 +1347,32 @@ function applyKimariStats() {
 
 // ======== Parse: モーター ========
 function parseMotorStats(text) {
-  const result = { numbers: [], shorit: [], contrib: [], win1: [], win2: [], win3: [] };
-  const labelMap = { 'モーター番号':'numbers','勝率':'shorit','2連対率':'win2','3連対率':'win3','機力貢献度':'contrib','1着率':'win1' };
-  for (const line of text.split('\n').map(l => l.trim()).filter(l => l.length > 0)) {
+  const result = { numbers: [], shorit: [], contrib: [], win1: [], win2: [], win3: [], playerClass: [] };
+  const labelMap = {
+    'モーター番号':'numbers','勝率':'shorit','2連対率':'win2','3連対率':'win3',
+    '機力貢献度':'contrib','1着率':'win1',
+    '番号':'numbers','貢献P':'contrib',  // 選手情報フォーマット
+  };
+  const CLASSES = ['A1','A2','B1','B2'];
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  let prevWasNames = false;
+  for (const line of lines) {
     const cols = line.split('\t');
+    // 選手名行の次の行が級別（A1/A2/B1/B2）
+    if (prevWasNames) {
+      const classVals = cols.map(c => c.trim()).filter(c => CLASSES.includes(c));
+      if (classVals.length >= 2) {
+        result.playerClass = classVals;
+        prevWasNames = false;
+        continue;
+      }
+    }
+    // 選手名行の検出（名前が並ぶ行: 漢字/ひらがな/カタカナ、タブ区切りで複数）
+    const namePattern = /^[　-鿿＀-￯぀-ヿ]+$/;
+    const nameCols = cols.filter(c => namePattern.test(c.trim()) && c.trim().length >= 2);
+    if (nameCols.length >= 3) { prevWasNames = true; continue; }
+    else { prevWasNames = false; }
+
     if (cols.length < 2) continue;
     const key = labelMap[cols[0].trim()];
     if (!key) continue;
@@ -1364,6 +1387,7 @@ function parseMotorStats(text) {
   return result;
 }
 
+const CLASS_COLORS = { 'A1':'#ff4466', 'A2':'#f5a623', 'B1':'#5a6a80', 'B2':'#3a4a60' };
 function applyMotorStats() {
   if (!motorStats) return;
   for (let i = 1; i <= 6; i++) {
@@ -1374,6 +1398,21 @@ function applyMotorStats() {
     document.getElementById(`mb3-${i}`).textContent = `機3連${motorStats.win3[i-1]||0}%`;
     document.getElementById(`b${i}_motor_win1`).value = motorStats.win1[i-1] || 0;
     document.getElementById(`b${i}_motor_contrib`).value = motorStats.contrib[i-1] || 0;
+    // 級別表示
+    const pc = motorStats.playerClass[i-1] || '';
+    const pcEl = document.getElementById(`pc-${i}`);
+    const pcHidden = document.getElementById(`b${i}_player_class`);
+    if (pcEl) {
+      if (pc) {
+        pcEl.textContent = pc;
+        pcEl.style.display = 'inline';
+        pcEl.style.background = CLASS_COLORS[pc] || '#5a6a80';
+        pcEl.style.color = '#fff';
+      } else {
+        pcEl.style.display = 'none';
+      }
+    }
+    if (pcHidden) pcHidden.value = pc;
   }
 }
 
@@ -1694,11 +1733,13 @@ async function runPredict(forceArekote = false) {
       win2_rate:     parseFloat(document.getElementById(`b${i}_win2_rate`).value) || 0,
       motor_win1:    parseFloat(document.getElementById(`b${i}_motor_win1`).value) || 0,
       motor_contrib: parseFloat(document.getElementById(`b${i}_motor_contrib`).value) || 0,
+      exhibit_st:    parseFloat(document.getElementById(`b${i}_exhibit_st`).value) || 0,
       lap:           parseFloat(document.getElementById(`b${i}_lap`).value) || 0,
       avg_lap:       parseFloat(document.getElementById(`b${i}_avg_lap`).value) || 0,
       straight:      parseFloat(document.getElementById(`b${i}_straight`).value) || 0,
       avg_straight:  parseFloat(document.getElementById(`b${i}_avg_straight`).value) || 0,
       avg_mawari:    parseFloat(document.getElementById(`b${i}_avg_mawari`).value) || 0,
+      player_class:  document.getElementById(`b${i}_player_class`)?.value || '',
     });
   }
 
