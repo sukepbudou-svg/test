@@ -1758,8 +1758,8 @@ function renderStatsSummary(d) {
   }
 
   // イン逃げ率帯の説明
-  const nigeLabel = d.nige_rate != null
-    ? `${Math.max(0, d.nige_rate - 10).toFixed(0)}%〜 のデータ`
+  const nigeLabel = d.nige_min != null
+    ? `${d.nige_min}%以上 のデータ`
     : '全データ';
 
   panel.innerHTML = `

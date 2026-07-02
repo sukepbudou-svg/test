@@ -730,21 +730,23 @@ def stats_summary():
         return jsonify({'error': '会場未指定'})
 
     rows = conn.execute(
-        "SELECT predictions, is_hit, payout, purchase, nige_rate FROM records WHERE venue=? AND purchase IS NOT NULL",
+        "SELECT predictions, is_hit, payout, purchase, nige_rate, result_1st, result_2nd, result_3rd FROM records WHERE venue=? AND purchase IS NOT NULL",
         (venue,)
     ).fetchall()
     conn.close()
 
-    # イン逃げ率帯フィルタ（±10%帯、または指定なしは全件）
+    # イン逃げ率帯フィルタ（5%単位切り捨てを下限にする）
     if nige_rate is not None:
-        nige_min = nige_rate - 10
+        import math
+        nige_min = math.floor(nige_rate / 5) * 5
         filtered = [r for r in rows if r['nige_rate'] is not None and r['nige_rate'] >= nige_min]
     else:
+        nige_min = None
         filtered = list(rows)
 
     total = len(filtered)
     if total == 0:
-        return jsonify({'total': 0, 'venue': venue, 'nige_rate': nige_rate})
+        return jsonify({'total': 0, 'venue': venue, 'nige_rate': nige_rate, 'nige_min': nige_min})
 
     # 集計
     hits = sum(1 for r in filtered if r['is_hit'])
@@ -753,19 +755,24 @@ def stats_summary():
     hit_rate = round(hits / total * 100, 1)
     recovery = round(total_payout / total_purchase * 100, 1) if total_purchase > 0 else 0
 
-    # 予想タイプ別集計
+    # 予想タイプ別集計（個別コンボを結果と照合）
     type_stats = {}
     for r in filtered:
         try:
             preds = json.loads(r['predictions'])
         except Exception:
             continue
-        types_in_race = set(p.get('type', '') for p in preds)
-        for t in types_in_race:
+        # 着順が入力済みの場合は個別照合、未入力はカウントのみ
+        has_result = r['result_1st'] and r['result_2nd'] and r['result_3rd']
+        result_combo = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}" if has_result else None
+        for p in preds:
+            t = p.get('type', '')
+            if not t:
+                continue
             if t not in type_stats:
                 type_stats[t] = {'count': 0, 'hit': 0}
             type_stats[t]['count'] += 1
-            if r['is_hit']:
+            if result_combo and p.get('combo') == result_combo:
                 type_stats[t]['hit'] += 1
 
     type_hit_rates = {}
@@ -792,6 +799,7 @@ def stats_summary():
     return jsonify({
         'venue': venue,
         'nige_rate': nige_rate,
+        'nige_min': nige_min,
         'total': total,
         'hits': hits,
         'hit_rate': hit_rate,
