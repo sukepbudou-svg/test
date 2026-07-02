@@ -625,7 +625,7 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
         <button class="tab-btn" onclick="switchTab('player',this)">選手成績</button>
         <button class="tab-btn" onclick="switchTab('kimari',this)">決まり手</button>
         <button class="tab-btn" onclick="switchTab('motor',this)">モーター</button>
-        <button class="tab-btn" onclick="switchTab('exhibit',this)">展示タイム</button>
+        <button class="tab-btn" onclick="switchTab('exhibit',this)">展示情報</button>
         <button class="tab-btn" onclick="switchTab('odds',this)">オッズ</button>
         <button class="tab-btn" onclick="allClear()" style="margin-left:auto;color:var(--accent);border-color:var(--accent);">オールクリア</button>
       </div>
@@ -725,8 +725,8 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
       </div>
 
       <div class="tab-pane" id="tab-exhibit">
-        <div class="tab-desc">展示情報をコピー＆ペーストしてください</div>
-        <textarea id="paste-exhibit" rows="10" placeholder="ここにコピペ&#10;（展示情報タイトルから部品交換行まで全部OK）"></textarea>
+        <div class="tab-desc">ボートレース日和の「今節展示情報」から「展示情報」まで全部まとめてコピー＆ペーストしてください</div>
+        <textarea id="paste-exhibit" rows="10" placeholder="今節展示情報&#10;前走展示　6.90　6.89...&#10;...&#10;展示情報&#10;進入　1　2　3　4　5　6&#10;展示　6.88　6.85...&#10;ST　.10　.06..."></textarea>
         <div style="display:flex;gap:8px;margin-top:8px;">
           <button class="btn btn-apply" onclick="parseData('exhibit')">適用</button>
         </div>
@@ -989,7 +989,12 @@ function buildBoatCards() {
             <option value="">-- 選択 --</option>
           </select>
         </div>
-      </div>`;
+      </div>
+      <input type="hidden" id="b${i}_lap">
+      <input type="hidden" id="b${i}_avg_lap">
+      <input type="hidden" id="b${i}_straight">
+      <input type="hidden" id="b${i}_avg_straight">
+      <input type="hidden" id="b${i}_avg_mawari">`;
     grid.appendChild(card);
   }
 }
@@ -1372,58 +1377,76 @@ function applyMotorStats() {
   }
 }
 
-// ======== 展示情報パーサー ========
+// ======== 展示情報パーサー（今節展示情報＋当日展示情報対応）========
 function parseExhibitInfo(text) {
-  const result = { courses:[], exhibit:[], mawari:[], st:[], stF:[], weight:[], tilt:[] };
-  const labelMap = {
-    '進入':'courses', '展示':'exhibit',
-    '周り足':'mawari', 'ST':'st', '体重':'weight', 'チルト':'tilt'
+  const result = {
+    courses:[], exhibit:[], mawari:[], straight:[], lap:[],
+    st:[], stF:[], weight:[], tilt:[],
+    avg_exhibit:[], avg_mawari:[], avg_straight:[], avg_lap:[],
   };
+
+  // 今節展示情報のラベルマップ
+  const labelMapNow = {
+    '平均展示': 'avg_exhibit',
+    '平均周回': 'avg_lap',
+    '平均周足': 'avg_mawari',
+    '平均直線': 'avg_straight',
+  };
+  // 当日展示情報のラベルマップ
+  const labelMapToday = {
+    '進入': 'courses',
+    '展示': 'exhibit',
+    '周回': 'lap',
+    '周り足': 'mawari',
+    '直線': 'straight',
+    'ST': 'st',
+    '体重': 'weight',
+    'チルト': 'tilt',
+  };
+
   for (const line of text.split('\n').map(l => l.trim()).filter(l => l.length > 0)) {
     const cols = line.split('\t');
     if (cols.length < 2) continue;
-    const key = labelMap[cols[0].trim()];
+    const label = cols[0].trim();
+    const key = labelMapNow[label] || labelMapToday[label];
     if (!key) continue;
+
     const vals = [];
     for (let ci = 1; ci < cols.length && vals.length < 6; ci++) {
-      vals.push(cols[ci].trim());
+      const v = cols[ci].trim();
+      if (v === '' || v === '履歴') continue;
+      vals.push(v);
     }
     while (vals.length < 6) vals.push('');
+
     if (key === 'st') {
-      result.st = vals.map(v => {
-        const isF = v.toUpperCase().startsWith('F');
-        const num = parseFloat(v.replace(/^F/i, '')) || 0;
-        return num;
-      });
+      result.st = vals.map(v => parseFloat(v.replace(/^F/i, '')) || 0);
       result.stF = vals.map(v => v.toUpperCase().startsWith('F'));
-    } else if (key === 'courses' || key === 'weight' || key === 'exhibit' || key === 'mawari' || key === 'tilt') {
+    } else {
       result[key] = vals.map(v => {
         const n = parseFloat(v);
         return isNaN(n) ? v : n;
       });
-    } else {
-      result[key] = vals;
     }
   }
   return result;
 }
 
 function applyExhibitInfo(data) {
-  // 進入コース順にマッピング（courses配列が進入コース、インデックスが艇番-1）
-  // courses = [1,2,3,4,5,6] の場合は順番通り
   const courses = data.courses.length === 6 ? data.courses : [1,2,3,4,5,6];
   for (let idx = 0; idx < 6; idx++) {
-    const boatNo = idx + 1; // 艇番
+    const boatNo = idx + 1;
     const course = courses[idx];
-    // コース欄を設定
     const courseEl = document.getElementById(`b${boatNo}_course`);
     if (courseEl && course) courseEl.value = course;
-    // 展示タイム
-    if (data.exhibit[idx] !== undefined) {
+
+    // 展示タイム（当日優先、なければ平均）
+    const exhibitVal = data.exhibit[idx] || data.avg_exhibit[idx];
+    if (exhibitVal !== undefined) {
       const el = document.getElementById(`b${boatNo}_exhibit_time`);
-      if (el) el.value = data.exhibit[idx];
+      if (el) el.value = exhibitVal;
     }
-    // まわり足
+    // まわり足（当日）
     if (data.mawari[idx] !== undefined) {
       const el = document.getElementById(`b${boatNo}_mawariashi`);
       if (el) el.value = data.mawari[idx];
@@ -1432,6 +1455,12 @@ function applyExhibitInfo(data) {
     if (data.st[idx] !== undefined) {
       const el = document.getElementById(`b${boatNo}_exhibit_st`);
       if (el) el.value = data.st[idx].toFixed(3);
+      // Fフラグ
+      const fbtn = document.getElementById(`b${boatNo}_fbtn`);
+      if (fbtn && data.stF[idx]) {
+        fbtn.classList.add('f-on');
+        fbtn.textContent = 'F有';
+      }
     }
     // 体重
     if (data.weight[idx] !== undefined) {
@@ -1443,6 +1472,19 @@ function applyExhibitInfo(data) {
       const el = document.getElementById(`b${boatNo}_tilt`);
       if (el) el.value = data.tilt[idx];
     }
+    // 周回タイム（今節平均と当日を隠しフィールドに保存）
+    const lapEl = document.getElementById(`b${boatNo}_lap`);
+    if (lapEl && data.lap[idx] !== undefined) lapEl.value = data.lap[idx];
+    const avgLapEl = document.getElementById(`b${boatNo}_avg_lap`);
+    if (avgLapEl && data.avg_lap[idx] !== undefined) avgLapEl.value = data.avg_lap[idx];
+    // 直線タイム
+    const strEl = document.getElementById(`b${boatNo}_straight`);
+    if (strEl && data.straight[idx] !== undefined) strEl.value = data.straight[idx];
+    const avgStrEl = document.getElementById(`b${boatNo}_avg_straight`);
+    if (avgStrEl && data.avg_straight[idx] !== undefined) avgStrEl.value = data.avg_straight[idx];
+    // 平均周り足
+    const avgMawariEl = document.getElementById(`b${boatNo}_avg_mawari`);
+    if (avgMawariEl && data.avg_mawari[idx] !== undefined) avgMawariEl.value = data.avg_mawari[idx];
   }
   updateSlit();
 }
@@ -1652,6 +1694,11 @@ async function runPredict(forceArekote = false) {
       win2_rate:     parseFloat(document.getElementById(`b${i}_win2_rate`).value) || 0,
       motor_win1:    parseFloat(document.getElementById(`b${i}_motor_win1`).value) || 0,
       motor_contrib: parseFloat(document.getElementById(`b${i}_motor_contrib`).value) || 0,
+      lap:           parseFloat(document.getElementById(`b${i}_lap`).value) || 0,
+      avg_lap:       parseFloat(document.getElementById(`b${i}_avg_lap`).value) || 0,
+      straight:      parseFloat(document.getElementById(`b${i}_straight`).value) || 0,
+      avg_straight:  parseFloat(document.getElementById(`b${i}_avg_straight`).value) || 0,
+      avg_mawari:    parseFloat(document.getElementById(`b${i}_avg_mawari`).value) || 0,
     });
   }
 

@@ -166,6 +166,12 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
         win2 = safe_float(b.get('win2_rate', 0))
         motor_win1 = safe_float(b.get('motor_win1', 0))
         motor_contrib = safe_float(b.get('motor_contrib', 0))
+        lap = safe_float(b.get('lap', 0))
+        avg_lap = safe_float(b.get('avg_lap', 0))
+        straight = safe_float(b.get('straight', 0))
+        avg_straight = safe_float(b.get('avg_straight', 0))
+        mawariashi = safe_float(b.get('mawariashi', 0))
+        avg_mawari = safe_float(b.get('avg_mawari', 0))
 
         # Base score: lower exhibit time = better, lower avg ST = better
         base = 0.0
@@ -178,6 +184,27 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
         # F持ちペナルティ
         if is_f:
             base -= 1.5
+
+        # 周回タイム: 当日×0.6 + 平均×0.4 (大きいほど良い)
+        if lap > 0 and avg_lap > 0:
+            combined_lap = lap * 0.6 + avg_lap * 0.4
+            base += (combined_lap - 36.0) * 0.5
+        elif lap > 0:
+            base += (lap - 36.0) * 0.5
+
+        # 直線タイム: 当日×0.6 + 平均×0.4 (大きいほど良い)
+        if straight > 0 and avg_straight > 0:
+            combined_str = straight * 0.6 + avg_straight * 0.4
+            base += (combined_str - 70.0) * 0.3
+        elif straight > 0:
+            base += (straight - 70.0) * 0.3
+
+        # まわり足: 当日×0.6 + 平均×0.4 (大きいほど良い)
+        if mawariashi > 0 and avg_mawari > 0:
+            combined_maw = mawariashi * 0.6 + avg_mawari * 0.4
+            base += (combined_maw - 36.0) * 0.3
+        elif mawariashi > 0:
+            base += (mawariashi - 36.0) * 0.3
 
         # Player bonus
         player_bonus = win1 * 0.3 + win2 * 0.1
