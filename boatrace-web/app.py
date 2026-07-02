@@ -730,7 +730,7 @@ def stats_summary():
         return jsonify({'error': '会場未指定'})
 
     rows = conn.execute(
-        "SELECT predictions, is_hit, payout, purchase, nige_rate, result_1st, result_2nd, result_3rd FROM records WHERE venue=? AND purchase IS NOT NULL",
+        "SELECT predictions, is_hit, payout, purchase, nige_rate, wind, result_1st, result_2nd, result_3rd FROM records WHERE venue=? AND purchase IS NOT NULL",
         (venue,)
     ).fetchall()
     conn.close()
@@ -784,6 +784,48 @@ def stats_summary():
                 'rate': round(s['hit'] / s['count'] * 100, 1)
             }
 
+    # 風向き別集計（is_hitのレースのみカウント）
+    wind_stats = {}
+    for r in filtered:
+        w = r['wind'] if 'wind' in r.keys() else None
+        if not w:
+            w = '無風'
+        if w not in wind_stats:
+            wind_stats[w] = {'count': 0, 'hit': 0}
+        wind_stats[w]['count'] += 1
+        if r['is_hit']:
+            wind_stats[w]['hit'] += 1
+
+    # 風向き表示順（追い風→向かい風→横風→無風）
+    WIND_ORDER = [
+        '追い風1m', '追い風2m', '追い風3m以上',
+        '向かい風1m', '向かい風2m', '向かい風3m以上',
+        '横風（左）1m', '横風（左）2m', '横風（左）3m以上',
+        '横風（右）1m', '横風（右）2m', '横風（右）3m以上',
+        '無風', 'その他',
+    ]
+    wind_hit_rates = []
+    seen_winds = set()
+    for w in WIND_ORDER:
+        if w in wind_stats:
+            s = wind_stats[w]
+            wind_hit_rates.append({
+                'wind': w,
+                'count': s['count'],
+                'hit': s['hit'],
+                'rate': round(s['hit'] / s['count'] * 100, 1) if s['count'] > 0 else 0,
+            })
+            seen_winds.add(w)
+    # WIND_ORDERにないものも末尾に追加
+    for w, s in wind_stats.items():
+        if w not in seen_winds:
+            wind_hit_rates.append({
+                'wind': w,
+                'count': s['count'],
+                'hit': s['hit'],
+                'rate': round(s['hit'] / s['count'] * 100, 1) if s['count'] > 0 else 0,
+            })
+
     # 推奨度判定
     if total < 5:
         level = 'unknown'
@@ -805,6 +847,7 @@ def stats_summary():
         'hit_rate': hit_rate,
         'recovery': recovery,
         'type_hit_rates': type_hit_rates,
+        'wind_hit_rates': wind_hit_rates,
         'level': level,
     })
 
