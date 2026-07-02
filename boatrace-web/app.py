@@ -715,6 +715,92 @@ def get_records():
     return jsonify(records)
 
 
+@app.route('/stats_summary', methods=['POST'])
+def stats_summary():
+    """会場×イン逃げ率帯の過去データをSQLiteで集計して返す"""
+    data = request.get_json()
+    venue = data.get('venue', '')
+    nige_rate = data.get('nige_rate', None)
+
+    conn = get_db()
+
+    # 会場フィルタ
+    if not venue:
+        conn.close()
+        return jsonify({'error': '会場未指定'})
+
+    rows = conn.execute(
+        "SELECT predictions, is_hit, payout, purchase, nige_rate FROM records WHERE venue=? AND purchase IS NOT NULL",
+        (venue,)
+    ).fetchall()
+    conn.close()
+
+    # イン逃げ率帯フィルタ（±10%帯、または指定なしは全件）
+    if nige_rate is not None:
+        nige_min = nige_rate - 10
+        filtered = [r for r in rows if r['nige_rate'] is not None and r['nige_rate'] >= nige_min]
+    else:
+        filtered = list(rows)
+
+    total = len(filtered)
+    if total == 0:
+        return jsonify({'total': 0, 'venue': venue, 'nige_rate': nige_rate})
+
+    # 集計
+    hits = sum(1 for r in filtered if r['is_hit'])
+    total_purchase = sum(r['purchase'] or 0 for r in filtered)
+    total_payout = sum((r['payout'] or 0) for r in filtered if r['is_hit'])
+    hit_rate = round(hits / total * 100, 1)
+    recovery = round(total_payout / total_purchase * 100, 1) if total_purchase > 0 else 0
+
+    # 予想タイプ別集計
+    type_stats = {}
+    for r in filtered:
+        try:
+            preds = json.loads(r['predictions'])
+        except Exception:
+            continue
+        types_in_race = set(p.get('type', '') for p in preds)
+        for t in types_in_race:
+            if t not in type_stats:
+                type_stats[t] = {'count': 0, 'hit': 0}
+            type_stats[t]['count'] += 1
+            if r['is_hit']:
+                type_stats[t]['hit'] += 1
+
+    type_hit_rates = {}
+    for t, s in type_stats.items():
+        if s['count'] > 0:
+            type_hit_rates[t] = {
+                'count': s['count'],
+                'hit': s['hit'],
+                'rate': round(s['hit'] / s['count'] * 100, 1)
+            }
+
+    # 推奨度判定
+    if total < 5:
+        level = 'unknown'
+    elif recovery >= 120 and hit_rate >= 25:
+        level = 'hot'
+    elif recovery >= 100:
+        level = 'watch'
+    elif recovery >= 80:
+        level = 'caution'
+    else:
+        level = 'pass'
+
+    return jsonify({
+        'venue': venue,
+        'nige_rate': nige_rate,
+        'total': total,
+        'hits': hits,
+        'hit_rate': hit_rate,
+        'recovery': recovery,
+        'type_hit_rates': type_hit_rates,
+        'level': level,
+    })
+
+
 @app.route('/delete_record', methods=['POST'])
 def delete_record():
     data = request.get_json()

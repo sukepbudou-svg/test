@@ -771,10 +771,21 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
 
   </div><!-- /left-panel -->
 
+  <!-- 過去データサマリー + メモ 横並び -->
+  <div style="margin-top:12px;display:flex;gap:12px;align-items:flex-start;">
+
+  <!-- 過去データサマリーパネル -->
+  <div class="card" id="stats-panel" style="flex:1;min-width:0;">
+    <h2>📊 過去データ</h2>
+    <div id="stats-body" style="color:var(--text-muted);font-size:12px;text-align:center;padding:20px 0;">
+      予想するを押すと<br>この会場の過去データが表示されます
+    </div>
+  </div>
+
   <!-- メモ -->
-  <div class="card" style="margin-top:12px;">
+  <div class="card" style="flex:1;min-width:0;">
     <h2>📝 メモ</h2>
-    <textarea id="memo-area" placeholder="レース選択の理由・気になる点など自由にメモできます" style="width:100%;min-height:400px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;outline:none;line-height:1.6;"></textarea>
+    <textarea id="memo-area" placeholder="レース選択の理由・気になる点など自由にメモできます" style="width:100%;min-height:120px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:13px;font-family:inherit;resize:vertical;outline:none;line-height:1.6;"></textarea>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
       <span style="font-size:10px;color:var(--text-muted);">※ 入力中は自動保存されます</span>
       <div style="display:flex;align-items:center;gap:8px;">
@@ -784,6 +795,7 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
       </div>
     </div>
   </div>
+  </div><!-- /stats+memo flex row -->
 
   <div class="right-panel">
     <!-- 会場情報 -->
@@ -1674,6 +1686,102 @@ async function runPredict(forceArekote = false) {
     lastNigeRate = nigeEl ? parseFloat(nigeEl.textContent) || null : null;
   }
   document.getElementById('btn-save').style.display = lastPredictions.length > 0 ? 'block' : 'none';
+
+  // 過去データサマリーを非同期で取得・表示
+  fetchStatsSummary(venue, lastNigeRate);
+}
+
+async function fetchStatsSummary(venue, nigeRate) {
+  const panel = document.getElementById('stats-body');
+  if (!venue) {
+    panel.innerHTML = '<span style="color:var(--text-muted);font-size:12px;">会場を選択してください</span>';
+    return;
+  }
+  panel.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">集計中...</span>';
+
+  try {
+    const resp = await fetch('/stats_summary', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ venue, nige_rate: nigeRate })
+    });
+    const d = await resp.json();
+    renderStatsSummary(d);
+  } catch(e) {
+    panel.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">取得エラー</span>';
+  }
+}
+
+function renderStatsSummary(d) {
+  const panel = document.getElementById('stats-body');
+  if (!d || d.total === 0) {
+    panel.innerHTML = `<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:12px 0;">
+      ${d.venue || ''}のデータがまだありません<br>
+      <span style="font-size:10px;">予想を記録すると分析できるようになります</span>
+    </div>`;
+    return;
+  }
+
+  // 推奨度ラベル
+  const levelMap = {
+    hot:     { label: '🔥 勝負レース',   color: '#ff6b35' },
+    watch:   { label: '🤔 要検討',       color: '#f5a623' },
+    caution: { label: '🚫 見送り推奨',   color: '#e94560' },
+    pass:    { label: '🚫 見送り推奨',   color: '#e94560' },
+    unknown: { label: '❓ 実績なし',     color: '#5a6a80' },
+  };
+  const lv = levelMap[d.level] || levelMap.unknown;
+
+  // 回収率の色
+  const recColor = d.recovery >= 100 ? 'var(--green)' : d.recovery >= 80 ? 'var(--yellow)' : 'var(--accent)';
+
+  // タイプ別的中率バー
+  const TYPE_ORDER_SUMMARY = ['本命', '対抗', '中穴', '万舟', '裏熊'];
+  const TYPE_COLOR = { '本命': '#e94560', '対抗': '#f5a623', '中穴': '#00d4ff', '万舟': '#b000dc', '裏熊': '#b000dc' };
+  let typeBars = '';
+  for (const t of TYPE_ORDER_SUMMARY) {
+    const s = d.type_hit_rates[t];
+    if (!s) continue;
+    const pct = s.rate;
+    const barW = Math.min(pct, 100);
+    const col = TYPE_COLOR[t] || '#5a6a80';
+    typeBars += `<div style="margin-bottom:5px;">
+      <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px;">
+        <span style="color:${col};font-weight:700;">${t}</span>
+        <span style="color:var(--text-muted);">${pct}% (${s.hit}/${s.count}戦)</span>
+      </div>
+      <div style="background:var(--surface3);border-radius:3px;height:6px;">
+        <div style="width:${barW}%;height:100%;border-radius:3px;background:${col};transition:width 0.6s ease;"></div>
+      </div>
+    </div>`;
+  }
+
+  // イン逃げ率帯の説明
+  const nigeLabel = d.nige_rate != null
+    ? `${Math.max(0, d.nige_rate - 10).toFixed(0)}%〜 のデータ`
+    : '全データ';
+
+  panel.innerHTML = `
+    <div style="text-align:center;margin-bottom:10px;">
+      <span style="font-size:16px;font-weight:900;color:${lv.color};">${lv.label}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:10px;gap:6px;">
+      <div style="text-align:center;flex:1;background:var(--surface2);border-radius:6px;padding:6px 4px;">
+        <div style="font-size:10px;color:var(--text-muted);">回収率</div>
+        <div style="font-size:18px;font-weight:900;color:${recColor};">${d.recovery}%</div>
+      </div>
+      <div style="text-align:center;flex:1;background:var(--surface2);border-radius:6px;padding:6px 4px;">
+        <div style="font-size:10px;color:var(--text-muted);">的中率</div>
+        <div style="font-size:18px;font-weight:900;color:var(--accent3);">${d.hit_rate}%</div>
+      </div>
+      <div style="text-align:center;flex:1;background:var(--surface2);border-radius:6px;padding:6px 4px;">
+        <div style="font-size:10px;color:var(--text-muted);">サンプル</div>
+        <div style="font-size:18px;font-weight:900;color:var(--text);">${d.total}戦</div>
+      </div>
+    </div>
+    <div style="font-size:9px;color:var(--text-muted);margin-bottom:8px;text-align:center;">${d.venue} / イン逃げ率 ${nigeLabel}</div>
+    ${typeBars}
+  `;
 }
 
 // ======== スリット隊形 ========
