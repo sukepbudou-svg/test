@@ -1689,10 +1689,11 @@ async function runPredict(forceArekote = false) {
   document.getElementById('btn-save').style.display = lastPredictions.length > 0 ? 'block' : 'none';
 
   // 過去データサマリーを非同期で取得・表示
-  fetchStatsSummary(venue, lastNigeRate);
+  const currentWind = document.getElementById('wind').value;
+  fetchStatsSummary(venue, lastNigeRate, currentWind);
 }
 
-async function fetchStatsSummary(venue, nigeRate) {
+async function fetchStatsSummary(venue, nigeRate, currentWind) {
   const panel = document.getElementById('stats-body');
   if (!venue) {
     panel.innerHTML = '<span style="color:var(--text-muted);font-size:12px;">会場を選択してください</span>';
@@ -1707,6 +1708,7 @@ async function fetchStatsSummary(venue, nigeRate) {
       body: JSON.stringify({ venue, nige_rate: nigeRate })
     });
     const d = await resp.json();
+    d._currentWind = currentWind || null;
     renderStatsSummary(d);
   } catch(e) {
     panel.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">取得エラー</span>';
@@ -1796,13 +1798,25 @@ function renderStatsSummary(d) {
         return `<div style="margin-bottom:5px;">
           <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:2px;">
             <span style="color:var(--text);">${w.wind}</span>
-            <span style="color:var(--text-muted);">${w.rate}% (${w.hit}/${w.count}戦)</span>
+            <span style="color:var(--text-muted);">${w.rate}% (${w.hit}/${w.count}レース)</span>
           </div>
           <div style="background:var(--surface3);border-radius:3px;height:5px;">
             <div style="width:${barW}%;height:100%;border-radius:3px;background:${col};transition:width 0.6s ease;"></div>
           </div>
         </div>`;
       }).join('')}
+      ${(() => {
+        const cw = d._currentWind;
+        if (!cw) return '';
+        const found = d.wind_hit_rates.find(w => w.wind === cw);
+        const rateColor = found ? (found.rate >= 30 ? 'var(--green)' : found.rate >= 15 ? 'var(--yellow)' : 'var(--accent)') : 'var(--text-muted)';
+        const rateText = found ? `的中率 <span style="font-size:15px;font-weight:900;color:${rateColor};">${found.rate}%</span> (${found.hit}/${found.count}レース)` : 'データなし';
+        return `<div style="margin-top:10px;padding:10px;background:rgba(0,212,255,0.08);border:1px solid var(--accent3);border-radius:8px;">
+          <div style="font-size:9px;color:var(--accent3);letter-spacing:1px;margin-bottom:4px;">📍 現在の風向き</div>
+          <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;">💨 ${cw}</div>
+          <div style="font-size:11px;color:var(--text-muted);">${rateText}</div>
+        </div>`;
+      })()}
     </div>` : ''}
   `;
 }
