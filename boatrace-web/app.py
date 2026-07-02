@@ -755,24 +755,31 @@ def stats_summary():
     hit_rate = round(hits / total * 100, 1)
     recovery = round(total_payout / total_purchase * 100, 1) if total_purchase > 0 else 0
 
-    # 予想タイプ別集計（個別コンボを結果と照合）
+    # 予想タイプ別集計（レース単位：そのレースでそのタイプが1点でも当たったか）
     type_stats = {}
     for r in filtered:
         try:
             preds = json.loads(r['predictions'])
         except Exception:
             continue
-        # 着順が入力済みの場合は個別照合、未入力はカウントのみ
         has_result = r['result_1st'] and r['result_2nd'] and r['result_3rd']
         result_combo = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}" if has_result else None
+        # このレースに含まれるタイプを収集
+        types_in_race = {}
         for p in preds:
             t = p.get('type', '')
             if not t:
                 continue
+            if t not in types_in_race:
+                types_in_race[t] = False
+            if result_combo and p.get('combo') == result_combo:
+                types_in_race[t] = True
+        # レース単位でカウント
+        for t, hit in types_in_race.items():
             if t not in type_stats:
                 type_stats[t] = {'count': 0, 'hit': 0}
             type_stats[t]['count'] += 1
-            if result_combo and p.get('combo') == result_combo:
+            if hit:
                 type_stats[t]['hit'] += 1
 
     type_hit_rates = {}
