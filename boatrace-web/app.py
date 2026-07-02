@@ -235,7 +235,72 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
         elif course == 6:
             score += upset_effect * 0.3
 
-        scores.append({'boat': b, 'score': score, 'course': course})
+        scores.append({'boat': b, 'score': score, 'course': course, 'exhibit_st': exhibit_st})
+
+    # ===== 展開補正: コース間のST比較で差し/まくりリスクを反映 =====
+    # exhibit_stが入力されている艇だけ対象（0は未入力とみなす）
+    st_by_course = {s['course']: s['exhibit_st'] for s in scores if s['exhibit_st'] > 0}
+
+    if len(st_by_course) >= 2:
+        def get_st(c): return st_by_course.get(c, 0.20)  # 未入力は遅め扱い
+
+        st1 = get_st(1); st2 = get_st(2); st3 = get_st(3)
+        st4 = get_st(4); st5 = get_st(5); st6 = get_st(6)
+
+        for s in scores:
+            c = s['course']
+            adj = 0.0
+
+            if c == 1:
+                # 2コースとの差: 2が速いほどインの逃げリスク上昇
+                sashi_threat = max(0, (st1 - st2) - 0.03)  # 0.03以上の差で差しリスク
+                adj -= sashi_threat * 15
+                # 3〜4コースがまくってきてもインは関係薄い
+                # 2コースより内側の艇がいない場合は安全
+                if st1 < st2 - 0.02:  # 1コースが明確に速い → 逃げ安全
+                    adj += 0.5
+
+            elif c == 2:
+                # 1コースより速い → 差し期待値UP
+                if st2 < st1 - 0.02:
+                    adj += 0.6
+                # 3コースが2より速い → 2コースは外から被される
+                outer_threat = max(0, (st2 - st3) - 0.02)
+                adj -= outer_threat * 10
+
+            elif c == 3:
+                # 2コース以内より速い → まくり期待値UP
+                inner_avg = (st1 + st2) / 2
+                if st3 < inner_avg - 0.03:
+                    adj += 0.7
+                # 4コースより遅い → 外から被される
+                outer_threat = max(0, (st3 - st4) - 0.02)
+                adj -= outer_threat * 8
+
+            elif c == 4:
+                # 3コース以内より速い → まくり期待値UP
+                inner_avg = (st1 + st2 + st3) / 3
+                if st4 < inner_avg - 0.04:
+                    adj += 0.8
+                # 5コースより遅い → 被される
+                outer_threat = max(0, (st4 - st5) - 0.02)
+                adj -= outer_threat * 6
+
+            elif c == 5:
+                inner_avg = (st2 + st3 + st4) / 3
+                if st5 < inner_avg - 0.04:
+                    adj += 0.6
+
+            elif c == 6:
+                inner_avg = (st3 + st4 + st5) / 3
+                if st6 < inner_avg - 0.05:
+                    adj += 0.5
+
+            # 風の影響: 向かい風は外枠のまくりをさらに後押し
+            if wind_effect > 0 and c >= 3:
+                adj += wind_effect * 0.2
+
+            s['score'] += adj
 
     scores.sort(key=lambda x: x['score'], reverse=True)
 
