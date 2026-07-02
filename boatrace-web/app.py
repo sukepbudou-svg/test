@@ -261,8 +261,8 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
 
     chaos = calc_chaos(scores, boats, vp, wind_effect, nige_rate)
 
-    # 荒れモード: イン逃げ率が50%未満、または強制フラグ
-    if force_arekote or (nige_rate is not None and nige_rate < 50):
+    # 荒れモード: 強制フラグのときのみ（自動切り替えは廃止）
+    if force_arekote:
         arekote = predict_arekote(scores, candidates, wind, wind_effect)
         return {
             'predictions': results,
