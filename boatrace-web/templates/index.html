@@ -2203,15 +2203,15 @@ function renderResult(data) {
     const icon = isShobu ? '✅' : '⚠️';
     const title = isShobu ? '勝負レース' : '見送り推奨';
     const detail = isShobu ? reasons.join(' / ') : warns.join(' / ');
-    html += `<div style="background:${bg};border:1.5px solid ${bd};border-radius:10px;padding:8px 14px;margin-bottom:10px;">
+    html += `<div id="shobu-banner" style="background:${bg};border:1.5px solid ${bd};border-radius:10px;padding:8px 14px;margin-bottom:10px;">
       <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-size:16px;">${icon}</span>
-        <span style="font-weight:900;color:${bd};letter-spacing:1px;font-size:13px;">${title}</span>
-        <span style="font-size:10px;color:var(--text-muted);">${detail}</span>
+        <span id="shobu-icon" style="font-size:16px;">${icon}</span>
+        <span id="shobu-title" style="font-weight:900;color:${bd};letter-spacing:1px;font-size:13px;">${title}</span>
+        <span id="shobu-detail" style="font-size:10px;color:var(--text-muted);">${detail}</span>
       </div>
       <div id="venue-judge-info" style="font-size:10px;color:var(--text-muted);margin-top:3px;"></div>
     </div>`;
-    // 会場成績を非同期で取得して追記
+    // 会場成績を非同期で取得して判定に反映（条件3: 得意会場か）
     if (venueVal) {
       fetch('/history_stats', {
         method: 'POST', headers: {'Content-Type':'application/json'},
@@ -2222,6 +2222,21 @@ function renderResult(data) {
         if (s.with_result >= 10) {
           const col = s.recovery >= 100 ? '#00e676' : s.recovery >= 80 ? '#ffd740' : '#e94560';
           el.innerHTML = `📊 ${venueVal}の過去成績: 的中率${s.hit_rate}% / 回収率<span style="color:${col};font-weight:700;">${s.recovery}%</span>（${s.with_result}レース）`;
+          // 苦手会場（回収率80%未満）なら勝負レースを格下げ
+          if (isShobu && s.recovery < 80) {
+            const banner = document.getElementById('shobu-banner');
+            const iconEl = document.getElementById('shobu-icon');
+            const titleEl = document.getElementById('shobu-title');
+            const detailEl = document.getElementById('shobu-detail');
+            if (banner && iconEl && titleEl && detailEl) {
+              banner.style.background = 'rgba(255,215,64,0.10)';
+              banner.style.borderColor = '#ffd740';
+              iconEl.textContent = '⚠️';
+              titleEl.textContent = '見送り推奨';
+              titleEl.style.color = '#ffd740';
+              detailEl.textContent = `${venueVal}は苦手会場（回収率${s.recovery}%）`;
+            }
+          }
         } else {
           el.textContent = `📊 ${venueVal}の過去データは${s.with_result}レース（判断には10レース以上必要）`;
         }
