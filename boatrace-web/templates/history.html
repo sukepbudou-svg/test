@@ -346,6 +346,10 @@ h1 {
         <div style="font-size:10px;color:var(--text-muted);letter-spacing:1px;margin-bottom:8px;">🔍 本命の外れ方 内訳</div>
         <div id="miss-breakdown-rows"></div>
       </div>
+      <div id="miss-breakdown-taikou-panel" style="margin-top:14px;display:none;">
+        <div style="font-size:10px;color:var(--text-muted);letter-spacing:1px;margin-bottom:8px;">🔍 対抗の外れ方 内訳</div>
+        <div id="miss-breakdown-taikou-rows"></div>
+      </div>
     </div>
     <div class="chart-card">
       <div class="chart-title">累計収支推移</div>
@@ -573,6 +577,7 @@ async function applyFilterNow() {
       renderProfitChartFromStats(d.profit_series);
       renderPayoutFromStats(d.pattern);
       renderMissBreakdown(d.miss_breakdown);
+      renderMissBreakdown(d.miss_breakdown_taikou, 'miss-breakdown-taikou-panel', 'miss-breakdown-taikou-rows', '対抗');
     }
     // テーブル行のshow/hide（再描画より高速）
     filterRecordsTable();
@@ -987,17 +992,17 @@ function renderPayoutFromStats(pattern) {
   }).join('');
 }
 
-// ======== 本命の外れ方内訳 ========
-function renderMissBreakdown(mb) {
-  const panel = document.getElementById('miss-breakdown-panel');
-  const rowsEl = document.getElementById('miss-breakdown-rows');
+// ======== 外れ方内訳（本命・対抗共通）========
+function renderMissBreakdown(mb, panelId = 'miss-breakdown-panel', rowsId = 'miss-breakdown-rows', typeName = '本命') {
+  const panel = document.getElementById(panelId);
+  const rowsEl = document.getElementById(rowsId);
   if (!mb || mb.total === 0) { panel.style.display = 'none'; return; }
   panel.style.display = 'block';
   const rows = [
-    { label: '的中', count: mb.hit, color: '#00e676', desc: '本命コンボが的中' },
+    { label: '的中', count: mb.hit, color: '#00e676', desc: `${typeName}コンボが的中` },
     { label: '3着だけズレ', count: mb.first_second, color: '#40c4ff', desc: '1・2着は合っていた' },
     { label: '2・3着ズレ', count: mb.first_only, color: '#ffd740', desc: '1着だけ合っていた' },
-    { label: '1着から外れ', count: mb.first_wrong, color: '#e94560', desc: '本命の1着艇が飛んだ' },
+    { label: '1着から外れ', count: mb.first_wrong, color: '#e94560', desc: `${typeName}の1着艇が飛んだ` },
   ];
   rowsEl.innerHTML = rows.map(r => {
     const pct = (r.count / mb.total * 100).toFixed(1);

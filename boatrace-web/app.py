@@ -1170,33 +1170,38 @@ def history_stats():
         pattern[t] = {'hits': s['hits'], 'total': s['total'], 'hit_rate': hr,
                       'avg_payout': avg_pay, 'breakeven': breakeven}
 
-    # 本命の外れ方内訳（1着は合っていたか？）
-    miss_breakdown = {'hit': 0, 'first_second': 0, 'first_only': 0, 'first_wrong': 0, 'total': 0}
-    for r in with_result:
-        try:
-            preds = json.loads(r['predictions'])
-        except Exception:
-            continue
-        honmei_combos = []
-        for idx, p in enumerate(preds):
-            t = p.get('type') or (TYPE_BY_INDEX[idx] if idx < len(TYPE_BY_INDEX) else '')
-            if t == '本命' and p.get('combo'):
-                honmei_combos.append(p['combo'])
-        if not honmei_combos:
-            continue
-        miss_breakdown['total'] += 1
-        result_combo = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}"
-        if result_combo in honmei_combos:
-            miss_breakdown['hit'] += 1
-            continue
-        first_match = any(c.split('-')[0] == str(r['result_1st']) for c in honmei_combos)
-        second_match = any(c.split('-')[0] == str(r['result_1st']) and c.split('-')[1] == str(r['result_2nd']) for c in honmei_combos)
-        if second_match:
-            miss_breakdown['first_second'] += 1
-        elif first_match:
-            miss_breakdown['first_only'] += 1
-        else:
-            miss_breakdown['first_wrong'] += 1
+    # 外れ方内訳（1着は合っていたか？）本命・対抗それぞれ集計
+    def calc_miss_breakdown(target_type):
+        mb = {'hit': 0, 'first_second': 0, 'first_only': 0, 'first_wrong': 0, 'total': 0}
+        for r in with_result:
+            try:
+                preds = json.loads(r['predictions'])
+            except Exception:
+                continue
+            combos = []
+            for idx, p in enumerate(preds):
+                t = p.get('type') or (TYPE_BY_INDEX[idx] if idx < len(TYPE_BY_INDEX) else '')
+                if t == target_type and p.get('combo'):
+                    combos.append(p['combo'])
+            if not combos:
+                continue
+            mb['total'] += 1
+            result_combo = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}"
+            if result_combo in combos:
+                mb['hit'] += 1
+                continue
+            first_match = any(c.split('-')[0] == str(r['result_1st']) for c in combos)
+            second_match = any(c.split('-')[0] == str(r['result_1st']) and c.split('-')[1] == str(r['result_2nd']) for c in combos)
+            if second_match:
+                mb['first_second'] += 1
+            elif first_match:
+                mb['first_only'] += 1
+            else:
+                mb['first_wrong'] += 1
+        return mb
+
+    miss_breakdown = calc_miss_breakdown('本命')
+    miss_breakdown_taikou = calc_miss_breakdown('対抗')
 
     # 会場別集計
     venue_stats = {}
@@ -1243,6 +1248,7 @@ def history_stats():
         'total_purchase': total_purchase,
         'pattern': pattern,
         'miss_breakdown': miss_breakdown,
+        'miss_breakdown_taikou': miss_breakdown_taikou,
         'venue_list': venue_list,
         'profit_series': profit_series,
     })
