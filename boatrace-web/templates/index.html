@@ -1751,7 +1751,9 @@ async function runPredict(forceArekote = false) {
   const venue = document.getElementById('venue').value;
   const wind  = document.getElementById('wind').value;
 
-  const predictPayload = { boats, kimari: kimariPayload, venue, wind, nige_rate: lastNigeRate, force_arekote: forceArekote };
+  // kimari_full: 決まり手の全パースデータ（各艇の差し率・捲り率等）。
+  // 現行モデルは未使用だが、将来のロジック（v5+）のバックテスト材料として保存する
+  const predictPayload = { boats, kimari: kimariPayload, venue, wind, nige_rate: lastNigeRate, force_arekote: forceArekote, kimari_full: kimariStats || null };
   lastPredictInput = predictPayload;
   const resp = await fetch('/predict', {
     method: 'POST',
