@@ -2334,8 +2334,8 @@ function renderResult(data) {
         <span class="pred-combo">${item.combo}</span>${oddsHtml}${evHtml}
       </div>`;
     }
-    if (items.length === 0) {
-      // オッズ範囲内の組み合わせなし
+    if (items.length === 0 && type !== '中穴') {
+      // 該当なし表示（中穴は廃止済みのため行ごと非表示）
       html += `<div class="pred-item" style="opacity:0.4;border:1px dashed var(--border)">
         <span class="pred-label ${TYPE_CLASS[type]?.replace('pred-','')||''}">${type}</span>
         <span style="font-size:12px;color:var(--text-muted)">該当なし</span>
