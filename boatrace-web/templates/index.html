@@ -2180,6 +2180,55 @@ function renderResult(data) {
     }
   }
 
+  // 勝負レース判定バナー
+  if (!data.arekote_mode) {
+    const reasons = [];
+    const warns = [];
+    // 条件1: イン逃げ率
+    if (lastNigeRate != null && lastNigeRate > 0) {
+      if (lastNigeRate >= 65) reasons.push(`イン逃げ率${lastNigeRate.toFixed(1)}%`);
+      else warns.push(`イン逃げ率${lastNigeRate.toFixed(1)}%（65%未満）`);
+    } else {
+      warns.push('イン逃げ率 未入力');
+    }
+    // 条件2: 本命1点目のオッズ妙味
+    const honmeiFirst = (classified['本命'] || [])[0];
+    if (honmeiFirst && honmeiFirst.odds != null) {
+      if (honmeiFirst.odds >= 7) reasons.push(`本命${honmeiFirst.odds.toFixed(1)}倍（妙味あり）`);
+      else warns.push(`本命${honmeiFirst.odds.toFixed(1)}倍（7倍未満・回収困難）`);
+    }
+    const isShobu = warns.length === 0 && reasons.length > 0;
+    const bg = isShobu ? 'rgba(0,230,118,0.12)' : 'rgba(255,215,64,0.10)';
+    const bd = isShobu ? '#00e676' : '#ffd740';
+    const icon = isShobu ? '✅' : '⚠️';
+    const title = isShobu ? '勝負レース' : '見送り推奨';
+    const detail = isShobu ? reasons.join(' / ') : warns.join(' / ');
+    html += `<div style="background:${bg};border:1.5px solid ${bd};border-radius:10px;padding:8px 14px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:16px;">${icon}</span>
+        <span style="font-weight:900;color:${bd};letter-spacing:1px;font-size:13px;">${title}</span>
+        <span style="font-size:10px;color:var(--text-muted);">${detail}</span>
+      </div>
+      <div id="venue-judge-info" style="font-size:10px;color:var(--text-muted);margin-top:3px;"></div>
+    </div>`;
+    // 会場成績を非同期で取得して追記
+    if (venueVal) {
+      fetch('/history_stats', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ period:'all', venues:[venueVal], nige_min:0, nige_max:100, manzoku:false })
+      }).then(r => r.json()).then(s => {
+        const el = document.getElementById('venue-judge-info');
+        if (!el) return;
+        if (s.with_result >= 10) {
+          const col = s.recovery >= 100 ? '#00e676' : s.recovery >= 80 ? '#ffd740' : '#e94560';
+          el.innerHTML = `📊 ${venueVal}の過去成績: 的中率${s.hit_rate}% / 回収率<span style="color:${col};font-weight:700;">${s.recovery}%</span>（${s.with_result}レース）`;
+        } else {
+          el.textContent = `📊 ${venueVal}の過去データは${s.with_result}レース（判断には10レース以上必要）`;
+        }
+      }).catch(() => {});
+    }
+  }
+
   // 荒れモード
   if (data.arekote_mode) {
     html += `<div style="background:linear-gradient(135deg,rgba(255,80,80,0.18),rgba(180,0,180,0.12));border:1.5px solid #ff5050;border-radius:10px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
