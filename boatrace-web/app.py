@@ -192,26 +192,26 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
         class_bonus = {'A1': 0.8, 'A2': 0.4, 'B1': 0.0, 'B2': -0.5}.get(player_class, 0.0)
         base += class_bonus * (1 + st_penalty * 10)
 
-        # 周回タイム: 当日×0.6 + 平均×0.4 (大きいほど良い)
+        # 周回タイム: 当日×0.6 + 平均×0.4 (小さいほど速い=良い)
         if lap > 0 and avg_lap > 0:
             combined_lap = lap * 0.6 + avg_lap * 0.4
-            base += (combined_lap - 36.0) * 0.5
+            base += (36.0 - combined_lap) * 0.5
         elif lap > 0:
-            base += (lap - 36.0) * 0.5
+            base += (36.0 - lap) * 0.5
 
-        # 直線タイム: 当日×0.6 + 平均×0.4 (大きいほど良い)
+        # 直線タイム: 当日×0.6 + 平均×0.4 (小さいほど速い=良い)
         if straight > 0 and avg_straight > 0:
             combined_str = straight * 0.6 + avg_straight * 0.4
-            base += (combined_str - 70.0) * 0.3
+            base += (6.5 - combined_str) * 3.0
         elif straight > 0:
-            base += (straight - 70.0) * 0.3
+            base += (6.5 - straight) * 3.0
 
-        # まわり足: 当日×0.6 + 平均×0.4 (大きいほど良い)
+        # まわり足: 当日×0.6 + 平均×0.4 (小さいほど速い=良い)
         if mawariashi > 0 and avg_mawari > 0:
             combined_maw = mawariashi * 0.6 + avg_mawari * 0.4
-            base += (combined_maw - 36.0) * 0.3
+            base += (5.0 - combined_maw) * 0.5
         elif mawariashi > 0:
-            base += (mawariashi - 36.0) * 0.3
+            base += (5.0 - mawariashi) * 0.5
 
         # Player bonus
         player_bonus = win1 * 0.3 + win2 * 0.1
