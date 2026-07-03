@@ -1009,13 +1009,19 @@ def payout_stats():
         except Exception:
             continue
         result = f"{row['result_1st']}-{row['result_2nd']}-{row['result_3rd']}"
-        # コンボ（点数）単位で集計（的中パターン分析と同じ基準）
+        # レース単位で集計（種別ごとに1レース=1カウント）
+        types_in_race = {}
         for p in preds:
             t = p.get('type')
             if t not in TYPES:
                 continue
-            stats[t]['total'] += 1
+            if t not in types_in_race:
+                types_in_race[t] = False
             if p.get('combo') == result:
+                types_in_race[t] = True
+        for t, is_hit in types_in_race.items():
+            stats[t]['total'] += 1
+            if is_hit:
                 stats[t]['hits'] += 1
                 if row['payout'] and row['payout'] > 0:
                     stats[t]['payouts'].append(row['payout'])

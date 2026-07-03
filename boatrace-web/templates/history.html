@@ -690,12 +690,17 @@ function renderPatternAnalysisWith(records) {
     if (!r.predictions) return;
     const preds = typeof r.predictions === 'string' ? JSON.parse(r.predictions) : r.predictions;
     const hitCombo = r.result_1st && r.result_2nd && r.result_3rd ? r.result_1st + '-' + r.result_2nd + '-' + r.result_3rd : null;
+    // レースベース: 種別ごとに1レース=1カウント
+    const typesInRace = {};
     preds.forEach((p, idx) => {
       const t = p.type || typeByIndex[idx] || '';
-      if (stats[t] !== undefined) {
-        stats[t].total++;
-        if (hitCombo && p.combo === hitCombo) stats[t].hit++;
-      }
+      if (stats[t] === undefined) return;
+      if (!(t in typesInRace)) typesInRace[t] = false;
+      if (hitCombo && p.combo === hitCombo) typesInRace[t] = true;
+    });
+    Object.entries(typesInRace).forEach(([t, isHit]) => {
+      stats[t].total++;
+      if (isHit) stats[t].hit++;
     });
   });
 
