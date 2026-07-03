@@ -404,21 +404,11 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
                 taikou.append(c)
             used_combos.add(c['combo'])
 
-    # 中穴: 残り1点
-    chuuana = []
-    for c in candidates:
-        if c['combo'] not in used_combos:
-            chuuana.append(c)
-            used_combos.add(c['combo'])
-            break
-
     results = []
     for c in honmei[:2]:
         results.append({'combo': c['combo'], 'type': '本命', 'combined': round(c['combined'], 2)})
     for c in taikou[:3]:
         results.append({'combo': c['combo'], 'type': '対抗', 'combined': round(c['combined'], 2)})
-    for c in chuuana[:1]:
-        results.append({'combo': c['combo'], 'type': '中穴', 'combined': round(c['combined'], 2)})
 
     chaos = calc_chaos(scores, boats, vp, wind_effect, nige_rate)
 
@@ -1147,7 +1137,7 @@ def history_stats():
 
     # 種別別集計
     TYPES = ['本命', '対抗', '中穴', '万舟']
-    TYPE_BY_INDEX = ['本命','本命','対抗','対抗','対抗','中穴','万舟','万舟']
+    TYPE_BY_INDEX = ['本命','本命','対抗','対抗','対抗','万舟','万舟']
     type_stats = {t: {'hits': 0, 'total': 0, 'payouts': []} for t in TYPES}
     for r in with_result:
         try:
