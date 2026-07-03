@@ -2215,8 +2215,9 @@ function renderResult(data) {
     // 今回のイン逃げ率±10%の類似条件で絞り込み、データ不足なら会場全体にフォールバック
     if (venueVal) {
       const hasNige = lastNigeRate != null && lastNigeRate > 0;
-      const bandMin = hasNige ? Math.max(0, Math.floor(lastNigeRate - 10)) : 0;
-      const bandMax = hasNige ? Math.min(100, Math.ceil(lastNigeRate + 10)) : 100;
+      // 下限=今回の逃げ率を5%刻みで切り下げ、上限=100%（下のレースを混ぜない）
+      const bandMin = hasNige ? Math.floor(lastNigeRate / 5) * 5 : 0;
+      const bandMax = 100;
       const fetchStats = (nMin, nMax) => fetch('/history_stats', {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ period:'all', venues:[venueVal], nige_min:nMin, nige_max:nMax, manzoku:false })
