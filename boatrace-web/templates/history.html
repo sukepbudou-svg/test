@@ -342,6 +342,10 @@ h1 {
         <div style="font-size:10px;color:var(--text-muted);letter-spacing:1px;margin-bottom:8px;">的中時 平均配当</div>
         <div id="avg-payout-rows"></div>
       </div>
+      <div id="miss-breakdown-panel" style="margin-top:14px;display:none;">
+        <div style="font-size:10px;color:var(--text-muted);letter-spacing:1px;margin-bottom:8px;">🔍 本命の外れ方 内訳</div>
+        <div id="miss-breakdown-rows"></div>
+      </div>
     </div>
     <div class="chart-card">
       <div class="chart-title">累計収支推移</div>
@@ -568,6 +572,7 @@ async function applyFilterNow() {
       renderPatternFromStats(d.pattern);
       renderProfitChartFromStats(d.profit_series);
       renderPayoutFromStats(d.pattern);
+      renderMissBreakdown(d.miss_breakdown);
     }
     // テーブル行のshow/hide（再描画より高速）
     filterRecordsTable();
@@ -978,6 +983,32 @@ function renderPayoutFromStats(pattern) {
       <span style="color:var(--text);font-weight:700;">${pay}</span>
       <span style="color:var(--text-muted);">${s.hits}回的中 / 的中率${s.hit_rate}%</span>
       <span style="color:var(--accent2);font-size:10px;">${beStr}</span>
+    </div>`;
+  }).join('');
+}
+
+// ======== 本命の外れ方内訳 ========
+function renderMissBreakdown(mb) {
+  const panel = document.getElementById('miss-breakdown-panel');
+  const rowsEl = document.getElementById('miss-breakdown-rows');
+  if (!mb || mb.total === 0) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  const rows = [
+    { label: '的中', count: mb.hit, color: '#00e676', desc: '本命コンボが的中' },
+    { label: '3着だけズレ', count: mb.first_second, color: '#40c4ff', desc: '1・2着は合っていた' },
+    { label: '2・3着ズレ', count: mb.first_only, color: '#ffd740', desc: '1着だけ合っていた' },
+    { label: '1着から外れ', count: mb.first_wrong, color: '#e94560', desc: '本命の1着艇が飛んだ' },
+  ];
+  rowsEl.innerHTML = rows.map(r => {
+    const pct = (r.count / mb.total * 100).toFixed(1);
+    return `<div style="margin-bottom:6px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">
+        <span style="color:${r.color};font-weight:700;">${r.label}</span>
+        <span style="color:var(--text-muted);">${r.count}/${mb.total}（${pct}%）<span style="font-size:9px;margin-left:4px;">${r.desc}</span></span>
+      </div>
+      <div style="background:var(--surface3);border-radius:3px;height:5px;">
+        <div style="width:${pct}%;height:100%;border-radius:3px;background:${r.color};"></div>
+      </div>
     </div>`;
   }).join('');
 }
