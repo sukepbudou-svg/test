@@ -2120,7 +2120,7 @@ function classifyByOdds(candidates) {
 function classifyByScore(predictions) {
   const result = { '本命': [], '対抗': [], '中穴': [], '万舟': [] };
   for (const p of predictions) {
-    if (result[p.type] && result[p.type].length < TYPE_LIMITS[p.type]) {
+    if (result[p.type] !== undefined) {
       result[p.type].push({ combo: p.combo, type: p.type, odds: null });
     }
   }
