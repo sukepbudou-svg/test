@@ -1494,12 +1494,7 @@ function applyExhibitInfo(data) {
     if (data.st[idx] !== undefined) {
       const el = document.getElementById(`b${boatNo}_exhibit_st`);
       if (el) el.value = data.st[idx].toFixed(3);
-      // Fフラグ
-      const fbtn = document.getElementById(`b${boatNo}_fbtn`);
-      if (fbtn && data.stF[idx]) {
-        fbtn.classList.add('f-on');
-        fbtn.textContent = 'F有';
-      }
+      // Fフラグは手動入力のみ（自動判定しない）
     }
     // 体重
     if (data.weight[idx] !== undefined) {
