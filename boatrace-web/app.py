@@ -360,25 +360,23 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
         if len(honmei) >= 2:
             break
 
-    # ===== 対抗3点 =====
+    # ===== 対抗3点: 3つの異なるシナリオをカバー =====
     taikou = []
     used_combos = {c['combo'] for c in honmei}
 
-    # --- 対抗1・2点目: candidatesスコア順で本命と被らない上位2コンボ ---
-    # スコア差が大きければ自然に1位艇1着バリエーション、僅差なら2位艇1着も入る
-    for c in candidates:
-        if c['combo'] not in used_combos:
-            taikou.append(c)
-            used_combos.add(c['combo'])
-        if len(taikou) >= 2:
-            break
+    # --- 対抗1点目: スコア2位の艇が1着（展開逆転シナリオ）---
+    if len(scores) >= 2:
+        second_bn = scores[1]['boat']['boat_number']
+        for c in candidates:
+            if c['combo'].startswith(f"{second_bn}-") and c['combo'] not in used_combos:
+                taikou.append(c)
+                used_combos.add(c['combo'])
+                break
 
-    # --- 対抗3点目: 展示ST最速が2着のコンボ（展開シナリオ）---
-    # STデータがある場合はST最速艇の2着シナリオを優先。なければスコア順で補完
+    # --- 対抗2点目: 1位1着 + STが最速の艇が2着（展示ST展開シナリオ）---
     st_entries = [(s['course'], s['exhibit_st'], s['boat']['boat_number'])
                   for s in scores if s.get('exhibit_st', 0) > 0
                   and s['boat']['boat_number'] != top_bn]
-    st_added = False
     if st_entries:
         best_st_bn = min(st_entries, key=lambda x: x[1])[2]  # STが小さい=速い
         for c in candidates:
@@ -386,14 +384,14 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
             if parts[0] == str(top_bn) and parts[1] == str(best_st_bn) and c['combo'] not in used_combos:
                 taikou.append(c)
                 used_combos.add(c['combo'])
-                st_added = True
                 break
-    if not st_added:
-        for c in candidates:
-            if c['combo'] not in used_combos:
-                taikou.append(c)
-                used_combos.add(c['combo'])
-                break
+
+    # --- 対抗3点目: 残りスコア上位コンボから本命と被らないもの ---
+    for c in candidates:
+        if c['combo'] not in used_combos:
+            taikou.append(c)
+            used_combos.add(c['combo'])
+            break
 
     # 不足分はスコア順で補完
     for c in candidates:
