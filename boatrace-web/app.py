@@ -868,11 +868,11 @@ def get_records():
     period = request.args.get('period', 'all')
     conn = get_db()
     if period == 'week':
-        rows = conn.execute("SELECT * FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
     elif period == 'month':
-        rows = conn.execute("SELECT * FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
     else:
-        rows = conn.execute("SELECT * FROM records ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records ORDER BY id DESC").fetchall()
     conn.close()
 
     records = []
@@ -1135,11 +1135,11 @@ def history_stats():
 
     conn = get_db()
     if period == 'week':
-        rows = conn.execute("SELECT * FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
     elif period == 'month':
-        rows = conn.execute("SELECT * FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
     else:
-        rows = conn.execute("SELECT * FROM records ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records ORDER BY id DESC").fetchall()
     conn.close()
 
     # フィルター適用
