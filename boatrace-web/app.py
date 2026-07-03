@@ -991,6 +991,56 @@ def stats_summary():
     })
 
 
+@app.route('/payout_stats', methods=['GET'])
+def payout_stats():
+    """種別（本命/対抗/中穴/万舟）ごとの的中時平均配当を集計"""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT predictions, result_1st, result_2nd, result_3rd, payout FROM records WHERE payout IS NOT NULL AND result_1st IS NOT NULL"
+    ).fetchall()
+    conn.close()
+
+    TYPES = ['本命', '対抗', '中穴', '万舟']
+    stats = {t: {'hits': 0, 'total': 0, 'payouts': []} for t in TYPES}
+
+    for row in rows:
+        try:
+            preds = json.loads(row['predictions'])
+        except Exception:
+            continue
+        result = f"{row['result_1st']}-{row['result_2nd']}-{row['result_3rd']}"
+        # このレースに含まれる種別を集計（種別ごとに1レース=1カウント）
+        types_in_race = {}
+        for p in preds:
+            t = p.get('type')
+            if t not in TYPES:
+                continue
+            if t not in types_in_race:
+                types_in_race[t] = False
+            if p.get('combo') == result:
+                types_in_race[t] = True
+        for t, is_hit in types_in_race.items():
+            stats[t]['total'] += 1
+            if is_hit:
+                stats[t]['hits'] += 1
+                if row['payout'] and row['payout'] > 0:
+                    stats[t]['payouts'].append(row['payout'])
+
+    result_data = {}
+    for t in TYPES:
+        s = stats[t]
+        avg_pay = round(sum(s['payouts']) / len(s['payouts'])) if s['payouts'] else None
+        hit_rate = round(s['hits'] / s['total'] * 100, 1) if s['total'] > 0 else 0
+        result_data[t] = {
+            'hits': s['hits'],
+            'total': s['total'],
+            'hit_rate': hit_rate,
+            'avg_payout': avg_pay,
+        }
+
+    return jsonify(result_data)
+
+
 @app.route('/delete_record', methods=['POST'])
 def delete_record():
     data = request.get_json()

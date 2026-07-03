@@ -338,6 +338,10 @@ h1 {
     <div class="chart-card">
       <div class="chart-title">的中パターン分析</div>
       <div class="pattern-bars" id="pattern-bars"></div>
+      <div id="avg-payout-panel" style="margin-top:14px;display:none;">
+        <div style="font-size:10px;color:var(--text-muted);letter-spacing:1px;margin-bottom:8px;">的中時 平均配当</div>
+        <div id="avg-payout-rows"></div>
+      </div>
     </div>
     <div class="chart-card">
       <div class="chart-title">累計収支推移</div>
@@ -547,6 +551,34 @@ function applyFilter() {
   renderDailyWith(filtered);
 }
 
+// ======== 種別別平均配当 ========
+async function loadPayoutStats() {
+  try {
+    const resp = await fetch('/payout_stats');
+    const data = await resp.json();
+    const types = ['本命','対抗','中穴','万舟'];
+    const typeColors = { '本命':'#40c4ff', '対抗':'#00e676', '中穴':'#ffd740', '万舟':'#e94560' };
+    const panel = document.getElementById('avg-payout-panel');
+    const rows = document.getElementById('avg-payout-rows');
+    const hasData = types.some(t => data[t] && data[t].hits > 0);
+    if (!hasData) return;
+    panel.style.display = 'block';
+    rows.innerHTML = types.map(t => {
+      const s = data[t];
+      if (!s || s.total === 0) return '';
+      const pay = s.avg_payout ? `¥${s.avg_payout.toLocaleString()}` : '-';
+      const breakeven = s.avg_payout && s.hit_rate > 0 ? Math.round(s.avg_payout * s.hit_rate / 100) : null;
+      const beStr = breakeven ? `（回収期待値 ¥${breakeven.toLocaleString()}/レース）` : '';
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:11px;">
+        <span style="color:${typeColors[t]};font-weight:700;width:32px;">${t}</span>
+        <span style="color:var(--text);font-weight:700;">${pay}</span>
+        <span style="color:var(--text-muted);">${s.hits}回的中 / 的中率${s.hit_rate}%</span>
+        <span style="color:var(--accent2);font-size:10px;">${beStr}</span>
+      </div>`;
+    }).join('');
+  } catch(e) {}
+}
+
 // ======== 初期化 ========
 async function loadRecords() {
   const resp = await fetch(`/get_records?period=${currentFilter}`);
@@ -554,6 +586,7 @@ async function loadRecords() {
   renderRecords();
   buildFilterPanel();
   applyFilter();
+  loadPayoutStats();
 }
 
 // ======== 期間フィルター ========
