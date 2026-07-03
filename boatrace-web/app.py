@@ -1041,6 +1041,132 @@ def payout_stats():
     return jsonify(result_data)
 
 
+@app.route('/history_stats', methods=['POST'])
+def history_stats():
+    """絞り込み条件をサーバーで処理して集計結果を返す"""
+    data = request.get_json()
+    period     = data.get('period', 'all')
+    venues     = data.get('venues', [])
+    nige_min   = data.get('nige_min', 0)
+    nige_max   = data.get('nige_max', 100)
+    manzoku    = data.get('manzoku', False)
+
+    conn = get_db()
+    if period == 'week':
+        rows = conn.execute("SELECT * FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
+    elif period == 'month':
+        rows = conn.execute("SELECT * FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
+    else:
+        rows = conn.execute("SELECT * FROM records ORDER BY id DESC").fetchall()
+    conn.close()
+
+    # フィルター適用
+    filtered = []
+    for r in rows:
+        if venues and r['venue'] not in venues:
+            continue
+        if nige_min > 0 or nige_max < 100:
+            if r['nige_rate'] is None:
+                continue
+            if r['nige_rate'] < nige_min or r['nige_rate'] > nige_max:
+                continue
+        if manzoku and (not r['payout'] or r['payout'] < 10000):
+            continue
+        filtered.append(r)
+
+    total = len(filtered)
+    with_result = [r for r in filtered if r['result_1st']]
+    hits = [r for r in with_result if r['is_hit']]
+    hit_rate = round(len(hits) / len(with_result) * 100, 1) if with_result else 0
+    total_payout = sum(r['payout'] or 0 for r in hits)
+    total_purchase = sum(r['purchase'] or 0 for r in with_result if r['purchase'])
+    recovery = round(total_payout / total_purchase * 100, 1) if total_purchase > 0 else 0
+    profit = total_payout - total_purchase
+
+    # 種別別集計
+    TYPES = ['本命', '対抗', '中穴', '万舟']
+    TYPE_BY_INDEX = ['本命','本命','対抗','対抗','対抗','中穴','万舟','万舟']
+    type_stats = {t: {'hits': 0, 'total': 0, 'payouts': []} for t in TYPES}
+    for r in with_result:
+        try:
+            preds = json.loads(r['predictions'])
+        except Exception:
+            continue
+        result_combo = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}"
+        types_in_race = {}
+        for idx, p in enumerate(preds):
+            t = p.get('type') or (TYPE_BY_INDEX[idx] if idx < len(TYPE_BY_INDEX) else '')
+            if t not in TYPES:
+                continue
+            if t not in types_in_race:
+                types_in_race[t] = False
+            if p.get('combo') == result_combo:
+                types_in_race[t] = True
+        for t, is_hit in types_in_race.items():
+            type_stats[t]['total'] += 1
+            if is_hit:
+                type_stats[t]['hits'] += 1
+                if r['payout'] and r['payout'] > 0:
+                    type_stats[t]['payouts'].append(r['payout'])
+
+    pattern = {}
+    for t in TYPES:
+        s = type_stats[t]
+        avg_pay = round(sum(s['payouts']) / len(s['payouts'])) if s['payouts'] else None
+        hr = round(s['hits'] / s['total'] * 100, 1) if s['total'] > 0 else 0
+        breakeven = round(avg_pay * s['hits'] / s['total']) if avg_pay and s['total'] > 0 else None
+        pattern[t] = {'hits': s['hits'], 'total': s['total'], 'hit_rate': hr,
+                      'avg_payout': avg_pay, 'breakeven': breakeven}
+
+    # 会場別集計
+    venue_stats = {}
+    for r in with_result:
+        v = r['venue']
+        if v not in venue_stats:
+            venue_stats[v] = {'hits': 0, 'total': 0, 'payout': 0, 'purchase': 0}
+        venue_stats[v]['total'] += 1
+        if r['is_hit']:
+            venue_stats[v]['hits'] += 1
+            venue_stats[v]['payout'] += r['payout'] or 0
+        venue_stats[v]['purchase'] += r['purchase'] or 0
+
+    venue_list = []
+    for v, s in venue_stats.items():
+        hr = round(s['hits'] / s['total'] * 100, 1) if s['total'] > 0 else 0
+        rec = round(s['payout'] / s['purchase'] * 100, 1) if s['purchase'] > 0 else 0
+        venue_list.append({'venue': v, 'hits': s['hits'], 'total': s['total'],
+                           'hit_rate': hr, 'recovery': rec})
+    venue_list.sort(key=lambda x: x['hit_rate'], reverse=True)
+
+    # 収支推移（日別）
+    daily = {}
+    for r in sorted(with_result, key=lambda x: x['race_date']):
+        d = r['race_date']
+        if d not in daily:
+            daily[d] = {'payout': 0, 'purchase': 0}
+        daily[d]['payout'] += r['payout'] or 0
+        daily[d]['purchase'] += r['purchase'] or 0
+    profit_series = []
+    cumulative = 0
+    for d, s in sorted(daily.items()):
+        cumulative += s['payout'] - s['purchase']
+        profit_series.append({'date': d, 'cumulative': cumulative})
+
+    return jsonify({
+        'total': total,
+        'with_result': len(with_result),
+        'hits': len(hits),
+        'hit_rate': hit_rate,
+        'recovery': recovery,
+        'profit': profit,
+        'total_payout': total_payout,
+        'total_purchase': total_purchase,
+        'pattern': pattern,
+        'venue_list': venue_list,
+        'profit_series': profit_series,
+    })
+
+
 @app.route('/delete_record', methods=['POST'])
 def delete_record():
     data = request.get_json()

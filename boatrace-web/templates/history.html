@@ -528,27 +528,50 @@ function resetFilter() {
   applyFilter();
 }
 
-function updateFilterLabel() {
-  const filtered = getFilteredRecords();
-  const total = allRecords.length;
-  const isFiltered = selectedVenues.size > 0 || nigeFilterMin > 0 || nigeFilterMax < 100 || manzokuOnly;
-  const label = document.getElementById('filter-active-label');
-  if (isFiltered) {
-    label.textContent = `絞り込み中: 全${total}件 → ${filtered.length}件対象`;
-  } else {
-    label.textContent = `全${total}件（絞り込みなし）`;
-  }
+let applyFilterTimer = null;
+function applyFilter() {
+  // デバウンス: 連続操作時は最後の操作から200ms後に実行
+  clearTimeout(applyFilterTimer);
+  applyFilterTimer = setTimeout(applyFilterNow, 200);
 }
 
-function applyFilter() {
-  updateFilterLabel();
-  const filtered = getFilteredRecords();
-  renderSummaryWith(filtered);
-  renderVenueChartWith(filtered);
-  const hasResult = filtered.some(r => r.result_1st);
-  document.getElementById('analysis-section').style.display = hasResult ? 'grid' : 'none';
-  if (hasResult) { renderPatternAnalysisWith(filtered); renderProfitChartWith(filtered); renderPayoutStats(filtered); }
-  renderDailyWith(filtered);
+async function applyFilterNow() {
+  const label = document.getElementById('filter-active-label');
+  label.textContent = '集計中...';
+
+  const body = {
+    period: currentFilter,
+    venues: [...selectedVenues],
+    nige_min: nigeFilterMin,
+    nige_max: nigeFilterMax,
+    manzoku: manzokuOnly,
+  };
+
+  try {
+    const resp = await fetch('/history_stats', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    const d = await resp.json();
+
+    const isFiltered = selectedVenues.size > 0 || nigeFilterMin > 0 || nigeFilterMax < 100 || manzokuOnly;
+    label.textContent = isFiltered
+      ? `絞り込み中: 全${allRecords.length}件 → ${d.total}件対象`
+      : `全${d.total}件（絞り込みなし）`;
+
+    renderSummaryFromStats(d);
+    renderVenueChartFromStats(d.venue_list);
+    const hasResult = d.with_result > 0;
+    document.getElementById('analysis-section').style.display = hasResult ? 'grid' : 'none';
+    if (hasResult) {
+      renderPatternFromStats(d.pattern);
+      renderProfitChartFromStats(d.profit_series);
+      renderPayoutFromStats(d.pattern);
+    }
+  } catch(e) {
+    label.textContent = '集計エラー';
+  }
 }
 
 // ======== 種別別平均配当（絞り込み済みレコードから計算）========
@@ -888,6 +911,101 @@ function toggleDailyDetail(id) {
   const el = document.getElementById(id);
   if (!el) return;
   el.style.display = el.style.display === 'block' ? 'none' : 'block';
+}
+
+// ======== サーバーデータ対応レンダラー ========
+function renderSummaryFromStats(d) {
+  document.getElementById('sum-hit').textContent = d.hits;
+  document.getElementById('sum-total-races').textContent = `全${d.total}レース`;
+  document.getElementById('sum-rate').textContent = `${d.hit_rate}%`;
+  document.getElementById('sum-recover').textContent = `${d.recovery}%`;
+  document.getElementById('sum-profit-detail').textContent = `収支: ${d.profit >= 0 ? '+' : ''}${d.profit.toLocaleString()}円`;
+  const balEl = document.getElementById('sum-balance');
+  balEl.textContent = `${d.profit >= 0 ? '+' : ''}${d.profit.toLocaleString()}`;
+  balEl.style.color = d.profit >= 0 ? 'var(--green)' : 'var(--accent)';
+  document.getElementById('sum-payout-detail').textContent = `払戻: ${d.total_payout.toLocaleString()}円`;
+}
+
+function renderPatternFromStats(pattern) {
+  const types = ['本命','対抗','中穴','万舟'];
+  const typeColors = { '本命':'#40c4ff', '対抗':'#00e676', '中穴':'#ffd740', '万舟':'#e94560' };
+  const maxTotal = Math.max(...types.map(t => pattern[t]?.total || 0), 1);
+  document.getElementById('pattern-bars').innerHTML = types.map(t => {
+    const s = pattern[t];
+    if (!s || s.total === 0) return '';
+    const barW = Math.round(s.total / maxTotal * 100);
+    const hitBarW = Math.round(s.hit_rate);
+    return `<div class="pattern-row">
+      <div class="pattern-label" style="color:${typeColors[t]};font-weight:bold;">${t}</div>
+      <div style="flex:1;">
+        <div class="pattern-track" style="width:${barW}%;min-width:60px;">
+          <div class="pattern-fill" style="width:${hitBarW}%;background:${typeColors[t]};opacity:0.85;"></div>
+          <div class="pattern-val">${s.hits}/${s.total}（${s.hit_rate}%）</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderPayoutFromStats(pattern) {
+  const types = ['本命','対抗','中穴','万舟'];
+  const typeColors = { '本命':'#40c4ff', '対抗':'#00e676', '中穴':'#ffd740', '万舟':'#e94560' };
+  const panel = document.getElementById('avg-payout-panel');
+  const rowsEl = document.getElementById('avg-payout-rows');
+  const hasData = types.some(t => pattern[t]?.hits > 0);
+  if (!hasData) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  rowsEl.innerHTML = types.map(t => {
+    const s = pattern[t];
+    if (!s || s.total === 0) return '';
+    const pay = s.avg_payout ? `¥${s.avg_payout.toLocaleString()}` : '-';
+    const beStr = s.breakeven ? `（回収期待値 ¥${s.breakeven.toLocaleString()}/レース）` : '';
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:11px;">
+      <span style="color:${typeColors[t]};font-weight:700;width:32px;">${t}</span>
+      <span style="color:var(--text);font-weight:700;">${pay}</span>
+      <span style="color:var(--text-muted);">${s.hits}回的中 / 的中率${s.hit_rate}%</span>
+      <span style="color:var(--accent2);font-size:10px;">${beStr}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderProfitChartFromStats(series) {
+  if (!series || series.length < 2) return;
+  const points = series.map(s => s.cumulative);
+  const minV = Math.min(...points, 0);
+  const maxV = Math.max(...points, 0);
+  const range = maxV - minV || 1;
+  const W = 300, H = 100, pad = 6;
+  const toX = i => pad + (i / (points.length - 1)) * (W - pad * 2);
+  const toY = v => H - pad - ((v - minV) / range) * (H - pad * 2);
+  const polyline = points.map((v,i) => toX(i) + ',' + toY(v)).join(' ');
+  const zeroY = toY(0);
+  const lastX = toX(points.length - 1);
+  const fillPath = 'M ' + pad + ',' + zeroY + ' L ' + points.map((v,i) => toX(i) + ',' + toY(v)).join(' L ') + ' L ' + lastX + ',' + zeroY + ' Z';
+  const lastVal = points[points.length - 1];
+  const lineColor = lastVal >= 0 ? '#00e676' : '#e94560';
+  const fillColor = lastVal >= 0 ? 'rgba(0,230,118,0.15)' : 'rgba(233,69,96,0.15)';
+  document.getElementById('profit-svg').innerHTML =
+    '<line x1="' + pad + '" y1="' + zeroY + '" x2="' + (W-pad) + '" y2="' + zeroY + '" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>' +
+    '<path d="' + fillPath + '" fill="' + fillColor + '"/>' +
+    '<polyline points="' + polyline + '" fill="none" stroke="' + lineColor + '" stroke-width="2" stroke-linejoin="round"/>';
+  document.getElementById('profit-oldest').textContent = series[0].date;
+  document.getElementById('profit-latest').textContent = series[series.length-1].date + '  累計: ' + (lastVal >= 0 ? '+' : '') + lastVal.toLocaleString() + '円';
+}
+
+function renderVenueChartFromStats(venueList) {
+  if (!venueList || venueList.length === 0) { document.getElementById('chart-section').style.display='none'; return; }
+  document.getElementById('chart-section').style.display='block';
+  const maxHit = Math.max(...venueList.map(v => v.hits), 1);
+  document.getElementById('venue-chart').innerHTML = venueList.map(v => `
+    <div class="bar-row">
+      <div class="bar-label"><span class="bar-label-btn" onclick="openVenueDetail('${v.venue}')">${v.venue}</span></div>
+      <div class="bar-track">
+        <div class="bar-fill hit-bar" style="width:${v.hits/maxHit*100}%">
+          <span class="bar-val">${v.hits}/${v.total}</span>
+        </div>
+      </div>
+    </div>`).join('');
 }
 
 // ======== 会場別グラフ ========
