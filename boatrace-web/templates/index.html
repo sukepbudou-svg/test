@@ -2457,6 +2457,11 @@ function allClear() {
     document.getElementById(`mb3-${i}`).textContent = '機3連-';
     document.getElementById(`mn-${i}`).textContent = '-';
     document.getElementById(`mr-${i}`).textContent = '';
+    // 選手の級クリア
+    const pcEl = document.getElementById(`pc-${i}`);
+    if (pcEl) { pcEl.textContent = ''; pcEl.style.cssText = ''; }
+    const pcHidden = document.getElementById(`b${i}_player_class`);
+    if (pcHidden) pcHidden.value = '';
   }
   document.getElementById('result-area').innerHTML = '<div style="color:var(--text-muted);font-size:12px;margin-top:12px;text-align:center;letter-spacing:1px;">データを入力して予想するを押してください</div>';
   document.getElementById('nige-rate-banner').style.display = 'none';
