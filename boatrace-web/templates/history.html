@@ -569,6 +569,10 @@ async function applyFilterNow() {
       renderProfitChartFromStats(d.profit_series);
       renderPayoutFromStats(d.pattern);
     }
+    // テーブル行のshow/hide（再描画より高速）
+    filterRecordsTable();
+    // 日別表示はクライアント側のレコードで描画（個別の結果入力ボタンが必要なため）
+    renderDailyWith(getFilteredRecords());
   } catch(e) {
     label.textContent = '集計エラー';
   }
@@ -628,9 +632,18 @@ function renderPayoutStats(records) {
 async function loadRecords() {
   const resp = await fetch(`/get_records?period=${currentFilter}`);
   allRecords = await resp.json();
-  renderRecords();
+  renderRecords();   // テーブル描画は初回・期間変更時のみ
   buildFilterPanel();
   applyFilter();
+}
+
+// レコード一覧テーブルの絞り込み表示（軽量: DOMのshow/hideのみ）
+function filterRecordsTable() {
+  const filtered = getFilteredRecords();
+  const filteredIds = new Set(filtered.map(r => r.id));
+  document.querySelectorAll('#records-body tr[data-id]').forEach(tr => {
+    tr.style.display = filteredIds.has(parseInt(tr.dataset.id)) ? '' : 'none';
+  });
 }
 
 // ======== 期間フィルター ========
@@ -679,7 +692,7 @@ function renderRecords() {
       ? `<button class="btn-result" onclick="openModal(${r.id},'${r.venue}',${r.race_no},'${r.race_date}')">修正</button>`
       : `<button class="btn-result" onclick="openModal(${r.id},'${r.venue}',${r.race_no},'${r.race_date}')">結果入力</button>`;
 
-    return `<tr>
+    return `<tr data-id="${r.id}">
       <td>${r.race_date}</td>
       <td>${r.venue}</td>
       <td>${r.race_no}R${(r.nige_rate != null || r.wind) ? `<br><span style="font-size:9px;color:#aaa;white-space:nowrap;">${r.nige_rate != null ? `逃${r.nige_rate.toFixed(1)}%` : ''}${r.nige_rate != null && r.wind ? ' ' : ''}${r.wind ? `💨${r.wind}` : ''}</span>` : ''}</td>
