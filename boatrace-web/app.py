@@ -351,6 +351,20 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
 
     candidates.sort(key=lambda x: x['combined'], reverse=True)
 
+    # スコア→確率変換（softmax）: 期待値計算用の推定確率
+    # 候補60点でほぼ全確率をカバーする前提。温度はスコアのばらつきで自動調整
+    if candidates:
+        import math as _math
+        vals = [c['combined'] for c in candidates]
+        mean_v = sum(vals) / len(vals)
+        var_v = sum((v - mean_v) ** 2 for v in vals) / len(vals)
+        temp = max(var_v ** 0.5, 1e-6)
+        max_v = max(vals)
+        exps = [_math.exp((v - max_v) / temp) for v in vals]
+        total_exp = sum(exps)
+        for c, e in zip(candidates, exps):
+            c['prob'] = round(e / total_exp, 4)
+
     # ===== 本命2点: スコア1位の艇が1着の上位2コンボ =====
     honmei = []
     top_bn = scores[0]['boat']['boat_number']
@@ -406,9 +420,9 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
 
     results = []
     for c in honmei[:2]:
-        results.append({'combo': c['combo'], 'type': '本命', 'combined': round(c['combined'], 2)})
+        results.append({'combo': c['combo'], 'type': '本命', 'combined': round(c['combined'], 2), 'prob': c.get('prob')})
     for c in taikou[:3]:
-        results.append({'combo': c['combo'], 'type': '対抗', 'combined': round(c['combined'], 2)})
+        results.append({'combo': c['combo'], 'type': '対抗', 'combined': round(c['combined'], 2), 'prob': c.get('prob')})
 
     chaos = calc_chaos(scores, boats, vp, wind_effect, nige_rate)
 
@@ -417,7 +431,7 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
         arekote = predict_arekote(scores, candidates, wind, wind_effect)
         return {
             'predictions': results,
-            'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2)} for c in candidates[:60]],
+            'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2), 'prob': c.get('prob')} for c in candidates[:60]],
             'score_order': [{'course': s['course'], 'boat_number': s['boat']['boat_number'], 'score': round(s['score'], 2)} for s in scores],
             'chaos': chaos,
             'arekote_mode': True,
@@ -426,7 +440,7 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
 
     return {
         'predictions': results,
-        'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2)} for c in candidates[:60]],
+        'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2), 'prob': c.get('prob')} for c in candidates[:60]],
         'score_order': [{'course': s['course'], 'boat_number': s['boat']['boat_number'], 'score': round(s['score'], 2)} for s in scores],
         'chaos': chaos,
     }

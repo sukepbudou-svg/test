@@ -2264,6 +2264,11 @@ function renderResult(data) {
       </div>`;
     }
   } else {
+  // コンボ→モデル確率マップ（期待値計算用）
+  const probMap = {};
+  for (const c of (data.candidates || [])) {
+    if (c.prob != null) probMap[c.combo] = c.prob;
+  }
   // 各タイプ表示
   for (const type of TYPE_ORDER) {
     const items = classified[type] || [];
@@ -2275,9 +2280,17 @@ function renderResult(data) {
         const oc = oddsVal < 20 ? 'low' : oddsVal > 100 ? 'high' : '';
         oddsHtml = `<span class="odds-tag ${oc}">${oddsVal.toFixed(1)}倍</span>`;
       }
+      // 期待値 = モデル確率 × オッズ × 100(%)
+      let evHtml = '';
+      const prob = probMap[item.combo];
+      if (oddsVal !== null && prob != null) {
+        const ev = Math.round(prob * oddsVal * 100);
+        const evCol = ev >= 100 ? 'var(--green)' : ev >= 70 ? 'var(--yellow)' : 'var(--text-muted)';
+        evHtml = `<span style="font-size:10px;color:${evCol};font-weight:700;margin-left:6px;" title="モデル確率${(prob*100).toFixed(1)}%×オッズ">EV ${ev}%</span>`;
+      }
       html += `<div class="pred-item ${cls}">
         <span class="pred-label">${type}</span>
-        <span class="pred-combo">${item.combo}</span>${oddsHtml}
+        <span class="pred-combo">${item.combo}</span>${oddsHtml}${evHtml}
       </div>`;
     }
     if (items.length === 0) {
