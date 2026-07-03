@@ -2212,33 +2212,54 @@ function renderResult(data) {
       <div id="venue-judge-info" style="font-size:10px;color:var(--text-muted);margin-top:3px;"></div>
     </div>`;
     // 会場成績を非同期で取得して判定に反映（条件3: 得意会場か）
+    // 今回のイン逃げ率±10%の類似条件で絞り込み、データ不足なら会場全体にフォールバック
     if (venueVal) {
-      fetch('/history_stats', {
+      const hasNige = lastNigeRate != null && lastNigeRate > 0;
+      const bandMin = hasNige ? Math.max(0, Math.floor(lastNigeRate - 10)) : 0;
+      const bandMax = hasNige ? Math.min(100, Math.ceil(lastNigeRate + 10)) : 100;
+      const fetchStats = (nMin, nMax) => fetch('/history_stats', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ period:'all', venues:[venueVal], nige_min:0, nige_max:100, manzoku:false })
-      }).then(r => r.json()).then(s => {
+        body: JSON.stringify({ period:'all', venues:[venueVal], nige_min:nMin, nige_max:nMax, manzoku:false })
+      }).then(r => r.json());
+
+      const applyJudge = (s, condLabel) => {
         const el = document.getElementById('venue-judge-info');
         if (!el) return;
-        if (s.with_result >= 10) {
-          const col = s.recovery >= 100 ? '#00e676' : s.recovery >= 80 ? '#ffd740' : '#e94560';
-          el.innerHTML = `📊 ${venueVal}の過去成績: 的中率${s.hit_rate}% / 回収率<span style="color:${col};font-weight:700;">${s.recovery}%</span>（${s.with_result}レース）`;
-          // 苦手会場（回収率80%未満）なら勝負レースを格下げ
-          if (isShobu && s.recovery < 80) {
-            const banner = document.getElementById('shobu-banner');
-            const iconEl = document.getElementById('shobu-icon');
-            const titleEl = document.getElementById('shobu-title');
-            const detailEl = document.getElementById('shobu-detail');
-            if (banner && iconEl && titleEl && detailEl) {
-              banner.style.background = 'rgba(255,215,64,0.10)';
-              banner.style.borderColor = '#ffd740';
-              iconEl.textContent = '⚠️';
-              titleEl.textContent = '見送り推奨';
-              titleEl.style.color = '#ffd740';
-              detailEl.textContent = `${venueVal}は苦手会場（回収率${s.recovery}%）`;
-            }
+        const col = s.recovery >= 100 ? '#00e676' : s.recovery >= 80 ? '#ffd740' : '#e94560';
+        el.innerHTML = `📊 ${venueVal}${condLabel}: 的中率${s.hit_rate}% / 回収率<span style="color:${col};font-weight:700;">${s.recovery}%</span>（${s.with_result}レース）`;
+        if (isShobu && s.recovery < 80) {
+          const banner = document.getElementById('shobu-banner');
+          const iconEl = document.getElementById('shobu-icon');
+          const titleEl = document.getElementById('shobu-title');
+          const detailEl = document.getElementById('shobu-detail');
+          if (banner && iconEl && titleEl && detailEl) {
+            banner.style.background = 'rgba(255,215,64,0.10)';
+            banner.style.borderColor = '#ffd740';
+            iconEl.textContent = '⚠️';
+            titleEl.textContent = '見送り推奨';
+            titleEl.style.color = '#ffd740';
+            detailEl.textContent = `${venueVal}${condLabel}は苦手条件（回収率${s.recovery}%）`;
           }
+        }
+      };
+
+      (hasNige ? fetchStats(bandMin, bandMax) : Promise.resolve(null)).then(sBand => {
+        if (sBand && sBand.with_result >= 10) {
+          // 類似イン逃げ率帯のデータで判定
+          applyJudge(sBand, `（逃げ率${bandMin}〜${bandMax}%帯）`);
         } else {
-          el.textContent = `📊 ${venueVal}の過去データは${s.with_result}レース（判断には10レース以上必要）`;
+          // フォールバック: 会場全体
+          fetchStats(0, 100).then(sAll => {
+            const el = document.getElementById('venue-judge-info');
+            if (!el) return;
+            if (sAll.with_result >= 10) {
+              const note = sBand ? `※類似条件は${sBand.with_result}レースのみ→会場全体で判定 ` : '';
+              applyJudge(sAll, '全体');
+              el.innerHTML = `<span style="opacity:0.7;">${note}</span>` + el.innerHTML;
+            } else {
+              el.textContent = `📊 ${venueVal}の過去データは${sAll.with_result}レース（判断には10レース以上必要）`;
+            }
+          }).catch(() => {});
         }
       }).catch(() => {});
     }
