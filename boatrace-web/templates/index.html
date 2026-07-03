@@ -2296,12 +2296,14 @@ function renderResult(data) {
   const displayed = [];
   if (data.arekote_mode) {
     for (const item of (data.arekote_predictions || [])) {
-      displayed.push({ combo: item.combo, type: item.type });
+      const odds = hasOdds ? getTriOdds(item.combo) : null;
+      displayed.push({ combo: item.combo, type: item.type, odds });
     }
   } else {
     for (const type of TYPE_ORDER) {
       for (const item of (classified[type] || [])) {
-        displayed.push({ combo: item.combo, type });
+        const odds = item.odds != null ? item.odds : (hasOdds ? getTriOdds(item.combo) : null);
+        displayed.push({ combo: item.combo, type, odds });
       }
     }
   }
