@@ -2139,10 +2139,19 @@ function renderResult(data) {
     html += `<div style="text-align:center;font-size:18px;font-weight:900;letter-spacing:3px;margin-bottom:8px;color:#ffffff;text-shadow:0 0 8px rgba(255,255,255,0.9),0 0 20px rgba(255,255,255,0.6),0 0 40px rgba(255,255,255,0.3);">${label}</div>`;
   }
 
-  // オッズ分類
+  // サーバーの予想をそのまま使用（倍率帯による上書き廃止）
   const candidates = data.candidates || data.predictions.map(p => ({ combo: p.combo }));
   const hasOdds = oddsData && Object.keys(oddsData.byBoat).length > 0;
-  const classified = hasOdds ? classifyByOdds(candidates) : classifyByScore(data.predictions);
+  // 本命/対抗/中穴は常にサーバーのtype割り当てを優先
+  const classified = classifyByScore(data.predictions);
+  // オッズがある場合は各コンボにodds情報を付与
+  if (hasOdds) {
+    for (const type of TYPE_ORDER) {
+      for (const item of (classified[type] || [])) {
+        if (item.odds === null) item.odds = getTriOdds(item.combo);
+      }
+    }
+  }
 
   // 万舟補完: スコア候補に入らない万舟をオッズデータ全体からピックアップ
   if (hasOdds && classified['万舟'].length < TYPE_LIMITS['万舟']) {
