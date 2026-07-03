@@ -351,12 +351,75 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
 
     candidates.sort(key=lambda x: x['combined'], reverse=True)
 
-    # スコアベースで仮タイプ付与（オッズなし時のフォールバック）
-    # 上位から 本命×2, 対抗×3, 中穴×1 の6点
-    type_labels = ['本命', '本命', '対抗', '対抗', '対抗', '中穴']
+    # ===== 本命2点: スコア1位の艇が1着の上位2コンボ =====
+    honmei = []
+    top_bn = scores[0]['boat']['boat_number']
+    for c in candidates:
+        if c['combo'].startswith(f"{top_bn}-"):
+            honmei.append(c)
+        if len(honmei) >= 2:
+            break
+
+    # ===== 対抗3点: 3つの異なるシナリオをカバー =====
+    taikou = []
+    used_combos = {c['combo'] for c in honmei}
+
+    # --- 対抗1点目: スコア2位の艇が1着（展開逆転シナリオ）---
+    if len(scores) >= 2:
+        second_bn = scores[1]['boat']['boat_number']
+        for c in candidates:
+            if c['combo'].startswith(f"{second_bn}-") and c['combo'] not in used_combos:
+                taikou.append(c)
+                used_combos.add(c['combo'])
+                break
+
+    # --- 対抗2点目: 1位1着 + STが最速の艇が2着（展示ST展開シナリオ）---
+    # STが入力されている場合、最もSTが速い艇（1位艇以外）を2着に
+    st_entries = [(s['course'], s['exhibit_st'], s['boat']['boat_number'])
+                  for s in scores if s.get('exhibit_st', 0) > 0
+                  and s['boat']['boat_number'] != top_bn]
+    if st_entries:
+        best_st_bn = min(st_entries, key=lambda x: x[1])[2]  # STが小さい=速い
+        for c in candidates:
+            parts = c['combo'].split('-')
+            if parts[0] == str(top_bn) and parts[1] == str(best_st_bn) and c['combo'] not in used_combos:
+                taikou.append(c)
+                used_combos.add(c['combo'])
+                break
+
+    # --- 対抗3点目: 残りスコア上位コンボから本命と被らないもの ---
+    for c in candidates:
+        if c['combo'] not in used_combos:
+            taikou.append(c)
+            used_combos.add(c['combo'])
+            break
+
+    # 不足分はスコア順で補完
+    for c in candidates:
+        if len(honmei) >= 2 and len(taikou) >= 3:
+            break
+        if c['combo'] not in used_combos:
+            if len(honmei) < 2:
+                honmei.append(c)
+            elif len(taikou) < 3:
+                taikou.append(c)
+            used_combos.add(c['combo'])
+
+    # 中穴: 残り1点
+    chuuana = []
+    for c in candidates:
+        if c['combo'] not in used_combos:
+            chuuana.append(c)
+            used_combos.add(c['combo'])
+            break
+
     results = []
-    for i, c in enumerate(candidates[:len(type_labels)]):
-        results.append({'combo': c['combo'], 'type': type_labels[i], 'combined': round(c['combined'], 2)})
+    for c in honmei[:2]:
+        results.append({'combo': c['combo'], 'type': '本命', 'combined': round(c['combined'], 2)})
+    for c in taikou[:3]:
+        results.append({'combo': c['combo'], 'type': '対抗', 'combined': round(c['combined'], 2)})
+    for c in chuuana[:1]:
+        results.append({'combo': c['combo'], 'type': '中穴', 'combined': round(c['combined'], 2)})
 
     chaos = calc_chaos(scores, boats, vp, wind_effect, nige_rate)
 
