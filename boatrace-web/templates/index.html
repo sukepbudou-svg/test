@@ -1751,10 +1751,12 @@ async function runPredict(forceArekote = false) {
   const venue = document.getElementById('venue').value;
   const wind  = document.getElementById('wind').value;
 
+  const predictPayload = { boats, kimari: kimariPayload, venue, wind, nige_rate: lastNigeRate, force_arekote: forceArekote };
+  lastPredictInput = predictPayload;
   const resp = await fetch('/predict', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ boats, kimari: kimariPayload, venue, wind, nige_rate: lastNigeRate, force_arekote: forceArekote })
+    body: JSON.stringify(predictPayload)
   });
   const data = await resp.json();
   document.getElementById('status-save').textContent = '';
@@ -2412,6 +2414,7 @@ function renderResult(data) {
 // ======== Save Record ========
 let lastPredictions = [];
 let lastNigeRate = null;
+let lastPredictInput = null;
 
 async function saveRecord() {
   const venue   = document.getElementById('venue').value;
@@ -2426,7 +2429,7 @@ async function saveRecord() {
   const resp = await fetch('/save_record', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ race_date, venue, race_no: parseInt(race_no), predictions: lastPredictions, nige_rate: lastNigeRate, wind: document.getElementById('wind').value || null })
+    body: JSON.stringify({ race_date, venue, race_no: parseInt(race_no), predictions: lastPredictions, nige_rate: lastNigeRate, wind: document.getElementById('wind').value || null, input_data: lastPredictInput })
   });
   const data = await resp.json();
   if (data.success) {
@@ -2531,6 +2534,7 @@ function clearMemo() {
 function allClear() {
   avgStStats = null; playerStats = null; kimariStats = null; motorStats = null; oddsData = null;
   lastPredictions = [];
+  lastPredictInput = null;
   document.getElementById('btn-save').style.display = 'none';
   document.getElementById('status-save').textContent = '';
   for (let i = 1; i <= 6; i++) {

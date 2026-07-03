@@ -48,9 +48,23 @@ def init_db():
         conn.commit()
     except Exception:
         pass
+    try:
+        conn.execute('ALTER TABLE records ADD COLUMN input_data TEXT')
+        conn.commit()
+    except Exception:
+        pass
+    try:
+        conn.execute('ALTER TABLE records ADD COLUMN model_version TEXT')
+        conn.commit()
+    except Exception:
+        pass
     conn.close()
 
 init_db()
+
+# モデルバージョン: 予想ロジックを変更したら必ず上げること
+# v4: 2026-07-03 タイム符号バグ修正 + 対抗3シナリオ + 中穴廃止
+MODEL_VERSION = 'v4'
 
 VENUES = [
     "桐生", "戸田", "江戸川", "平和島", "多摩川", "浜名湖",
@@ -637,8 +651,8 @@ def save_record():
     data = request.get_json()
     conn = get_db()
     conn.execute('''
-        INSERT INTO records (race_date, venue, race_no, predictions, created_at, nige_rate, wind)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO records (race_date, venue, race_no, predictions, created_at, nige_rate, wind, input_data, model_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         data.get('race_date', ''),
         data.get('venue', ''),
@@ -646,7 +660,9 @@ def save_record():
         json.dumps(data.get('predictions', []), ensure_ascii=False),
         datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         data.get('nige_rate'),
-        data.get('wind')
+        data.get('wind'),
+        json.dumps(data.get('input_data'), ensure_ascii=False) if data.get('input_data') else None,
+        MODEL_VERSION
     ))
     conn.commit()
     record_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
@@ -1265,6 +1281,82 @@ def history_stats():
         'miss_breakdown_taikou': miss_breakdown_taikou,
         'venue_list': venue_list,
         'profit_series': profit_series,
+    })
+
+
+@app.route('/backtest', methods=['POST'])
+def backtest():
+    """入力データが保存されたレースを現行ロジックで再予想し、保存時の予想と比較"""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM records WHERE input_data IS NOT NULL AND result_1st IS NOT NULL ORDER BY id"
+    ).fetchall()
+    conn.close()
+
+    def eval_preds(preds, result_combo):
+        """予想リストの種別ごとの的中を判定（レースベース）"""
+        out = {}
+        for p in preds:
+            t = p.get('type')
+            if not t:
+                continue
+            if t not in out:
+                out[t] = False
+            if p.get('combo') == result_combo:
+                out[t] = True
+        return out
+
+    TYPES = ['本命', '対抗', '中穴', '万舟']
+    stored_stats = {t: {'hits': 0, 'total': 0} for t in TYPES}
+    new_stats = {t: {'hits': 0, 'total': 0} for t in TYPES}
+    n_races = 0
+
+    for r in rows:
+        try:
+            inp = json.loads(r['input_data'])
+            stored_preds = json.loads(r['predictions'])
+        except Exception:
+            continue
+        result_combo = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}"
+
+        # 現行ロジックで再予想
+        try:
+            new_result = predict(
+                inp.get('boats', []),
+                kimari=inp.get('kimari'),
+                venue=inp.get('venue'),
+                wind=inp.get('wind'),
+                nige_rate=inp.get('nige_rate'),
+            )
+            new_preds = new_result['predictions']
+        except Exception:
+            continue
+
+        n_races += 1
+        for t, is_hit in eval_preds(stored_preds, result_combo).items():
+            if t in stored_stats:
+                stored_stats[t]['total'] += 1
+                if is_hit:
+                    stored_stats[t]['hits'] += 1
+        for t, is_hit in eval_preds(new_preds, result_combo).items():
+            if t in new_stats:
+                new_stats[t]['total'] += 1
+                if is_hit:
+                    new_stats[t]['hits'] += 1
+
+    def fmt(stats):
+        out = {}
+        for t in TYPES:
+            s = stats[t]
+            out[t] = {'hits': s['hits'], 'total': s['total'],
+                      'hit_rate': round(s['hits'] / s['total'] * 100, 1) if s['total'] > 0 else 0}
+        return out
+
+    return jsonify({
+        'races': n_races,
+        'model_version': MODEL_VERSION,
+        'stored': fmt(stored_stats),
+        'current': fmt(new_stats),
     })
 
 
