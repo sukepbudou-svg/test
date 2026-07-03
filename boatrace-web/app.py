@@ -867,7 +867,9 @@ def update_result():
 def get_records():
     period = request.args.get('period', 'all')
     conn = get_db()
-    if period == 'week':
+    if period == 'today':
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
+    elif period == 'week':
         rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
     elif period == 'month':
         rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
@@ -1134,7 +1136,9 @@ def history_stats():
     manzoku    = data.get('manzoku', False)
 
     conn = get_db()
-    if period == 'week':
+    if period == 'today':
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
+    elif period == 'week':
         rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
     elif period == 'month':
         rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()

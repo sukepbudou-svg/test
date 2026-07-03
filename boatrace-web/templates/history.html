@@ -393,9 +393,10 @@ h1 {
 
   <!-- フィルター -->
   <div class="filter-bar">
-    <button class="filter-btn active" onclick="setFilter('all',this)">全期間</button>
-    <button class="filter-btn" onclick="setFilter('month',this)">直近30日</button>
+    <button class="filter-btn active" onclick="setFilter('today',this)">当日</button>
     <button class="filter-btn" onclick="setFilter('week',this)">直近7日</button>
+    <button class="filter-btn" onclick="setFilter('month',this)">直近30日</button>
+    <button class="filter-btn" onclick="setFilter('all',this)">全期間</button>
   </div>
 
   <!-- 記録一覧 -->
@@ -467,7 +468,7 @@ h1 {
 </div>
 
 <script>
-let currentFilter = 'all';
+let currentFilter = 'today';
 let allRecords = [];
 let selectedVenues = new Set();
 let nigeFilterMin = 0;
