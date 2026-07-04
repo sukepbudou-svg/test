@@ -527,16 +527,17 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
 
     chaos = calc_chaos(scores, boats, vp, wind_effect, nige_rate)
 
-    # 荒れモード: 強制フラグのときのみ（自動切り替えは廃止）
+    # 裏熊モード: 強制フラグのときのみ（自動切り替えは廃止）
     if force_arekote:
-        arekote = predict_arekote(scores, candidates, wind, wind_effect)
+        ura = predict_arekote_v2(scores, kimari_full=kimari_full, nige_rate=nige_rate)
         return {
             'predictions': results,
             'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2), 'prob': c.get('prob')} for c in candidates[:60]],
             'score_order': [{'course': s['course'], 'boat_number': s['boat']['boat_number'], 'score': round(s['score'], 2)} for s in scores],
             'chaos': chaos,
             'arekote_mode': True,
-            'arekote_predictions': arekote,
+            'arekote_predictions': ura['predictions'] if ura else [],
+            'ura_judge': {k: v for k, v in ura.items() if k != 'predictions'} if ura else None,
         }
 
     return {
@@ -547,9 +548,139 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
     }
 
 
+def predict_arekote_v2(scores, kimari_full=None, nige_rate=None):
+    """裏熊予想v2 (2026-07-04): シナリオ・フォーメーション方式（穴党プロ型）
+
+    出動条件（AND）:
+      (1) イン逃げ率40%未満
+      (2) 1号艇に弱点2つ以上（スコア3位以下/B級/展示ST5番手以下/差され捲られ率30%超）
+      (3) 仕留める主役がいる（3〜5コース・まくり系15%以上・STが1号艇より速い・スコア2位以内）
+      (4) オッズ妙味（20倍未満は足切り）→ フロント側で判定
+    買い目: 主役-相手2艇-全 のフォーメーション8点
+    条件未達でも参考予想として買い目は返す（バナーで条件充足数を表示）
+    """
+    if not scores:
+        return None
+    boat1 = next((s for s in scores if s['course'] == 1), None)
+    # scoresはスコア降順ソート済み
+    rank_of = {s['boat']['boat_number']: i + 1 for i, s in enumerate(scores)}
+
+    # 決まり手データ（直近6ヶ月優先）
+    kdata = None
+    if kimari_full and isinstance(kimari_full, dict):
+        for period in ('直近6ヶ月', '直近1年'):
+            if period in kimari_full and isinstance(kimari_full[period], dict):
+                kdata = kimari_full[period]
+                break
+    maki_arr = (kdata or {}).get('maki_active') or []
+    makis_arr = (kdata or {}).get('makis_active') or []
+
+    def attack(bn):
+        i = bn - 2
+        ma = safe_float(maki_arr[i]) if 0 <= i < len(maki_arr) else 0.0
+        ms = safe_float(makis_arr[i]) if 0 <= i < len(makis_arr) else 0.0
+        return ma, ms
+
+    # 条件1: イン逃げ率40%未満
+    cond_nige = nige_rate is not None and safe_float(nige_rate) < 40
+
+    # 条件2: 1号艇の弱点2つ以上
+    weaknesses = []
+    boat1_st = 0
+    if boat1:
+        bn1 = boat1['boat']['boat_number']
+        boat1_st = boat1.get('exhibit_st', 0)
+        if rank_of.get(bn1, 1) >= 3:
+            weaknesses.append(f"スコア{rank_of[bn1]}位")
+        pc = boat1['boat'].get('player_class', '')
+        if pc in ('B1', 'B2'):
+            weaknesses.append(f"{pc}級")
+        st_sorted = sorted([s for s in scores if s.get('exhibit_st', 0) > 0], key=lambda x: x['exhibit_st'])
+        if boat1_st > 0:
+            st_rank1 = next((i + 1 for i, s in enumerate(st_sorted) if s['course'] == 1), None)
+            if st_rank1 and st_rank1 >= 5:
+                weaknesses.append(f"展示ST{st_rank1}番手")
+        threat = (safe_float((kdata or {}).get('sasar', 0))
+                  + safe_float((kdata or {}).get('makur_passive', 0))
+                  + safe_float((kdata or {}).get('makurS_passive', 0)))
+        if threat > 30:
+            weaknesses.append(f"差され捲られ率{round(threat)}%")
+    cond_boat1 = len(weaknesses) >= 2
+
+    # 条件3: 仕留める主役（3〜5コース）
+    shuyaku = None
+    shuyaku_candidates = []
+    for s in scores:
+        if s['course'] not in (3, 4, 5):
+            continue
+        bn = s['boat']['boat_number']
+        ma, ms = attack(bn)
+        st_ok = s.get('exhibit_st', 0) > 0 and boat1_st > 0 and s['exhibit_st'] < boat1_st
+        if (ma + ms) >= 15 and st_ok and rank_of.get(bn, 9) <= 2:
+            shuyaku_candidates.append({'bn': bn, 'course': s['course'], 'maki': ma, 'makis': ms, 'score': s['score']})
+    if shuyaku_candidates:
+        shuyaku = max(shuyaku_candidates, key=lambda x: x['score'])
+    cond_shuyaku = shuyaku is not None
+
+    # 条件未達でも参考予想: 1号艇以外のスコア最上位を主役に
+    if shuyaku is None:
+        fallback = [s for s in scores if s['course'] != 1]
+        if not fallback:
+            return None
+        fb = max(fallback, key=lambda x: x['score'])
+        ma, ms = attack(fb['boat']['boat_number'])
+        shuyaku = {'bn': fb['boat']['boat_number'], 'course': fb['course'], 'maki': ma, 'makis': ms, 'score': fb['score']}
+
+    scenario = 'まくり' if shuyaku['maki'] >= shuyaku['makis'] else 'まくり差し'
+    bn1 = boat1['boat']['boat_number'] if boat1 else 1
+
+    # 相手2艇: シナリオ整合スコアで選ぶ
+    def aite_score(s):
+        sc = s['score']
+        if s['course'] == shuyaku['course'] + 1:
+            sc += 1.0  # 直外は展開が向く
+        if scenario == 'まくり' and 1 < s['course'] < shuyaku['course']:
+            sc -= 1.0  # 主役より内側は沈みやすい
+        return sc
+
+    others = [s for s in scores if s['boat']['boat_number'] != shuyaku['bn']]
+    if scenario == 'まくり':
+        pool = [s for s in others if s['boat']['boat_number'] != bn1]  # まくり時は1号艇を2着に置かない
+    else:
+        pool = others
+    pool_sorted = sorted(pool, key=aite_score, reverse=True)
+    aite = [p['boat']['boat_number'] for p in pool_sorted[:2]]
+
+    # フォーメーション: 主役-相手2艇-全（8点）
+    combos = []
+    for a in aite:
+        for s in scores:
+            b3 = s['boat']['boat_number']
+            if b3 in (shuyaku['bn'], a):
+                continue
+            combos.append({'combo': f"{shuyaku['bn']}-{a}-{b3}", 'type': '裏熊'})
+
+    return {
+        'predictions': combos,
+        'shuyaku': shuyaku['bn'],
+        'scenario': scenario,
+        'aite': aite,
+        'formation': f"{shuyaku['bn']}-{aite[0]}{aite[1]}-全" if len(aite) >= 2 else '',
+        'conds': {
+            'nige': bool(cond_nige),
+            'nige_val': safe_float(nige_rate) if nige_rate is not None else None,
+            'boat1': bool(cond_boat1),
+            'weaknesses': weaknesses,
+            'shuyaku_ok': bool(cond_shuyaku),
+            'clear': int(cond_nige) + int(cond_boat1) + int(cond_shuyaku),
+            'total': 3,
+        },
+    }
+
+
 def predict_arekote(scores, candidates, wind, wind_effect):
     """
-    荒れモード予想（イン逃げ率 < 50% 時）
+    旧・荒れモード予想（v2に置き換え済み・未使用）
     万舟×2 + 裏熊×3（展開重視、1号艇除外）+ 裏熊×1（差し/まくり判断で1号艇2or3着）
     """
     # 万舟×2: 既存候補リストの最後尾（低スコア＝高倍率）上位2点
@@ -730,7 +861,9 @@ def predict_route():
     nige_rate = data.get('nige_rate', None)
     force_arekote = data.get('force_arekote', False)
     # 実戦はv4凍結中: USE_V5_LIVE/USE_V6_LIVEがTrueのときだけ各補正を使う
-    kimari_full = data.get('kimari_full', None) if USE_V5_LIVE else None
+    # ただし裏熊モードは決まり手データ（主役判定・シナリオ）が必須なので常に渡す
+    kimari_full_raw = data.get('kimari_full', None)
+    kimari_full = kimari_full_raw if (USE_V5_LIVE or force_arekote) else None
     result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full, hybrid_taikou=USE_V6_LIVE)
     return jsonify(result)
 
@@ -1225,6 +1358,7 @@ def history_stats():
     nige_min   = data.get('nige_min', 0)
     nige_max   = data.get('nige_max', 100)
     manzoku    = data.get('manzoku', False)
+    kind       = data.get('kind', 'all')  # all / normal / ura（裏熊予想の分離）
 
     conn = get_db()
     if period == 'today':
@@ -1249,6 +1383,13 @@ def history_stats():
                 continue
         if manzoku and (not r['payout'] or r['payout'] < 10000):
             continue
+        # 予想種別フィルター: 裏熊タイプを含むレコードか否かで判定
+        if kind != 'all':
+            is_ura = '"裏熊"' in (r['predictions'] or '')
+            if kind == 'ura' and not is_ura:
+                continue
+            if kind == 'normal' and is_ura:
+                continue
         filtered.append(r)
 
     total = len(filtered)

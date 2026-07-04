@@ -2300,39 +2300,58 @@ function renderResult(data) {
     }
   }
 
-  // 荒れモード
+  // 🐻 裏熊モード（v2: シナリオ・フォーメーション方式）
+  let uraDisplayed = [];
   if (data.arekote_mode) {
-    html += `<div style="background:linear-gradient(135deg,rgba(255,80,80,0.18),rgba(180,0,180,0.12));border:1.5px solid #ff5050;border-radius:10px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
-      <span style="font-size:18px;">⚠️</span>
-      <span style="font-weight:900;color:#ff5050;letter-spacing:1px;font-size:14px;">荒れモード発動中</span>
-      <span style="font-size:11px;color:#aaa;margin-left:4px;">イン逃げ率50%未満 — 1号艇飛びを想定した特別予想</span>
-    </div>`;
-    const arekote = data.arekote_predictions || [];
-    const manzokuItems = arekote.filter(p => p.type === '万舟');
-    const uraItems = arekote.filter(p => p.type === '裏熊');
-    for (const item of manzokuItems) {
-      const oddsVal = getTriOdds(item.combo);
-      let oddsHtml = '';
-      if (oddsVal !== null) {
-        const oc = oddsVal > 100 ? 'high' : '';
-        oddsHtml = `<span class="odds-tag ${oc}">${oddsVal.toFixed(1)}倍</span>`;
-      }
-      html += `<div class="pred-item pred-manshu">
-        <span class="pred-label">万舟</span>
-        <span class="pred-combo">${item.combo}</span>${oddsHtml}
-      </div>`;
+    const uj = data.ura_judge || {};
+    const conds = uj.conds || {};
+
+    // オッズ足切り: 20倍未満を除外
+    let uraItems = (data.arekote_predictions || []).map(it => ({
+      combo: it.combo, type: it.type,
+      odds: hasOdds ? getTriOdds(it.combo) : null,
+    }));
+    let cutCount = 0;
+    if (hasOdds) {
+      const before = uraItems.length;
+      uraItems = uraItems.filter(it => !(it.odds !== null && it.odds < 20));
+      cutCount = before - uraItems.length;
     }
-    for (const item of uraItems) {
-      const oddsVal = getTriOdds(item.combo);
-      let oddsHtml = '';
-      if (oddsVal !== null) {
-        const oc = oddsVal < 20 ? 'low' : oddsVal > 100 ? 'high' : '';
-        oddsHtml = `<span class="odds-tag ${oc}">${oddsVal.toFixed(1)}倍</span>`;
+    const allCut = hasOdds && uraItems.length === 0 && (data.arekote_predictions || []).length > 0;
+
+    // 出動判定（3条件+オッズ妙味）
+    const oddsOk = hasOdds ? !allCut : null;
+    const fullClear = conds.clear === conds.total && (oddsOk !== false);
+    const condRows = [
+      { ok: conds.nige, label: `イン逃げ率40%未満${conds.nige_val != null ? `（今回${conds.nige_val.toFixed(1)}%）` : '（未入力）'}` },
+      { ok: conds.boat1, label: `1号艇に弱点2つ以上${(conds.weaknesses && conds.weaknesses.length) ? `（${conds.weaknesses.join('・')}）` : ''}` },
+      { ok: conds.shuyaku_ok, label: `仕留める主役${conds.shuyaku_ok && uj.shuyaku ? `（${uj.shuyaku}号艇）` : 'なし'}` },
+    ];
+    if (hasOdds) condRows.push({ ok: oddsOk, label: `オッズ妙味（20倍未満${cutCount}点を足切り）` });
+
+    const bd2 = fullClear ? '#b000dc' : '#5a6a80';
+    const title2 = fullClear ? '🐻 裏熊出動（勝負）' : (allCut ? '🐻 妙味なし・見送り推奨' : `🐻 参考予想（出動条件 ${conds.clear || 0}/${conds.total || 3}）`);
+    html += `<div style="background:linear-gradient(135deg,rgba(180,0,220,0.15),rgba(100,0,180,0.08));border:1.5px solid ${bd2};border-radius:10px;padding:10px 14px;margin-bottom:10px;">
+      <div style="font-weight:900;color:${fullClear ? '#d95cff' : 'var(--text-muted)'};letter-spacing:1px;font-size:14px;margin-bottom:6px;">${title2}</div>
+      ${condRows.map(c => `<div style="font-size:11px;margin-bottom:2px;color:${c.ok ? 'var(--green)' : 'var(--text-muted)'};">${c.ok ? '✓' : '✗'} ${c.label}</div>`).join('')}
+      ${uj.shuyaku && !allCut ? `<div style="font-size:12px;margin-top:6px;color:var(--text);">シナリオ: <b>${uj.shuyaku}号艇 ${uj.scenario || ''}</b> ／ 買い目: <b style="color:#d95cff;">フォーメーション ${uj.formation || ''}</b>（${uraItems.length}点）</div>` : ''}
+    </div>`;
+
+    if (!allCut) {
+      for (const item of uraItems) {
+        let oddsHtml = '';
+        if (item.odds !== null) {
+          const oc = item.odds > 100 ? 'high' : '';
+          oddsHtml = `<span class="odds-tag ${oc}">${item.odds.toFixed(1)}倍</span>`;
+        }
+        html += `<div class="pred-item" style="background:linear-gradient(135deg,rgba(180,0,220,0.18),rgba(100,0,180,0.10));border-color:#b000dc;">
+          <span class="pred-label" style="background:linear-gradient(135deg,#b000dc,#7000b0);color:#fff;">裏熊</span>
+          <span class="pred-combo">${item.combo}</span>${oddsHtml}
+        </div>`;
       }
-      html += `<div class="pred-item" style="background:linear-gradient(135deg,rgba(180,0,220,0.18),rgba(100,0,180,0.10));border-color:#b000dc;">
-        <span class="pred-label" style="background:linear-gradient(135deg,#b000dc,#7000b0);color:#fff;">裏熊</span>
-        <span class="pred-combo">${item.combo}</span>${oddsHtml}
-      </div>`;
+      uraDisplayed = uraItems.map(it => ({ combo: it.combo, type: '裏熊', odds: it.odds }));
+    } else {
+      html += `<div style="opacity:0.6;font-size:12px;color:var(--text-muted);padding:8px;">全ての買い目が20倍未満のためオッズに妙味がありません。このレースは見送り推奨です。</div>`;
     }
   } else {
   // コンボ→モデル確率マップ（期待値計算用）
@@ -2428,10 +2447,8 @@ function renderResult(data) {
   // 表示した予想を返す（saveRecordで使用）
   const displayed = [];
   if (data.arekote_mode) {
-    for (const item of (data.arekote_predictions || [])) {
-      const odds = hasOdds ? getTriOdds(item.combo) : null;
-      displayed.push({ combo: item.combo, type: item.type, odds });
-    }
+    // 足切り後の裏熊買い目のみ保存対象（全滅=妙味なしの場合は空）
+    displayed.push(...uraDisplayed);
   } else {
     for (const type of TYPE_ORDER) {
       for (const item of (classified[type] || [])) {

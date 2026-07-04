@@ -100,6 +100,7 @@ h1 {
 .pred-tag.穴   { background: rgba(0,230,118,0.12); color: var(--green); border: 1px solid rgba(0,230,118,0.25); }
 .pred-tag.中穴 { background: rgba(0,212,255,0.12); color: var(--accent3); border: 1px solid rgba(0,212,255,0.3); }
 .pred-tag.万舟 { background: rgba(180,0,255,0.12); color: #b400ff; border: 1px solid rgba(180,0,255,0.3); }
+.pred-tag.裏熊 { background: rgba(180,0,220,0.18); color: #d95cff; border: 1px solid rgba(180,0,220,0.4); }
 
 /* オッズはマウスホバー時にツールチップ表示 */
 .pred-tag.has-odds { position: relative; cursor: help; }
@@ -413,6 +414,10 @@ h1 {
     <button class="filter-btn" onclick="setFilter('week',this)">直近7日</button>
     <button class="filter-btn" onclick="setFilter('month',this)">直近30日</button>
     <button class="filter-btn" onclick="setFilter('all',this)">全期間</button>
+    <span style="width:12px;"></span>
+    <button class="filter-btn kind-btn active" onclick="setKindFilter('all',this)">すべて</button>
+    <button class="filter-btn kind-btn" onclick="setKindFilter('normal',this)">通常予想</button>
+    <button class="filter-btn kind-btn" onclick="setKindFilter('ura',this)">🐻裏熊</button>
   </div>
 
   <!-- 記録一覧 -->
@@ -497,8 +502,23 @@ let nigeFilterMax = 100;
 let manzokuOnly = false;
 
 // ======== 絞り込みロジック ========
+let kindFilter = 'all';
+
+function isUraRecord(r) {
+  return (r.predictions || []).some(p => p.type === '裏熊');
+}
+
+function setKindFilter(kind, btn) {
+  kindFilter = kind;
+  document.querySelectorAll('.kind-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilter();
+}
+
 function getFilteredRecords() {
   return allRecords.filter(r => {
+    if (kindFilter === 'ura' && !isUraRecord(r)) return false;
+    if (kindFilter === 'normal' && isUraRecord(r)) return false;
     if (selectedVenues.size > 0 && !selectedVenues.has(r.venue)) return false;
     if (nigeFilterMin > 0 || nigeFilterMax < 100) {
       if (r.nige_rate == null) return false;
@@ -579,6 +599,7 @@ async function applyFilterNow() {
 
   const body = {
     period: currentFilter,
+    kind: kindFilter,
     venues: [...selectedVenues],
     nige_min: nigeFilterMin,
     nige_max: nigeFilterMax,
@@ -1336,8 +1357,13 @@ function openModal(id, venue, race_no, race_date) {
   document.getElementById('modal-combo').textContent = '?-?-?';
   document.getElementById('auto-fetch-status').textContent = '';
 
-  // 購入金額のデフォルトは500円（本命2点+対抗3点=5点×100円）
-  document.getElementById('r-purchase').value = 500;
+  // 購入金額のデフォルト: 通常予想=500円（5点×100円）、裏熊=点数×100円
+  const rec = allRecords.find(r => r.id === id);
+  if (rec && isUraRecord(rec)) {
+    document.getElementById('r-purchase').value = (rec.predictions || []).length * 100;
+  } else {
+    document.getElementById('r-purchase').value = 500;
+  }
   document.getElementById('r-henkan').value = '';
   document.getElementById('henkan-info').textContent = '';
 
@@ -1427,8 +1453,10 @@ function applyHenkanAdjust() {
   if (!raw || !rec || !rec.predictions) { infoEl.textContent = ''; return; }
   const henkanBoats = raw.split(',').map(s => s.trim()).filter(s => /^[1-6]$/.test(s));
   if (henkanBoats.length === 0) { infoEl.textContent = ''; return; }
-  // 基本購入分（本命・対抗の5点）のうち返還艇を含むコンボを数える
-  const basePreds = rec.predictions.filter(p => p.type === '本命' || p.type === '対抗');
+  // 基本購入分のうち返還艇を含むコンボを数える（通常=本命対抗5点、裏熊=全点）
+  const basePreds = isUraRecord(rec)
+    ? rec.predictions
+    : rec.predictions.filter(p => p.type === '本命' || p.type === '対抗');
   const returnedCount = basePreds.filter(p =>
     p.combo.split('-').some(b => henkanBoats.includes(b))
   ).length;
