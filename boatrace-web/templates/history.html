@@ -335,6 +335,12 @@ h1 {
     </div>
   </div>
 
+  <!-- 勝負レース判定別 成績 -->
+  <div class="chart-card" id="shobu-stats-card" style="margin-bottom:16px;display:none;">
+    <div class="chart-title">🎯 勝負レース判定別 成績</div>
+    <div id="shobu-stats-body" style="display:flex;gap:24px;flex-wrap:wrap;"></div>
+  </div>
+
   <!-- グラフ -->
   <div class="chart-section" id="chart-section" style="display:none;">
     <div class="chart-card">
@@ -602,6 +608,8 @@ async function applyFilterNow() {
     filterRecordsTable();
     // 日別表示はクライアント側のレコードで描画（個別の結果入力ボタンが必要なため）
     renderDailyWith(getFilteredRecords());
+    // 勝負レース判定別成績（クライアント側で判定を復元）
+    renderShobuStats(getFilteredRecords());
   } catch(e) {
     label.textContent = '集計エラー';
   }
@@ -1017,6 +1025,49 @@ function renderPayoutFromStats(pattern) {
       <span style="color:var(--text);font-weight:700;">${pay}</span>
       <span style="color:var(--text-muted);">${s.hits}回的中 / 的中率${s.hit_rate}%</span>
       <span style="color:var(--accent2);font-size:10px;">${beStr}</span>
+    </div>`;
+  }).join('');
+}
+
+// ======== 勝負レース判定別 成績 ========
+function renderShobuStats(records) {
+  const card = document.getElementById('shobu-stats-card');
+  const body = document.getElementById('shobu-stats-body');
+  const groups = { shobu: [], miokuri: [] };
+  for (const r of records) {
+    if (!r.result_1st) continue;
+    const honmei1 = (r.predictions || []).find(p => p.type === '本命');
+    if (r.nige_rate == null || !honmei1 || honmei1.odds == null) continue;
+    const isShobu = r.nige_rate >= 65 && honmei1.odds >= 7;
+    groups[isShobu ? 'shobu' : 'miokuri'].push(r);
+  }
+  if (groups.shobu.length === 0 && groups.miokuri.length === 0) {
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = 'block';
+  const boxes = [
+    { key: 'shobu', label: '✅ 勝負レース', color: 'var(--green)' },
+    { key: 'miokuri', label: '⚠️ 見送り推奨', color: 'var(--yellow)' },
+  ];
+  body.innerHTML = boxes.map(b => {
+    const races = groups[b.key];
+    if (races.length === 0) {
+      return `<div style="min-width:180px;">
+        <div style="font-size:11px;font-weight:700;color:${b.color};margin-bottom:4px;">${b.label}</div>
+        <div style="font-size:11px;color:var(--text-muted);">該当レースなし</div>
+      </div>`;
+    }
+    const hits = races.filter(r => r.is_hit);
+    const rate = (hits.length / races.length * 100).toFixed(1);
+    const payout = hits.reduce((s,r) => s + (r.payout || 0), 0);
+    const purchase = races.reduce((s,r) => s + (r.purchase || 0), 0);
+    const recovery = purchase > 0 ? Math.round(payout / purchase * 100) : 0;
+    const recCol = recovery >= 100 ? 'var(--green)' : recovery >= 80 ? 'var(--yellow)' : 'var(--accent)';
+    return `<div style="min-width:180px;">
+      <div style="font-size:11px;font-weight:700;color:${b.color};margin-bottom:4px;">${b.label}</div>
+      <div style="font-size:16px;font-weight:900;">${hits.length}/${races.length} <span style="font-size:11px;color:var(--text-muted);">（的中率${rate}%）</span></div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">回収率 <span style="color:${recCol};font-weight:700;">${recovery}%</span>（払戻${payout.toLocaleString()}円 / 購入${purchase.toLocaleString()}円）</div>
     </div>`;
   }).join('');
 }
