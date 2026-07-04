@@ -352,7 +352,7 @@ h1 {
   <!-- バックテスト -->
   <div class="chart-card" style="margin-bottom:16px;">
     <div class="chart-title">🧪 バックテスト（現行ロジック vs 保存時の予想）</div>
-    <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">入力データ付きで保存されたレースを現行ロジックで再予想し、当時の予想と成績を比較します</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">入力データ付きで保存されたレースを現行ロジックで再予想し、当時の予想と成績を比較します。<b>上の期間・会場・イン逃げ率の絞り込みに連動します</b></div>
     <button onclick="runBacktest()" style="padding:6px 16px;background:linear-gradient(135deg,#7000b0,#b000dc);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">バックテスト実行</button>
     <div id="backtest-result" style="margin-top:10px;"></div>
   </div>
@@ -1096,7 +1096,15 @@ async function runBacktest() {
   const el = document.getElementById('backtest-result');
   el.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">再予想中...</span>';
   try {
-    const resp = await fetch('/backtest', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+    const resp = await fetch('/backtest', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        period: currentFilter,
+        venues: Array.from(selectedVenues),
+        nige_min: nigeFilterMin,
+        nige_max: nigeFilterMax,
+      })
+    });
     const d = await resp.json();
     if (d.races === 0) {
       el.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">入力データ付きのレース記録がまだありません。今日以降に保存した予想が対象になります。</span>';

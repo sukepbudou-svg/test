@@ -1375,12 +1375,37 @@ def history_stats():
 
 @app.route('/backtest', methods=['POST'])
 def backtest():
-    """入力データが保存されたレースを現行ロジックで再予想し、保存時の予想と比較"""
+    """入力データが保存されたレースを現行ロジックで再予想し、保存時の予想と比較。
+    成績記録の絞り込み（期間・会場・イン逃げ率）と連動する"""
+    data = request.get_json() or {}
+    period = data.get('period', 'all')
+    venues = data.get('venues', [])
+    nige_min = data.get('nige_min', 0)
+    nige_max = data.get('nige_max', 100)
+
     conn = get_db()
-    rows = conn.execute(
-        "SELECT * FROM records WHERE input_data IS NOT NULL AND result_1st IS NOT NULL ORDER BY id"
-    ).fetchall()
+    q = "SELECT * FROM records WHERE input_data IS NOT NULL AND result_1st IS NOT NULL"
+    if period == 'today':
+        q += " AND race_date = date('now', '+9 hours')"
+    elif period == 'week':
+        q += " AND race_date >= date('now', '-7 days')"
+    elif period == 'month':
+        q += " AND race_date >= date('now', '-30 days')"
+    rows = conn.execute(q + " ORDER BY id").fetchall()
     conn.close()
+
+    # 会場・イン逃げ率フィルター
+    filtered_rows = []
+    for r in rows:
+        if venues and r['venue'] not in venues:
+            continue
+        if nige_min > 0 or nige_max < 100:
+            if r['nige_rate'] is None:
+                continue
+            if r['nige_rate'] < nige_min or r['nige_rate'] > nige_max:
+                continue
+        filtered_rows.append(r)
+    rows = filtered_rows
 
     def eval_preds(preds, result_combo):
         """予想リストの種別ごとの的中を判定（レースベース）"""
