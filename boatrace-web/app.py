@@ -1399,6 +1399,10 @@ def backtest():
     stored_stats = {t: {'hits': 0, 'total': 0} for t in TYPES}
     new_stats = {t: {'hits': 0, 'total': 0} for t in TYPES}
     n_races = 0
+    # 回収率比較（odds_allが保存されているレースのみ、本命+対抗5点ベース）
+    ev_races = 0
+    stored_purchase = stored_payout = 0
+    new_purchase = new_payout = 0
 
     for r in rows:
         try:
@@ -1434,6 +1438,21 @@ def backtest():
                 if is_hit:
                     new_stats[t]['hits'] += 1
 
+        # 回収率比較: odds_allがあるレースのみ、本命+対抗の5点を100円ずつ買った想定
+        odds_all = inp.get('odds_all')
+        if odds_all:
+            result_odds = safe_float(odds_all.get(result_combo, 0))
+            stored_base = [p for p in stored_preds if p.get('type') in ('本命', '対抗')]
+            new_base = [p for p in new_preds if p.get('type') in ('本命', '対抗')]
+            if stored_base and new_base:
+                ev_races += 1
+                stored_purchase += 100 * len(stored_base)
+                new_purchase += 100 * len(new_base)
+                if any(p.get('combo') == result_combo for p in stored_base):
+                    stored_payout += int(result_odds * 100)
+                if any(p.get('combo') == result_combo for p in new_base):
+                    new_payout += int(result_odds * 100)
+
     def fmt(stats):
         out = {}
         for t in TYPES:
@@ -1442,11 +1461,22 @@ def backtest():
                       'hit_rate': round(s['hits'] / s['total'] * 100, 1) if s['total'] > 0 else 0}
         return out
 
+    recovery = None
+    if ev_races > 0 and stored_purchase > 0 and new_purchase > 0:
+        recovery = {
+            'races': ev_races,
+            'stored': round(stored_payout / stored_purchase * 100, 1),
+            'current': round(new_payout / new_purchase * 100, 1),
+            'stored_payout': stored_payout,
+            'current_payout': new_payout,
+        }
+
     return jsonify({
         'races': n_races,
         'model_version': 'v5(検証中・実戦はv4)',
         'stored': fmt(stored_stats),
         'current': fmt(new_stats),
+        'recovery': recovery,
     })
 
 

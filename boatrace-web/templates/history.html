@@ -1117,6 +1117,20 @@ async function runBacktest() {
         <td style="padding:4px 8px;color:${diffCol};font-weight:700;">${diffStr}pt</td>
       </tr>`;
     }).join('');
+    let recoveryHtml = '';
+    if (d.recovery) {
+      const rc = d.recovery;
+      const diff = (rc.current - rc.stored).toFixed(1);
+      const diffCol = diff > 0 ? 'var(--green)' : diff < 0 ? 'var(--accent)' : 'var(--text-muted)';
+      recoveryHtml = `<div style="margin-top:8px;padding:8px;background:var(--surface3);border-radius:6px;font-size:11px;">
+        💰 回収率比較（5点×100円想定・${rc.races}レース）:
+        保存時 <b>${rc.stored}%</b>（払戻${rc.stored_payout.toLocaleString()}円） →
+        現行 <b>${rc.current}%</b>（払戻${rc.current_payout.toLocaleString()}円）
+        <span style="color:${diffCol};font-weight:700;">${diff > 0 ? '+' : ''}${diff}pt</span>
+      </div>`;
+    } else {
+      recoveryHtml = `<div style="margin-top:8px;font-size:10px;color:var(--text-muted);">💰 回収率比較は全オッズ（odds_all）付きで保存されたレースが対象。次回保存分から蓄積されます</div>`;
+    }
     el.innerHTML = `<div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;">対象: ${d.races}レース / 現行ロジック: ${d.model_version}</div>
       <table style="width:100%;border-collapse:collapse;font-size:11px;">
         <thead><tr style="color:var(--text-muted);font-size:10px;">
@@ -1126,7 +1140,7 @@ async function runBacktest() {
           <th style="padding:4px 8px;text-align:left;">差分</th>
         </tr></thead>
         <tbody>${rows}</tbody>
-      </table>`;
+      </table>${recoveryHtml}`;
   } catch(e) {
     el.innerHTML = '<span style="color:var(--accent);font-size:11px;">バックテスト実行エラー</span>';
   }

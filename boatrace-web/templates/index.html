@@ -2447,10 +2447,29 @@ async function saveRecord() {
   if (!race_date) { statusEl.style.color='var(--accent)'; statusEl.textContent='日付を選択してください'; return; }
   if (lastPredictions.length === 0) { statusEl.style.color='var(--accent)'; statusEl.textContent='先に予想してください'; return; }
 
+  // 全120通りの三連単オッズを保存（バックテストの回収率検証用）
+  let oddsAll = null;
+  if (oddsData) {
+    oddsAll = {};
+    for (let b1 = 1; b1 <= 6; b1++) {
+      for (let b2 = 1; b2 <= 6; b2++) {
+        if (b2 === b1) continue;
+        for (let b3 = 1; b3 <= 6; b3++) {
+          if (b3 === b1 || b3 === b2) continue;
+          const combo = `${b1}-${b2}-${b3}`;
+          const o = getTriOdds(combo);
+          if (o !== null) oddsAll[combo] = o;
+        }
+      }
+    }
+    if (Object.keys(oddsAll).length === 0) oddsAll = null;
+  }
+  const inputData = lastPredictInput ? Object.assign({}, lastPredictInput, { odds_all: oddsAll }) : null;
+
   const resp = await fetch('/save_record', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ race_date, venue, race_no: parseInt(race_no), predictions: lastPredictions, nige_rate: lastNigeRate, wind: document.getElementById('wind').value || null, input_data: lastPredictInput })
+    body: JSON.stringify({ race_date, venue, race_no: parseInt(race_no), predictions: lastPredictions, nige_rate: lastNigeRate, wind: document.getElementById('wind').value || null, input_data: inputData })
   });
   const data = await resp.json();
   if (data.success) {
