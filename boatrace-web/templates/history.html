@@ -470,6 +470,11 @@ h1 {
         <input type="number" id="r-purchase" placeholder="100" min="0" value="100">
       </div>
     </div>
+    <div class="modal-row" style="margin-top:8px;">
+      <label>返還艇（F等・カンマ区切り 例: 4 や 4,5）</label>
+      <input type="text" id="r-henkan" placeholder="なし" oninput="applyHenkanAdjust()">
+      <div id="henkan-info" style="font-size:10px;color:var(--accent2);margin-top:2px;min-height:14px;"></div>
+    </div>
     <div style="margin-bottom:10px;">
       <button id="btn-auto-fetch" onclick="autoFetchResult()" style="width:100%;padding:8px;background:linear-gradient(135deg,#0050dd,#0099ff);color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;">🌐 公式サイトから結果を自動取得</button>
       <div id="auto-fetch-status" style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:4px;min-height:16px;"></div>
@@ -1289,6 +1294,8 @@ function openModal(id, venue, race_no, race_date) {
 
   // 購入金額のデフォルトは500円（本命2点+対抗3点=5点×100円）
   document.getElementById('r-purchase').value = 500;
+  document.getElementById('r-henkan').value = '';
+  document.getElementById('henkan-info').textContent = '';
 
   modalVenue = venue;
   modalRaceNo = race_no;
@@ -1367,6 +1374,26 @@ function closeModal() {
   document.getElementById('modal').classList.remove('open');
 }
 
+// 返還艇入力 → 該当コンボ数×100円を購入額から自動減算
+function applyHenkanAdjust() {
+  const infoEl = document.getElementById('henkan-info');
+  const raw = document.getElementById('r-henkan').value.trim();
+  const id = parseInt(document.getElementById('modal-record-id').value);
+  const rec = allRecords.find(r => r.id === id);
+  if (!raw || !rec || !rec.predictions) { infoEl.textContent = ''; return; }
+  const henkanBoats = raw.split(',').map(s => s.trim()).filter(s => /^[1-6]$/.test(s));
+  if (henkanBoats.length === 0) { infoEl.textContent = ''; return; }
+  // 基本購入分（本命・対抗の5点）のうち返還艇を含むコンボを数える
+  const basePreds = rec.predictions.filter(p => p.type === '本命' || p.type === '対抗');
+  const returnedCount = basePreds.filter(p =>
+    p.combo.split('-').some(b => henkanBoats.includes(b))
+  ).length;
+  const base = 100 * basePreds.length;
+  const adjusted = Math.max(0, base - returnedCount * 100);
+  document.getElementById('r-purchase').value = adjusted;
+  infoEl.textContent = `返還対象 ${returnedCount}点（本命対抗${basePreds.length}点中）→ 購入額を${adjusted}円に自動調整。万舟等も買っていた場合は手で修正してください`;
+}
+
 async function submitResult() {
   const id = document.getElementById('modal-record-id').value;
   const r1 = parseInt(document.getElementById('r1st').value);
@@ -1374,13 +1401,15 @@ async function submitResult() {
   const r3 = parseInt(document.getElementById('r3rd').value);
   const payout = parseInt(document.getElementById('r-payout').value) || 0;
   const purchase = parseInt(document.getElementById('r-purchase').value) || 100;
+  const henkanRaw = document.getElementById('r-henkan').value.trim();
+  const henkan = henkanRaw ? henkanRaw.split(',').map(s => s.trim()).filter(s => /^[1-6]$/.test(s)).join(',') : null;
 
   if (!r1 || !r2 || !r3) { alert('1着・2着・3着を入力してください'); return; }
 
   const resp = await fetch('/update_result', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ id: parseInt(id), result_1st: r1, result_2nd: r2, result_3rd: r3, payout, purchase })
+    body: JSON.stringify({ id: parseInt(id), result_1st: r1, result_2nd: r2, result_3rd: r3, payout, purchase, henkan })
   });
   const data = await resp.json();
   closeModal();

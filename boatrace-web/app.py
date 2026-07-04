@@ -58,6 +58,11 @@ def init_db():
         conn.commit()
     except Exception:
         pass
+    try:
+        conn.execute('ALTER TABLE records ADD COLUMN henkan TEXT')
+        conn.commit()
+    except Exception:
+        pass
     conn.close()
 
 init_db()
@@ -843,6 +848,7 @@ def update_result():
     result_3rd = data.get('result_3rd')
     payout = data.get('payout', 0)
     purchase = data.get('purchase', 100)
+    henkan = data.get('henkan') or None  # 返還艇（例: "4" や "4,5"）
 
     conn = get_db()
     row = conn.execute('SELECT predictions FROM records WHERE id=?', (record_id,)).fetchone()
@@ -856,8 +862,8 @@ def update_result():
 
     conn.execute('''
         UPDATE records SET result_1st=?, result_2nd=?, result_3rd=?,
-        payout=?, purchase=?, is_hit=? WHERE id=?
-    ''', (result_1st, result_2nd, result_3rd, payout, purchase, is_hit, record_id))
+        payout=?, purchase=?, is_hit=?, henkan=? WHERE id=?
+    ''', (result_1st, result_2nd, result_3rd, payout, purchase, is_hit, henkan, record_id))
     conn.commit()
     conn.close()
     return jsonify({'success': True, 'is_hit': is_hit})
@@ -868,13 +874,13 @@ def get_records():
     period = request.args.get('period', 'all')
     conn = get_db()
     if period == 'today':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
     elif period == 'week':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
     elif period == 'month':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
     else:
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records ORDER BY id DESC").fetchall()
     conn.close()
 
     records = []
@@ -894,6 +900,7 @@ def get_records():
             'created_at': r['created_at'],
             'nige_rate': r['nige_rate'],
             'wind': r['wind'],
+            'henkan': r['henkan'] if 'henkan' in r.keys() else None,
         })
     return jsonify(records)
 
@@ -1137,13 +1144,13 @@ def history_stats():
 
     conn = get_db()
     if period == 'today':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
     elif period == 'week':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
     elif period == 'month':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
     else:
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind FROM records ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records ORDER BY id DESC").fetchall()
     conn.close()
 
     # フィルター適用
@@ -1169,6 +1176,13 @@ def history_stats():
     recovery = round(total_payout / total_purchase * 100, 1) if total_purchase > 0 else 0
     profit = total_payout - total_purchase
 
+    # 返還艇を含むコンボを無効化する判定
+    def is_henkan_combo(combo, henkan_str):
+        if not henkan_str:
+            return False
+        henkan_boats = {b.strip() for b in str(henkan_str).split(',') if b.strip()}
+        return any(b in henkan_boats for b in combo.split('-'))
+
     # 種別別集計
     TYPES = ['本命', '対抗', '中穴', '万舟']
     TYPE_BY_INDEX = ['本命','本命','対抗','対抗','対抗','万舟','万舟']
@@ -1178,11 +1192,15 @@ def history_stats():
             preds = json.loads(r['predictions'])
         except Exception:
             continue
+        henkan_str = r['henkan'] if 'henkan' in r.keys() else None
         result_combo = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}"
         types_in_race = {}
         for idx, p in enumerate(preds):
             t = p.get('type') or (TYPE_BY_INDEX[idx] if idx < len(TYPE_BY_INDEX) else '')
             if t not in TYPES:
+                continue
+            # 返還コンボは無効（外れでも的中でもない）
+            if p.get('combo') and is_henkan_combo(p['combo'], henkan_str):
                 continue
             if t not in types_in_race:
                 types_in_race[t] = False
@@ -1212,10 +1230,11 @@ def history_stats():
                 preds = json.loads(r['predictions'])
             except Exception:
                 continue
+            henkan_str = r['henkan'] if 'henkan' in r.keys() else None
             combos = []
             for idx, p in enumerate(preds):
                 t = p.get('type') or (TYPE_BY_INDEX[idx] if idx < len(TYPE_BY_INDEX) else '')
-                if t == target_type and p.get('combo'):
+                if t == target_type and p.get('combo') and not is_henkan_combo(p['combo'], henkan_str):
                     combos.append(p['combo'])
             if not combos:
                 continue
