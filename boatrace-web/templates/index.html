@@ -1615,10 +1615,42 @@ function getTriOdds(combo) {
 }
 
 // ======== 一括貼り付け ========
+// ======== 追加統計のパース（将来のモデル検証用・現行ロジックでは未使用） ========
+// ST考察（安定率/抜出率/出遅率）・ST順位・部品交換・調整重量を読み取り保存する
+let extraStats = null;
+
+function parseExtraStats(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const out = {};
+  const parsePctRow = (line) => line.split('\t').slice(1, 7).map(s => {
+    const v = parseFloat(String(s).replace(/[%％]/g, ''));
+    return isNaN(v) ? null : v;
+  });
+  let inStRank = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith('安定率')) out.st_stability = parsePctRow(line);
+    else if (line.startsWith('抜出率')) out.st_nukede = parsePctRow(line);
+    else if (line.startsWith('出遅率')) out.st_okure = parsePctRow(line);
+    else if (line === 'ST順位') { inStRank = true; continue; }
+    else if (inStRank && line.startsWith('直近6ヶ月')) { out.st_rank_6m = parsePctRow(line); inStRank = false; }
+    else if (line.startsWith('部品交換')) out.parts = line.split('\t').slice(1, 7).map(s => s.trim());
+    else if (line.startsWith('調整重量')) out.chosei_weight = parsePctRow(line);
+  }
+  if (Object.keys(out).length > 0) {
+    extraStats = Object.assign(extraStats || {}, out);
+    return true;
+  }
+  return false;
+}
+
 function parseBulk() {
   var text = document.getElementById('paste-bulk').value;
   var statusEl = document.getElementById('status-bulk');
   var results = [];
+
+  // 追加統計（ST考察・部品交換など）: 保存専用
+  if (parseExtraStats(text)) results.push('追加統計');
 
   // 平均ST
   var stPeriod = document.getElementById('bulk-st-period').value;
@@ -1655,6 +1687,9 @@ function parseBulk() {
 function parseData(name) {
   const statusEl = document.getElementById(`status-${name}`);
   statusEl.style.color = 'var(--green)';
+  // どのタブの貼り付けからも追加統計（ST考察・部品交換等）を拾って保存用に貯める
+  const rawText = document.getElementById(`paste-${name}`)?.value || '';
+  if (rawText) parseExtraStats(rawText);
   if (name === 'avg-st') {
     const text = document.getElementById('paste-avg-st').value;
     avgStStats = parseAvgST(text);
@@ -1757,7 +1792,7 @@ async function runPredict(forceArekote = false) {
 
   // kimari_full: 決まり手の全パースデータ（各艇の差し率・捲り率等）。
   // 現行モデルは未使用だが、将来のロジック（v5+）のバックテスト材料として保存する
-  const predictPayload = { boats, kimari: kimariPayload, venue, wind, nige_rate: lastNigeRate, force_arekote: forceArekote, kimari_full: kimariStats || null };
+  const predictPayload = { boats, kimari: kimariPayload, venue, wind, nige_rate: lastNigeRate, force_arekote: forceArekote, kimari_full: kimariStats || null, extra_stats: extraStats || null };
   lastPredictInput = predictPayload;
   const resp = await fetch('/predict', {
     method: 'POST',
@@ -2604,7 +2639,7 @@ function clearMemo() {
 })();
 
 function allClear() {
-  avgStStats = null; playerStats = null; kimariStats = null; motorStats = null; oddsData = null;
+  avgStStats = null; playerStats = null; kimariStats = null; motorStats = null; oddsData = null; extraStats = null;
   lastPredictions = [];
   lastPredictInput = null;
   document.getElementById('btn-save').style.display = 'none';
