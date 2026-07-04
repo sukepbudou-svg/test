@@ -69,7 +69,9 @@ init_db()
 
 # モデルバージョン: 予想ロジックを変更したら必ず上げること
 # v4: 2026-07-03 タイム符号バグ修正 + 対抗3シナリオ + 中穴廃止
-MODEL_VERSION = 'v4'
+# v5: 2026-07-04 選手個人の決まり手傾向（差し率/捲り率/捲り差し率）による展開補正
+#     捲り屋の内側沈み/直外浮上、差し屋のイン残り、1号艇の負けやすさ減点
+MODEL_VERSION = 'v5'
 
 VENUES = [
     "桐生", "戸田", "江戸川", "平和島", "多摩川", "浜名湖",
@@ -167,7 +169,7 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
-def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_arekote=False):
+def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_arekote=False, kimari_full=None):
     # 会場プロファイル取得
     vp = VENUE_PROFILES.get(venue, {"in_rate": 0.0, "upset": 0.5, "wind": 0.5})
     wind_bonus = WIND_UPSET_BONUS.get(wind, 0.0)
@@ -320,6 +322,65 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
                 adj += wind_effect * 0.2
 
             s['score'] += adj
+
+    # ===== v5 (2026-07-04): 選手個人の決まり手傾向による展開補正 =====
+    # kimari_full: 各艇の差し率/捲り率/捲り差し率（直近6ヶ月優先、なければ直近1年）
+    kdata = None
+    if kimari_full and isinstance(kimari_full, dict):
+        for period in ('直近6ヶ月', '直近1年'):
+            if period in kimari_full and isinstance(kimari_full[period], dict):
+                kdata = kimari_full[period]
+                break
+    if kdata:
+        sashi_arr = kdata.get('sashi_active') or []
+        maki_arr = kdata.get('maki_active') or []
+        makis_arr = kdata.get('makis_active') or []
+
+        def attack_rates(bn):
+            """艇番2〜6の差し率/捲り率/捲り差し率（%）。配列indexは艇番-2"""
+            i = bn - 2
+            sa = safe_float(sashi_arr[i]) if 0 <= i < len(sashi_arr) else 0.0
+            ma = safe_float(maki_arr[i]) if 0 <= i < len(maki_arr) else 0.0
+            ms = safe_float(makis_arr[i]) if 0 <= i < len(makis_arr) else 0.0
+            return sa, ma, ms
+
+        for s in scores:
+            bn = s['boat']['boat_number']
+            if bn == 1:
+                continue
+            sa, ma, ms = attack_rates(bn)
+            # 攻め力ボーナス: 決まり手を持つ艇は2着3着に絡みやすい（上限2.0）
+            s['score'] += min(2.0, sa * 0.04 + ma * 0.05 + ms * 0.045)
+
+        # 捲り屋がいる場合: その内側（1号艇以外）は沈みやすく、直外は連れて浮上
+        for s in scores:
+            bn = s['boat']['boat_number']
+            if bn == 1:
+                continue
+            sa, ma, ms = attack_rates(bn)
+            if ma + ms >= 15:  # 捲り系の合計が15%以上 → 捲り脅威とみなす
+                for s2 in scores:
+                    bn2 = s2['boat']['boat_number']
+                    if bn2 == bn:
+                        continue
+                    if 1 < bn2 < bn:
+                        s2['score'] -= 0.6  # 内側艇は展開で沈む
+                    elif bn2 == bn + 1:
+                        s2['score'] += 0.4  # 直外は展開が向く
+            if sa >= 15:
+                # 差し屋は伸び返しでイン残りを助ける（1号艇の2着残り）
+                for s2 in scores:
+                    if s2['boat']['boat_number'] == 1:
+                        s2['score'] += 0.3
+
+        # 1号艇の負けやすさ: 差され率＋捲られ率＋捲られ差され率が高いほど1着力を減点
+        threat = (safe_float(kdata.get('sasar', 0))
+                  + safe_float(kdata.get('makur_passive', 0))
+                  + safe_float(kdata.get('makurS_passive', 0)))
+        if threat > 0:
+            for s in scores:
+                if s['boat']['boat_number'] == 1:
+                    s['score'] -= min(2.5, threat * 0.05)
 
     scores.sort(key=lambda x: x['score'], reverse=True)
 
@@ -647,7 +708,8 @@ def predict_route():
     wind = data.get('wind', None)
     nige_rate = data.get('nige_rate', None)
     force_arekote = data.get('force_arekote', False)
-    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote)
+    kimari_full = data.get('kimari_full', None)
+    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full)
     return jsonify(result)
 
 
@@ -1350,6 +1412,7 @@ def backtest():
                 venue=inp.get('venue'),
                 wind=inp.get('wind'),
                 nige_rate=inp.get('nige_rate'),
+                kimari_full=inp.get('kimari_full'),
             )
             new_preds = new_result['predictions']
         except Exception:
