@@ -1117,6 +1117,14 @@ async function runBacktest() {
         <td style="padding:4px 8px;color:${diffCol};font-weight:700;">${diffStr}pt</td>
       </tr>`;
     }).join('');
+    let v3Html = '';
+    if (d.v3_taikou) {
+      const v = d.v3_taikou;
+      v3Html = `<div style="margin-top:8px;font-size:11px;color:var(--text-muted);">
+        📜 旧v3対抗シミュ（1位艇1着固定・3点）: <b style="color:var(--text);">${v.hits}/${v.total}（${v.hit_rate}%）</b>
+        ${d.recovery && d.recovery.v3 != null ? ` / 5点回収率 <b style="color:var(--text);">${d.recovery.v3}%</b>（払戻${d.recovery.v3_payout.toLocaleString()}円）` : ''}
+      </div>`;
+    }
     let recoveryHtml = '';
     if (d.recovery) {
       const rc = d.recovery;
@@ -1140,7 +1148,7 @@ async function runBacktest() {
           <th style="padding:4px 8px;text-align:left;">差分</th>
         </tr></thead>
         <tbody>${rows}</tbody>
-      </table>${recoveryHtml}`;
+      </table>${v3Html}${recoveryHtml}`;
   } catch(e) {
     el.innerHTML = '<span style="color:var(--accent);font-size:11px;">バックテスト実行エラー</span>';
   }

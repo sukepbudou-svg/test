@@ -1399,10 +1399,13 @@ def backtest():
     stored_stats = {t: {'hits': 0, 'total': 0} for t in TYPES}
     new_stats = {t: {'hits': 0, 'total': 0} for t in TYPES}
     n_races = 0
+    # v3対抗シミュレーション（旧ロジック: 1位艇1着固定でスコア順3〜5番目）
+    v3_taikou = {'hits': 0, 'total': 0}
     # 回収率比較（odds_allが保存されているレースのみ、本命+対抗5点ベース）
     ev_races = 0
     stored_purchase = stored_payout = 0
     new_purchase = new_payout = 0
+    v3_purchase = v3_payout = 0
 
     for r in rows:
         try:
@@ -1438,6 +1441,20 @@ def backtest():
                 if is_hit:
                     new_stats[t]['hits'] += 1
 
+        # v3対抗シミュ: 1位艇1着固定のスコア順コンボ3〜5番目（旧対抗）
+        v3_combos = []
+        try:
+            top_bn = new_result['score_order'][0]['boat_number']
+            top_first = [c['combo'] for c in new_result['candidates']
+                         if c['combo'].startswith(f"{top_bn}-")]
+            v3_combos = top_first[2:5]  # 1〜2番目は本命相当なので3〜5番目が旧対抗
+        except Exception:
+            pass
+        if v3_combos:
+            v3_taikou['total'] += 1
+            if result_combo in v3_combos:
+                v3_taikou['hits'] += 1
+
         # 回収率比較: odds_allがあるレースのみ、本命+対抗の5点を100円ずつ買った想定
         odds_all = inp.get('odds_all')
         if odds_all:
@@ -1452,6 +1469,13 @@ def backtest():
                     stored_payout += int(result_odds * 100)
                 if any(p.get('combo') == result_combo for p in new_base):
                     new_payout += int(result_odds * 100)
+                # v3の5点 = 本命2点（現行と同じ）+ v3対抗3点
+                if v3_combos:
+                    honmei_combos = [p.get('combo') for p in new_preds if p.get('type') == '本命']
+                    v3_set = honmei_combos + v3_combos
+                    v3_purchase += 100 * len(v3_set)
+                    if result_combo in v3_set:
+                        v3_payout += int(result_odds * 100)
 
     def fmt(stats):
         out = {}
@@ -1470,12 +1494,21 @@ def backtest():
             'stored_payout': stored_payout,
             'current_payout': new_payout,
         }
+        if v3_purchase > 0:
+            recovery['v3'] = round(v3_payout / v3_purchase * 100, 1)
+            recovery['v3_payout'] = v3_payout
+
+    v3_result = None
+    if v3_taikou['total'] > 0:
+        v3_result = {'hits': v3_taikou['hits'], 'total': v3_taikou['total'],
+                     'hit_rate': round(v3_taikou['hits'] / v3_taikou['total'] * 100, 1)}
 
     return jsonify({
         'races': n_races,
         'model_version': 'v5(検証中・実戦はv4)',
         'stored': fmt(stored_stats),
         'current': fmt(new_stats),
+        'v3_taikou': v3_result,
         'recovery': recovery,
     })
 
