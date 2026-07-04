@@ -724,10 +724,12 @@ function renderRecords() {
     } else {
       payout = '-';
     }
-    const profit = (r.result_1st && r.purchase)
+    const profit = (r.result_1st && r.purchase != null)
       ? (r.is_hit && r.payout
         ? `<span class="profit-plus">+${(r.payout - r.purchase).toLocaleString()}円</span>`
-        : `<span class="profit-minus">-${r.purchase.toLocaleString()}円</span>`)
+        : (r.purchase === 0
+          ? '<span style="color:var(--text-muted);">±0円(返還)</span>'
+          : `<span class="profit-minus">-${r.purchase.toLocaleString()}円</span>`))
       : '-';
 
     const resultBtn = r.result_1st
@@ -1216,10 +1218,10 @@ function openVenueDetail(venue) {
   const hits = withResult.filter(r => r.is_hit);
   const hitRate = withResult.length > 0 ? (hits.length / withResult.length * 100).toFixed(1) : '-';
   const totalProfit = withResult.reduce((sum, r) => {
-    const purchase = r.purchase || 100;
+    const purchase = r.purchase != null ? r.purchase : 100;
     return sum + (r.is_hit ? (r.payout || 0) - purchase : -purchase);
   }, 0);
-  const totalPurchase = withResult.reduce((sum, r) => sum + (r.purchase || 100), 0);
+  const totalPurchase = withResult.reduce((sum, r) => sum + (r.purchase != null ? r.purchase : 100), 0);
   const roi = totalPurchase > 0 ? (((totalPurchase + totalProfit) / totalPurchase) * 100).toFixed(1) : '-';
 
   document.getElementById('vd-title').textContent = `${venue} 詳細`;
@@ -1252,7 +1254,7 @@ function openVenueDetail(venue) {
     const predHtml = preds.map(p => '<span class="pred-tag ' + (p.type||'') + '" style="font-size:10px;">' + p.combo + '</span>').join(' ');
     const resultStr = r.result_1st ? `${r.result_1st}-${r.result_2nd}-${r.result_3rd}` : '-';
     const hitBadge = r.is_hit ? '<span style="color:var(--green);font-weight:bold;">✓</span>' : (r.result_1st ? '<span style="color:var(--accent);">✗</span>' : '-');
-    const purchase = r.purchase || 100;
+    const purchase = r.purchase != null ? r.purchase : 100;
     const profit = r.result_1st ? (r.is_hit ? `<span style="color:var(--green);">+${((r.payout||0)-purchase).toLocaleString()}</span>` : `<span style="color:var(--accent);">-${purchase.toLocaleString()}</span>`) : '-';
     const payout = r.is_hit && r.payout ? `${r.payout.toLocaleString()}円` : (r.result_1st && r.payout ? `<span style="color:var(--text-muted);font-size:10px;">(${r.payout.toLocaleString()})</span>` : '-');
     const nige = r.nige_rate != null ? `${r.nige_rate.toFixed(1)}%` : '-';
@@ -1400,7 +1402,8 @@ async function submitResult() {
   const r2 = parseInt(document.getElementById('r2nd').value);
   const r3 = parseInt(document.getElementById('r3rd').value);
   const payout = parseInt(document.getElementById('r-payout').value) || 0;
-  const purchase = parseInt(document.getElementById('r-purchase').value) || 100;
+  const purchaseRaw = document.getElementById('r-purchase').value.trim();
+  const purchase = purchaseRaw === '' ? 100 : (parseInt(purchaseRaw) || 0);  // 0円（全点返還）を許容
   const henkanRaw = document.getElementById('r-henkan').value.trim();
   const henkan = henkanRaw ? henkanRaw.split(',').map(s => s.trim()).filter(s => /^[1-6]$/.test(s)).join(',') : null;
 
