@@ -721,10 +721,20 @@ function renderRecords() {
       ? `<button class="btn-result" onclick="openModal(${r.id},'${r.venue}',${r.race_no},'${r.race_date}')">修正</button>`
       : `<button class="btn-result" onclick="openModal(${r.id},'${r.venue}',${r.race_no},'${r.race_date}')">結果入力</button>`;
 
+    // 勝負レース判定の復元（イン逃げ率65%以上 + 本命1点目オッズ7倍以上）
+    let shobuBadge = '';
+    const honmei1 = (r.predictions || []).find(p => p.type === '本命');
+    if (r.nige_rate != null && honmei1 && honmei1.odds != null) {
+      const isShobu = r.nige_rate >= 65 && honmei1.odds >= 7;
+      shobuBadge = isShobu
+        ? '<br><span style="font-size:9px;color:var(--green);font-weight:700;white-space:nowrap;">✅勝負</span>'
+        : '<br><span style="font-size:9px;color:var(--yellow);white-space:nowrap;">⚠️見送</span>';
+    }
+
     return `<tr data-id="${r.id}">
       <td>${r.race_date}</td>
       <td>${r.venue}</td>
-      <td>${r.race_no}R${(r.nige_rate != null || r.wind) ? `<br><span style="font-size:9px;color:#aaa;white-space:nowrap;">${r.nige_rate != null ? `逃${r.nige_rate.toFixed(1)}%` : ''}${r.nige_rate != null && r.wind ? ' ' : ''}${r.wind ? `💨${r.wind}` : ''}</span>` : ''}</td>
+      <td>${r.race_no}R${(r.nige_rate != null || r.wind) ? `<br><span style="font-size:9px;color:#aaa;white-space:nowrap;">${r.nige_rate != null ? `逃${r.nige_rate.toFixed(1)}%` : ''}${r.nige_rate != null && r.wind ? ' ' : ''}${r.wind ? `💨${r.wind}` : ''}</span>` : ''}${shobuBadge}</td>
       <td><div class="pred-list">${predHtml}</div></td>
       <td>${resultStr}</td>
       <td>${hitBadge}</td>
