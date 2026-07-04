@@ -69,9 +69,12 @@ init_db()
 
 # モデルバージョン: 予想ロジックを変更したら必ず上げること
 # v4: 2026-07-03 タイム符号バグ修正 + 対抗3シナリオ + 中穴廃止
-# v5: 2026-07-04 選手個人の決まり手傾向（差し率/捲り率/捲り差し率）による展開補正
-#     捲り屋の内側沈み/直外浮上、差し屋のイン残り、1号艇の負けやすさ減点
-MODEL_VERSION = 'v5'
+# v5: 2026-07-04 選手個人の決まり手傾向による展開補正（検証中・実戦未採用）
+#     初回バックテスト87レース: 本命-1.2pt/対抗±0 → 効果確認できず。
+#     100レース貯まったら再評価する（それまで実戦はv4で凍結）
+MODEL_VERSION = 'v4'
+# v5ロジックのon/off: 実戦(/predict)はFalse=v4動作、バックテストはTrueでv5を検証
+USE_V5_LIVE = False
 
 VENUES = [
     "桐生", "戸田", "江戸川", "平和島", "多摩川", "浜名湖",
@@ -708,7 +711,8 @@ def predict_route():
     wind = data.get('wind', None)
     nige_rate = data.get('nige_rate', None)
     force_arekote = data.get('force_arekote', False)
-    kimari_full = data.get('kimari_full', None)
+    # 実戦はv4凍結中: USE_V5_LIVEがTrueのときだけkimari_full（v5補正）を使う
+    kimari_full = data.get('kimari_full', None) if USE_V5_LIVE else None
     result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full)
     return jsonify(result)
 
@@ -1440,7 +1444,7 @@ def backtest():
 
     return jsonify({
         'races': n_races,
-        'model_version': MODEL_VERSION,
+        'model_version': 'v5(検証中・実戦はv4)',
         'stored': fmt(stored_stats),
         'current': fmt(new_stats),
     })
