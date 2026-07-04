@@ -403,8 +403,9 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
 .pred-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 8px 10px;
   border-radius: 8px;
   margin-bottom: 6px;
   opacity: 0;
@@ -473,10 +474,12 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
 
 .pred-combo {
   font-family: 'Orbitron', monospace;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 900;
-  letter-spacing: 3px;
+  letter-spacing: 2px;
   color: var(--text);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .score-section { margin-top: 14px; }
@@ -577,9 +580,10 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
 
 /* ===== ODDS ===== */
 .odds-tag {
-  display:inline-block; font-size:11px; font-weight:700;
-  padding:1px 7px; border-radius:10px; margin-left:8px;
+  display:inline-block; font-size:10px; font-weight:700;
+  padding:1px 6px; border-radius:10px; margin-left:auto;
   background:rgba(245,166,35,0.18); color:var(--accent2); border:1px solid rgba(245,166,35,0.3);
+  white-space:nowrap; flex-shrink:0;
 }
 .odds-tag.low  { background:rgba(233,69,96,0.18); color:var(--accent);  border-color:rgba(233,69,96,0.3); }
 .odds-tag.high { background:rgba(90,106,128,0.18); color:var(--text-muted); border-color:var(--border); }
@@ -2376,7 +2380,7 @@ function renderResult(data) {
       if (oddsVal !== null && prob != null) {
         const ev = Math.round(prob * oddsVal * 100);
         const evCol = ev >= 100 ? 'var(--green)' : ev >= 70 ? 'var(--yellow)' : 'var(--text-muted)';
-        evHtml = `<span style="font-size:10px;color:${evCol};font-weight:700;margin-left:6px;" title="モデル確率${(prob*100).toFixed(1)}%×オッズ">EV ${ev}%</span>`;
+        evHtml = `<span style="font-size:10px;color:${evCol};font-weight:700;margin-left:4px;white-space:nowrap;flex-shrink:0;" title="モデル確率${(prob*100).toFixed(1)}%×オッズ">EV ${ev}%</span>`;
       }
       html += `<div class="pred-item ${cls}">
         <span class="pred-label">${type}</span>
