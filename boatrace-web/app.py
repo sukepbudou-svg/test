@@ -81,6 +81,10 @@ USE_V5_LIVE = False
 # v6ハイブリッド対抗: 採用済み（2026-07-04）
 USE_V6_LIVE = True
 
+# 会場グループ（2026-07-04ユーザー設定。index.html/history.htmlの同名定数と同期すること）
+TOKUI_VENUES = ['大村', '福岡', '桐生', '徳山']
+KENSHO_VENUES = ['芦屋', '宮島', '常滑', '三国', '浜名湖', '尼崎', '若松', '蒲郡', '多摩川', '住之江', 'びわこ']
+
 VENUES = [
     "桐生", "戸田", "江戸川", "平和島", "多摩川", "浜名湖",
     "蒲郡", "常滑", "津", "三国", "びわこ", "住之江",
@@ -1722,6 +1726,272 @@ def backtest():
         'current': fmt(new_stats),
         'v3_taikou': v3_result,
         'recovery': recovery,
+    })
+
+
+def _filtered_result_rows(data):
+    """成績記録の絞り込み条件（期間・会場・逃げ率）で結果入力済みレコードを取得する共通処理"""
+    period = data.get('period', 'all')
+    venues = data.get('venues', [])
+    nige_min = data.get('nige_min', 0)
+    nige_max = data.get('nige_max', 100)
+    conn = get_db()
+    q = "SELECT * FROM records WHERE result_1st IS NOT NULL"
+    if period == 'today':
+        q += " AND race_date = date('now', '+9 hours')"
+    elif period == 'week':
+        q += " AND race_date >= date('now', '-7 days')"
+    elif period == 'month':
+        q += " AND race_date >= date('now', '-30 days')"
+    rows = conn.execute(q + " ORDER BY id").fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        if venues and r['venue'] not in venues:
+            continue
+        if nige_min > 0 or nige_max < 100:
+            if r['nige_rate'] is None:
+                continue
+            if r['nige_rate'] < nige_min or r['nige_rate'] > nige_max:
+                continue
+        out.append(r)
+    return out
+
+
+@app.route('/strategy_sim', methods=['POST'])
+def strategy_sim():
+    """買い方シミュレーター: odds_all付きレースで複数の買い方の回収率を一括比較"""
+    data = request.get_json() or {}
+    rows = _filtered_result_rows(data)
+
+    # 通常予想向け戦略
+    strategies = {
+        'full5':    {'name': '5点フル（本命2+対抗3）', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
+        'honmei2':  {'name': '本命2点のみ', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
+        'skip1':    {'name': '本命1点目抜き4点', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
+        'taikou3':  {'name': '対抗3点のみ', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
+        'full7':    {'name': '7点（5点+万舟2点）', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
+        'smart':    {'name': 'スマート（本命7倍未満は本命2点のみ、他は5点）', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
+    }
+    # 裏熊向け戦略
+    ura_strategies = {
+        'ura_all':    {'name': '裏熊: 全点', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
+        'ura_30_150': {'name': '裏熊: 30〜150倍のみ', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
+    }
+
+    def settle(strat, combos, result_combo, result_odds):
+        if not combos:
+            return
+        strat['races'] += 1
+        strat['purchase'] += 100 * len(combos)
+        if result_combo in combos:
+            strat['payout'] += int(result_odds * 100)
+            strat['hits'] += 1
+
+    for r in rows:
+        try:
+            inp = json.loads(r['input_data']) if r['input_data'] else None
+            preds = json.loads(r['predictions'])
+        except Exception:
+            continue
+        odds_all = (inp or {}).get('odds_all')
+        if not odds_all:
+            continue
+        result_combo = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}"
+        result_odds = safe_float(odds_all.get(result_combo, 0))
+
+        is_ura = any(p.get('type') == '裏熊' for p in preds)
+        if is_ura:
+            all_combos = [p['combo'] for p in preds if p.get('combo')]
+            band = [c for c in all_combos if 30 <= safe_float(odds_all.get(c, 0)) <= 150]
+            settle(ura_strategies['ura_all'], all_combos, result_combo, result_odds)
+            settle(ura_strategies['ura_30_150'], band, result_combo, result_odds)
+            continue
+
+        honmei = [p['combo'] for p in preds if p.get('type') == '本命' and p.get('combo')]
+        taikou = [p['combo'] for p in preds if p.get('type') == '対抗' and p.get('combo')]
+        manshu = [p['combo'] for p in preds if p.get('type') == '万舟' and p.get('combo')]
+        if not honmei:
+            continue
+        base5 = honmei + taikou
+        settle(strategies['full5'], base5, result_combo, result_odds)
+        settle(strategies['honmei2'], honmei, result_combo, result_odds)
+        settle(strategies['skip1'], honmei[1:] + taikou, result_combo, result_odds)
+        settle(strategies['taikou3'], taikou, result_combo, result_odds)
+        settle(strategies['full7'], base5 + manshu, result_combo, result_odds)
+        # スマート: 本命1点目のオッズで買い方を変える（ユーザーの実運用パターン）
+        h1_odds = None
+        for p in preds:
+            if p.get('type') == '本命':
+                h1_odds = p.get('odds')
+                break
+        smart_set = honmei if (h1_odds is not None and h1_odds < 7) else base5
+        settle(strategies['smart'], smart_set, result_combo, result_odds)
+
+    def fmt(d):
+        out = []
+        for key, s in d.items():
+            rec = round(s['payout'] / s['purchase'] * 100, 1) if s['purchase'] > 0 else 0
+            hr = round(s['hits'] / s['races'] * 100, 1) if s['races'] > 0 else 0
+            out.append({'key': key, 'name': s['name'], 'races': s['races'], 'hits': s['hits'],
+                        'hit_rate': hr, 'purchase': s['purchase'], 'payout': s['payout'],
+                        'recovery': rec, 'profit': s['payout'] - s['purchase']})
+        return out
+
+    return jsonify({'normal': fmt(strategies), 'ura': fmt(ura_strategies)})
+
+
+@app.route('/ev_calibration', methods=['POST'])
+def ev_calibration():
+    """EVキャリブレーション: モデル確率×オッズ（EV）帯ごとに実際の回収率を検証"""
+    data = request.get_json() or {}
+    rows = _filtered_result_rows(data)
+
+    BUCKETS = [
+        {'key': 'ev_lt70',   'label': 'EV 70%未満',    'lo': 0.0, 'hi': 0.7},
+        {'key': 'ev_70_100', 'label': 'EV 70〜100%',   'lo': 0.7, 'hi': 1.0},
+        {'key': 'ev_100_130','label': 'EV 100〜130%',  'lo': 1.0, 'hi': 1.3},
+        {'key': 'ev_ge130',  'label': 'EV 130%以上',   'lo': 1.3, 'hi': 9999.0},
+    ]
+    stats = {b['key']: {'label': b['label'], 'bets': 0, 'hits': 0, 'purchase': 0, 'payout': 0,
+                        'prob_sum': 0.0} for b in BUCKETS}
+    n_races = 0
+
+    for r in rows:
+        try:
+            inp = json.loads(r['input_data']) if r['input_data'] else None
+        except Exception:
+            continue
+        if not inp:
+            continue
+        odds_all = inp.get('odds_all')
+        if not odds_all:
+            continue
+        try:
+            pred_result = predict(
+                inp.get('boats', []),
+                kimari=inp.get('kimari'),
+                venue=inp.get('venue'),
+                wind=inp.get('wind'),
+                nige_rate=inp.get('nige_rate'),
+            )
+        except Exception:
+            continue
+        n_races += 1
+        result_combo = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}"
+        for c in pred_result.get('candidates', []):
+            prob = c.get('prob')
+            odds = safe_float(odds_all.get(c['combo'], 0))
+            if prob is None or odds <= 0:
+                continue
+            ev = prob * odds
+            for b in BUCKETS:
+                if b['lo'] <= ev < b['hi']:
+                    s = stats[b['key']]
+                    s['bets'] += 1
+                    s['purchase'] += 100
+                    s['prob_sum'] += prob
+                    if c['combo'] == result_combo:
+                        s['hits'] += 1
+                        s['payout'] += int(odds * 100)
+                    break
+
+    out = []
+    for b in BUCKETS:
+        s = stats[b['key']]
+        rec = round(s['payout'] / s['purchase'] * 100, 1) if s['purchase'] > 0 else 0
+        actual_hr = round(s['hits'] / s['bets'] * 100, 2) if s['bets'] > 0 else 0
+        model_hr = round(s['prob_sum'] / s['bets'] * 100, 2) if s['bets'] > 0 else 0
+        out.append({'label': s['label'], 'bets': s['bets'], 'hits': s['hits'],
+                    'model_hit_rate': model_hr, 'actual_hit_rate': actual_hr,
+                    'recovery': rec})
+    return jsonify({'races': n_races, 'buckets': out})
+
+
+@app.route('/weekly_report', methods=['POST'])
+def weekly_report():
+    """週次分析レポート: 直近の成績・勝負レース・会場昇格候補・検証状況をまとめる"""
+    data = request.get_json() or {}
+    if 'period' not in data:
+        data['period'] = 'week'
+    rows = _filtered_result_rows(data)
+
+    def is_ura_row(r):
+        return '"裏熊"' in (r['predictions'] or '')
+
+    normal_rows = [r for r in rows if not is_ura_row(r)]
+    ura_rows = [r for r in rows if is_ura_row(r)]
+
+    def summary(rs):
+        hits = [r for r in rs if r['is_hit']]
+        payout = sum(r['payout'] or 0 for r in hits)
+        purchase = sum(r['purchase'] or 0 for r in rs if r['purchase'] is not None)
+        return {
+            'races': len(rs), 'hits': len(hits),
+            'hit_rate': round(len(hits) / len(rs) * 100, 1) if rs else 0,
+            'payout': payout, 'purchase': purchase,
+            'recovery': round(payout / purchase * 100, 1) if purchase > 0 else 0,
+            'profit': payout - purchase,
+        }
+
+    # ✅勝負レース相当（得意会場+逃げ率65%+本命1点目7倍以上）
+    shobu_rows = []
+    for r in normal_rows:
+        if r['nige_rate'] is None or r['nige_rate'] < 65 or r['venue'] not in TOKUI_VENUES:
+            continue
+        try:
+            preds = json.loads(r['predictions'])
+        except Exception:
+            continue
+        h1 = next((p for p in preds if p.get('type') == '本命'), None)
+        if h1 and h1.get('odds') is not None and h1['odds'] >= 7:
+            shobu_rows.append(r)
+
+    # 検証中会場の状況（逃げ率65%以上のレースの実力回収率）
+    kensho_status = []
+    for v in KENSHO_VENUES:
+        vrows = [r for r in normal_rows if r['venue'] == v and r['nige_rate'] is not None and r['nige_rate'] >= 65]
+        if not vrows:
+            continue
+        purchase = 0
+        payout = 0
+        hits = 0
+        for r in vrows:
+            try:
+                preds = json.loads(r['predictions'])
+            except Exception:
+                continue
+            base = [p['combo'] for p in preds if p.get('type') in ('本命', '対抗') and p.get('combo')]
+            if not base:
+                continue
+            purchase += 100 * len(base)
+            rc = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}"
+            if rc in base and r['payout']:
+                payout += r['payout']
+                hits += 1
+        rec = round(payout / purchase * 100, 1) if purchase > 0 else 0
+        kensho_status.append({
+            'venue': v, 'races': len(vrows), 'hits': hits, 'recovery_base': rec,
+            'need_more': max(0, 10 - len(vrows)),
+            'verdict': '昇格候補' if (len(vrows) >= 10 and rec >= 100) else ('降格候補' if (len(vrows) >= 10 and rec < 80) else 'データ蓄積中'),
+        })
+    kensho_status.sort(key=lambda x: x['recovery_base'], reverse=True)
+
+    # v5再評価の進捗
+    conn = get_db()
+    input_data_count = conn.execute(
+        "SELECT COUNT(*) FROM records WHERE input_data IS NOT NULL AND result_1st IS NOT NULL"
+    ).fetchone()[0]
+    conn.close()
+
+    return jsonify({
+        'total': summary(rows),
+        'normal': summary(normal_rows),
+        'shobu': summary(shobu_rows),
+        'ura': summary(ura_rows),
+        'kensho_status': kensho_status,
+        'input_data_count': input_data_count,
+        'v5_reeval_at': 150,
     })
 
 

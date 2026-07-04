@@ -350,6 +350,30 @@ h1 {
     </div>
   </div>
 
+  <!-- 週次レポート -->
+  <div class="chart-card" style="margin-bottom:16px;">
+    <div class="chart-title">📋 分析レポート</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">期間・会場・逃げ率の絞り込みに連動（期間未指定時は直近7日）。勝負レース成績・検証中会場の昇格候補・検証の進捗をまとめます</div>
+    <button onclick="runWeeklyReport()" style="padding:6px 16px;background:linear-gradient(135deg,#0050dd,#0099ff);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">レポート生成</button>
+    <div id="weekly-report-result" style="margin-top:10px;"></div>
+  </div>
+
+  <!-- 買い方シミュレーター -->
+  <div class="chart-card" style="margin-bottom:16px;">
+    <div class="chart-title">🧮 買い方シミュレーター</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">全オッズ（odds_all）付きレースで複数の買い方の回収率を一括比較します。絞り込みに連動</div>
+    <button onclick="runStrategySim()" style="padding:6px 16px;background:linear-gradient(135deg,#00795c,#00b389);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">シミュレーション実行</button>
+    <div id="strategy-sim-result" style="margin-top:10px;"></div>
+  </div>
+
+  <!-- EVキャリブレーション -->
+  <div class="chart-card" style="margin-bottom:16px;">
+    <div class="chart-title">🎓 EVキャリブレーション</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">EV帯別に「モデルの言う確率」と「実際の的中率・回収率」を突き合わせます。EV表示が信用できるかの答え合わせ。100レース以上推奨</div>
+    <button onclick="runEvCalibration()" style="padding:6px 16px;background:linear-gradient(135deg,#7000b0,#b000dc);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">検証実行</button>
+    <div id="ev-calib-result" style="margin-top:10px;"></div>
+  </div>
+
   <!-- バックテスト -->
   <div class="chart-card" style="margin-bottom:16px;">
     <div class="chart-title">🧪 バックテスト（現行ロジック vs 保存時の予想）</div>
@@ -1110,6 +1134,136 @@ function renderShobuStats(records) {
       <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">回収率 <span style="color:${recCol};font-weight:700;">${recovery}%</span>（払戻${payout.toLocaleString()}円 / 購入${purchase.toLocaleString()}円）</div>
     </div>`;
   }).join('');
+}
+
+// ======== 共通: 現在の絞り込み条件をPOSTボディにする ========
+function currentFilterBody(extra) {
+  return JSON.stringify(Object.assign({
+    period: currentFilter,
+    venues: Array.from(selectedVenues),
+    nige_min: nigeFilterMin,
+    nige_max: nigeFilterMax,
+  }, extra || {}));
+}
+
+// ======== 週次レポート ========
+async function runWeeklyReport() {
+  const el = document.getElementById('weekly-report-result');
+  el.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">集計中...</span>';
+  try {
+    const resp = await fetch('/weekly_report', { method: 'POST', headers: {'Content-Type':'application/json'}, body: currentFilterBody() });
+    const d = await resp.json();
+    const sumRow = (label, s, color) => s.races > 0
+      ? `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:4px 8px;font-weight:700;color:${color};white-space:nowrap;">${label}</td>
+          <td style="padding:4px 8px;">${s.hits}/${s.races}（${s.hit_rate}%）</td>
+          <td style="padding:4px 8px;color:${s.recovery >= 100 ? 'var(--green)' : s.recovery >= 80 ? 'var(--yellow)' : 'var(--accent)'};font-weight:700;">${s.recovery}%</td>
+          <td style="padding:4px 8px;text-align:right;color:${s.profit >= 0 ? 'var(--green)' : 'var(--accent)'};">${s.profit >= 0 ? '+' : ''}${s.profit.toLocaleString()}円</td>
+        </tr>`
+      : `<tr style="border-bottom:1px solid var(--border);"><td style="padding:4px 8px;font-weight:700;color:${color};">${label}</td><td colspan="3" style="padding:4px 8px;color:var(--text-muted);">該当なし</td></tr>`;
+    const kenshoRows = (d.kensho_status || []).map(k => `
+      <tr style="border-bottom:1px solid var(--border);font-size:11px;">
+        <td style="padding:3px 8px;">${k.venue}</td>
+        <td style="padding:3px 8px;">${k.hits}/${k.races}</td>
+        <td style="padding:3px 8px;color:${k.recovery_base >= 100 ? 'var(--green)' : k.recovery_base >= 80 ? 'var(--yellow)' : 'var(--accent)'};">${k.recovery_base}%</td>
+        <td style="padding:3px 8px;">${k.verdict === '昇格候補' ? '<b style="color:var(--green);">⬆ 昇格候補</b>' : k.verdict === '降格候補' ? '<b style="color:var(--accent);">⬇ 降格候補</b>' : `あと${k.need_more}レース`}</td>
+      </tr>`).join('');
+    const v5left = Math.max(0, d.v5_reeval_at - d.input_data_count);
+    el.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead><tr style="color:var(--text-muted);font-size:10px;">
+          <th style="padding:4px 8px;text-align:left;">区分</th><th style="padding:4px 8px;text-align:left;">的中</th>
+          <th style="padding:4px 8px;text-align:left;">回収率</th><th style="padding:4px 8px;text-align:right;">収支</th>
+        </tr></thead>
+        <tbody>
+          ${sumRow('全体', d.total, 'var(--text)')}
+          ${sumRow('通常予想', d.normal, 'var(--accent3)')}
+          ${sumRow('✅勝負レース', d.shobu, 'var(--green)')}
+          ${sumRow('🐻裏熊', d.ura, '#d95cff')}
+        </tbody>
+      </table>
+      ${kenshoRows ? `<div style="font-size:10px;color:var(--text-muted);margin-top:10px;margin-bottom:4px;">🔍 検証中会場の状況（逃げ率65%以上・実力回収率ベース）</div>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="color:var(--text-muted);font-size:10px;"><th style="padding:3px 8px;text-align:left;">会場</th><th style="padding:3px 8px;text-align:left;">的中</th><th style="padding:3px 8px;text-align:left;">実力回収率</th><th style="padding:3px 8px;text-align:left;">判定</th></tr></thead>
+        <tbody>${kenshoRows}</tbody>
+      </table>` : ''}
+      <div style="font-size:10px;color:var(--text-muted);margin-top:8px;">🧪 v5再評価まで: input_data付き${d.input_data_count}件 / ${d.v5_reeval_at}件（${v5left > 0 ? `あと${v5left}件` : '<b style="color:var(--green);">実行可能！バックテストでv5を再評価してください</b>'}）</div>
+    `;
+  } catch(e) {
+    el.innerHTML = '<span style="color:var(--accent);font-size:11px;">レポート生成エラー</span>';
+  }
+}
+
+// ======== 買い方シミュレーター ========
+async function runStrategySim() {
+  const el = document.getElementById('strategy-sim-result');
+  el.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">シミュレーション中...</span>';
+  try {
+    const resp = await fetch('/strategy_sim', { method: 'POST', headers: {'Content-Type':'application/json'}, body: currentFilterBody() });
+    const d = await resp.json();
+    const table = (list, title) => {
+      const rows = list.filter(s => s.races > 0);
+      if (rows.length === 0) return '';
+      // 回収率降順で並べ、最良に👑
+      rows.sort((a, b) => b.recovery - a.recovery);
+      const best = rows[0].recovery;
+      return `<div style="font-size:10px;color:var(--text-muted);margin-top:8px;margin-bottom:4px;">${title}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead><tr style="color:var(--text-muted);font-size:10px;">
+          <th style="padding:3px 8px;text-align:left;">買い方</th><th style="padding:3px 8px;">レース</th>
+          <th style="padding:3px 8px;">的中率</th><th style="padding:3px 8px;">回収率</th><th style="padding:3px 8px;text-align:right;">収支</th>
+        </tr></thead><tbody>
+        ${rows.map(s => `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:4px 8px;white-space:nowrap;">${s.recovery === best && s.recovery > 0 ? '👑 ' : ''}${s.name}</td>
+          <td style="padding:4px 8px;text-align:center;">${s.races}</td>
+          <td style="padding:4px 8px;text-align:center;">${s.hit_rate}%</td>
+          <td style="padding:4px 8px;text-align:center;font-weight:700;color:${s.recovery >= 100 ? 'var(--green)' : s.recovery >= 80 ? 'var(--yellow)' : 'var(--accent)'};">${s.recovery}%</td>
+          <td style="padding:4px 8px;text-align:right;color:${s.profit >= 0 ? 'var(--green)' : 'var(--accent)'};">${s.profit >= 0 ? '+' : ''}${s.profit.toLocaleString()}円</td>
+        </tr>`).join('')}
+        </tbody></table>`;
+    };
+    const html = table(d.normal || [], '通常予想の買い方比較（100円/点想定）') + table(d.ura || [], '🐻裏熊の買い方比較');
+    el.innerHTML = html || '<span style="color:var(--text-muted);font-size:11px;">全オッズ付きのレース記録がまだありません。odds_all保存開始以降のデータが対象です</span>';
+  } catch(e) {
+    el.innerHTML = '<span style="color:var(--accent);font-size:11px;">シミュレーションエラー</span>';
+  }
+}
+
+// ======== EVキャリブレーション ========
+async function runEvCalibration() {
+  const el = document.getElementById('ev-calib-result');
+  el.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">再予想して検証中...（レース数によって時間がかかります）</span>';
+  try {
+    const resp = await fetch('/ev_calibration', { method: 'POST', headers: {'Content-Type':'application/json'}, body: currentFilterBody() });
+    const d = await resp.json();
+    if (d.races === 0) {
+      el.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">全オッズ付きのレース記録がまだありません</span>';
+      return;
+    }
+    const rows = (d.buckets || []).map(b => {
+      const gap = b.actual_hit_rate - b.model_hit_rate;
+      const gapStr = b.bets > 0 ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}pt` : '-';
+      return `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:4px 8px;font-weight:700;">${b.label}</td>
+        <td style="padding:4px 8px;text-align:center;">${b.bets}</td>
+        <td style="padding:4px 8px;text-align:center;">${b.model_hit_rate}%</td>
+        <td style="padding:4px 8px;text-align:center;">${b.actual_hit_rate}%</td>
+        <td style="padding:4px 8px;text-align:center;color:${Math.abs(gap) < 1 ? 'var(--green)' : 'var(--yellow)'};">${gapStr}</td>
+        <td style="padding:4px 8px;text-align:center;font-weight:700;color:${b.recovery >= 100 ? 'var(--green)' : b.recovery >= 80 ? 'var(--yellow)' : 'var(--accent)'};">${b.recovery}%</td>
+      </tr>`;
+    }).join('');
+    el.innerHTML = `<div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;">対象: ${d.races}レース × 候補60点（全候補を100円ずつ買った想定）</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead><tr style="color:var(--text-muted);font-size:10px;">
+          <th style="padding:3px 8px;text-align:left;">EV帯</th><th style="padding:3px 8px;">点数</th>
+          <th style="padding:3px 8px;">モデル確率</th><th style="padding:3px 8px;">実測的中率</th>
+          <th style="padding:3px 8px;">ズレ</th><th style="padding:3px 8px;">回収率</th>
+        </tr></thead><tbody>${rows}</tbody>
+      </table>
+      <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">💡 見方: 「EV100%以上の帯の回収率が実際に100%を超えていれば」EV表示は信用できる。モデル確率と実測的中率のズレが大きい場合は確率が未調整</div>`;
+  } catch(e) {
+    el.innerHTML = '<span style="color:var(--accent);font-size:11px;">検証エラー</span>';
+  }
 }
 
 // ======== バックテスト ========
