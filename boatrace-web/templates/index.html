@@ -2226,6 +2226,7 @@ function renderResult(data) {
       detail = warns.join(' / ');
     }
     const isShobu = condOk && venueTier === 'tokui';
+    const isKensho = condOk && venueTier === 'kensho';
     html += `<div id="shobu-banner" style="background:${bg};border:1.5px solid ${bd};border-radius:10px;padding:8px 14px;margin-bottom:10px;">
       <div style="display:flex;align-items:center;gap:8px;">
         <span id="shobu-icon" style="font-size:16px;">${icon}</span>
@@ -2253,19 +2254,27 @@ function renderResult(data) {
         const recBase = s.recovery_base != null ? s.recovery_base : s.recovery;
         const col = recBase >= 100 ? '#00e676' : recBase >= 80 ? '#ffd740' : '#e94560';
         el.innerHTML = `📊 ${venueVal}${condLabel}: 的中率${s.hit_rate}% / 実力回収率<span style="color:${col};font-weight:700;">${recBase}%</span><span style="opacity:0.6;">（本命対抗ベース・万舟除く / 全体${s.recovery}%）</span>（${s.with_result}レース）`;
+        const banner = document.getElementById('shobu-banner');
+        const iconEl = document.getElementById('shobu-icon');
+        const titleEl = document.getElementById('shobu-title');
+        const detailEl = document.getElementById('shobu-detail');
+        if (!banner || !iconEl || !titleEl || !detailEl) return;
         if (isShobu && recBase < 80) {
-          const banner = document.getElementById('shobu-banner');
-          const iconEl = document.getElementById('shobu-icon');
-          const titleEl = document.getElementById('shobu-title');
-          const detailEl = document.getElementById('shobu-detail');
-          if (banner && iconEl && titleEl && detailEl) {
-            banner.style.background = 'rgba(255,215,64,0.10)';
-            banner.style.borderColor = '#ffd740';
-            iconEl.textContent = '⚠️';
-            titleEl.textContent = '見送り推奨';
-            titleEl.style.color = '#ffd740';
-            detailEl.textContent = `${venueVal}${condLabel}は苦手条件（実力回収率${recBase}%・万舟除く）`;
-          }
+          // 得意会場でもデータが悪ければ格下げ
+          banner.style.background = 'rgba(255,215,64,0.10)';
+          banner.style.borderColor = '#ffd740';
+          iconEl.textContent = '⚠️';
+          titleEl.textContent = '見送り推奨';
+          titleEl.style.color = '#ffd740';
+          detailEl.textContent = `${venueVal}${condLabel}は苦手条件（実力回収率${recBase}%・万舟除く）`;
+        } else if (isKensho && recBase >= 100) {
+          // 検証中会場でもデータが良ければ勝負レースへ自動昇格
+          banner.style.background = 'rgba(0,230,118,0.12)';
+          banner.style.borderColor = '#00e676';
+          iconEl.textContent = '✅';
+          titleEl.textContent = '勝負レース（データ昇格）';
+          titleEl.style.color = '#00e676';
+          detailEl.textContent = `${venueVal}${condLabel}は実力回収率${recBase}%（${s.with_result}レース）で好条件`;
         }
       };
 
