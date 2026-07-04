@@ -2101,6 +2101,11 @@ const TYPE_CLASS = {
   '万舟': 'pred-manshu',
 };
 const TYPE_ORDER = ['本命', '対抗', '中穴', '万舟'];
+
+// 会場グループ（2026-07-04 ユーザー設定）
+// 得意会場: 勝負レース対象。検証中: データ蓄積で判定。それ以外: 対象外
+const TOKUI_VENUES = ['大村', '福岡', '桐生', '徳山'];
+const KENSHO_VENUES = ['芦屋', '宮島', '常滑', '三国', '浜名湖', '尼崎', '若松', '蒲郡', '多摩川', '住之江', 'びわこ'];
 const TYPE_LIMITS = { '本命': 2, '対抗': 3, '中穴': 1, '万舟': 2 };
 
 function classifyByOdds(candidates) {
@@ -2201,12 +2206,26 @@ function renderResult(data) {
       if (honmeiFirst.odds >= 7) reasons.push(`本命${honmeiFirst.odds.toFixed(1)}倍（妙味あり）`);
       else warns.push(`本命${honmeiFirst.odds.toFixed(1)}倍（7倍未満・回収困難）`);
     }
-    const isShobu = warns.length === 0 && reasons.length > 0;
-    const bg = isShobu ? 'rgba(0,230,118,0.12)' : 'rgba(255,215,64,0.10)';
-    const bd = isShobu ? '#00e676' : '#ffd740';
-    const icon = isShobu ? '✅' : '⚠️';
-    const title = isShobu ? '勝負レース' : '見送り推奨';
-    const detail = isShobu ? reasons.join(' / ') : warns.join(' / ');
+    // 条件3: 会場グループ（得意/検証中/対象外）
+    const venueTier = TOKUI_VENUES.includes(venueVal) ? 'tokui'
+                    : KENSHO_VENUES.includes(venueVal) ? 'kensho' : 'other';
+    if (venueTier === 'tokui') reasons.push(`${venueVal}は得意会場`);
+    else if (venueTier === 'other') warns.push(`${venueVal}は対象外会場`);
+
+    const condOk = warns.length === 0 && reasons.length > 0;
+    // 3段階判定: ✅勝負（得意会場+条件OK）/ 🔍検証中（検証中会場+条件OK）/ ⚠️見送り
+    let icon, title, bd, bg, detail;
+    if (condOk && venueTier === 'tokui') {
+      icon = '✅'; title = '勝負レース'; bd = '#00e676'; bg = 'rgba(0,230,118,0.12)';
+      detail = reasons.join(' / ');
+    } else if (condOk && venueTier === 'kensho') {
+      icon = '🔍'; title = '検証中会場'; bd = '#40c4ff'; bg = 'rgba(64,196,255,0.10)';
+      detail = reasons.join(' / ') + ` / ${venueVal}はデータ蓄積で判定中`;
+    } else {
+      icon = '⚠️'; title = '見送り推奨'; bd = '#ffd740'; bg = 'rgba(255,215,64,0.10)';
+      detail = warns.join(' / ');
+    }
+    const isShobu = condOk && venueTier === 'tokui';
     html += `<div id="shobu-banner" style="background:${bg};border:1.5px solid ${bd};border-radius:10px;padding:8px 14px;margin-bottom:10px;">
       <div style="display:flex;align-items:center;gap:8px;">
         <span id="shobu-icon" style="font-size:16px;">${icon}</span>

@@ -736,15 +736,12 @@ function renderRecords() {
       ? `<button class="btn-result" onclick="openModal(${r.id},'${r.venue}',${r.race_no},'${r.race_date}')">修正</button>`
       : `<button class="btn-result" onclick="openModal(${r.id},'${r.venue}',${r.race_no},'${r.race_date}')">結果入力</button>`;
 
-    // 勝負レース判定の復元（イン逃げ率65%以上 + 本命1点目オッズ7倍以上）
+    // 勝負レース判定の復元（逃げ率65%以上 + 本命7倍以上 + 会場グループ）
     let shobuBadge = '';
-    const honmei1 = (r.predictions || []).find(p => p.type === '本命');
-    if (r.nige_rate != null && honmei1 && honmei1.odds != null) {
-      const isShobu = r.nige_rate >= 65 && honmei1.odds >= 7;
-      shobuBadge = isShobu
-        ? ' <span style="font-size:9px;color:var(--green);font-weight:700;white-space:nowrap;">✅勝負</span>'
-        : ' <span style="font-size:9px;color:var(--yellow);white-space:nowrap;">⚠️見送</span>';
-    }
+    const tier = judgeRaceTier(r);
+    if (tier === 'shobu') shobuBadge = ' <span style="font-size:9px;color:var(--green);font-weight:700;white-space:nowrap;">✅勝負</span>';
+    else if (tier === 'kensho') shobuBadge = ' <span style="font-size:9px;color:var(--blue);white-space:nowrap;">🔍検証</span>';
+    else if (tier === 'miokuri') shobuBadge = ' <span style="font-size:9px;color:var(--yellow);white-space:nowrap;">⚠️見送</span>';
 
     return `<tr data-id="${r.id}">
       <td>${r.race_date}</td>
@@ -1036,25 +1033,40 @@ function renderPayoutFromStats(pattern) {
   }).join('');
 }
 
+// ======== 勝負レース判定 ========
+// 会場グループ（2026-07-04 ユーザー設定、index.htmlと同期すること）
+const TOKUI_VENUES = ['大村', '福岡', '桐生', '徳山'];
+const KENSHO_VENUES = ['芦屋', '宮島', '常滑', '三国', '浜名湖', '尼崎', '若松', '蒲郡', '多摩川', '住之江', 'びわこ'];
+
+// レースの判定を復元: 'shobu' | 'kensho' | 'miokuri' | null（データ不足）
+function judgeRaceTier(r) {
+  const honmei1 = (r.predictions || []).find(p => p.type === '本命');
+  if (r.nige_rate == null || !honmei1 || honmei1.odds == null) return null;
+  const condOk = r.nige_rate >= 65 && honmei1.odds >= 7;
+  if (!condOk) return 'miokuri';
+  if (TOKUI_VENUES.includes(r.venue)) return 'shobu';
+  if (KENSHO_VENUES.includes(r.venue)) return 'kensho';
+  return 'miokuri';
+}
+
 // ======== 勝負レース判定別 成績 ========
 function renderShobuStats(records) {
   const card = document.getElementById('shobu-stats-card');
   const body = document.getElementById('shobu-stats-body');
-  const groups = { shobu: [], miokuri: [] };
+  const groups = { shobu: [], kensho: [], miokuri: [] };
   for (const r of records) {
     if (!r.result_1st) continue;
-    const honmei1 = (r.predictions || []).find(p => p.type === '本命');
-    if (r.nige_rate == null || !honmei1 || honmei1.odds == null) continue;
-    const isShobu = r.nige_rate >= 65 && honmei1.odds >= 7;
-    groups[isShobu ? 'shobu' : 'miokuri'].push(r);
+    const tier = judgeRaceTier(r);
+    if (tier) groups[tier].push(r);
   }
-  if (groups.shobu.length === 0 && groups.miokuri.length === 0) {
+  if (groups.shobu.length === 0 && groups.kensho.length === 0 && groups.miokuri.length === 0) {
     card.style.display = 'none';
     return;
   }
   card.style.display = 'block';
   const boxes = [
-    { key: 'shobu', label: '✅ 勝負レース', color: 'var(--green)' },
+    { key: 'shobu', label: '✅ 勝負レース（得意会場）', color: 'var(--green)' },
+    { key: 'kensho', label: '🔍 検証中会場', color: 'var(--blue)' },
     { key: 'miokuri', label: '⚠️ 見送り推奨', color: 'var(--yellow)' },
   ];
   body.innerHTML = boxes.map(b => {
