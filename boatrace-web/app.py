@@ -1306,6 +1306,31 @@ def history_stats():
         pattern[t] = {'hits': s['hits'], 'total': s['total'], 'hit_rate': hr,
                       'avg_payout': avg_pay, 'breakeven': breakeven}
 
+    # 本命+対抗5点ベースの回収率（万舟のまぐれ当たりを除外した実力ベース）
+    # 会場の得意/苦手判定に使用。100円/点で本命対抗のみ買った想定
+    base_purchase = 0
+    base_payout = 0
+    base_races = 0
+    for r in with_result:
+        try:
+            preds = json.loads(r['predictions'])
+        except Exception:
+            continue
+        henkan_str = r['henkan'] if 'henkan' in r.keys() else None
+        base_combos = []
+        for idx, p in enumerate(preds):
+            t = p.get('type') or (TYPE_BY_INDEX[idx] if idx < len(TYPE_BY_INDEX) else '')
+            if t in ('本命', '対抗') and p.get('combo') and not is_henkan_combo(p['combo'], henkan_str):
+                base_combos.append(p['combo'])
+        if not base_combos:
+            continue
+        base_races += 1
+        base_purchase += 100 * len(base_combos)
+        result_combo = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}"
+        if result_combo in base_combos and r['payout']:
+            base_payout += r['payout']
+    recovery_base = round(base_payout / base_purchase * 100, 1) if base_purchase > 0 else 0
+
     # 外れ方内訳（1着は合っていたか？）本命・対抗それぞれ集計
     def calc_miss_breakdown(target_type):
         mb = {'hit': 0, 'first_second': 0, 'first_only': 0, 'first_wrong': 0, 'total': 0}
@@ -1384,6 +1409,8 @@ def history_stats():
         'total_payout': total_payout,
         'total_purchase': total_purchase,
         'pattern': pattern,
+        'recovery_base': recovery_base,
+        'base_races': base_races,
         'miss_breakdown': miss_breakdown,
         'miss_breakdown_taikou': miss_breakdown_taikou,
         'venue_list': venue_list,

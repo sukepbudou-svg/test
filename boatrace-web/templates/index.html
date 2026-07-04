@@ -2249,9 +2249,11 @@ function renderResult(data) {
       const applyJudge = (s, condLabel) => {
         const el = document.getElementById('venue-judge-info');
         if (!el) return;
-        const col = s.recovery >= 100 ? '#00e676' : s.recovery >= 80 ? '#ffd740' : '#e94560';
-        el.innerHTML = `📊 ${venueVal}${condLabel}: 的中率${s.hit_rate}% / 回収率<span style="color:${col};font-weight:700;">${s.recovery}%</span>（${s.with_result}レース）`;
-        if (isShobu && s.recovery < 80) {
+        // 判定は本命+対抗5点ベースの回収率（万舟のまぐれ当たりを除外した実力値）
+        const recBase = s.recovery_base != null ? s.recovery_base : s.recovery;
+        const col = recBase >= 100 ? '#00e676' : recBase >= 80 ? '#ffd740' : '#e94560';
+        el.innerHTML = `📊 ${venueVal}${condLabel}: 的中率${s.hit_rate}% / 実力回収率<span style="color:${col};font-weight:700;">${recBase}%</span><span style="opacity:0.6;">（本命対抗ベース・万舟除く / 全体${s.recovery}%）</span>（${s.with_result}レース）`;
+        if (isShobu && recBase < 80) {
           const banner = document.getElementById('shobu-banner');
           const iconEl = document.getElementById('shobu-icon');
           const titleEl = document.getElementById('shobu-title');
@@ -2262,7 +2264,7 @@ function renderResult(data) {
             iconEl.textContent = '⚠️';
             titleEl.textContent = '見送り推奨';
             titleEl.style.color = '#ffd740';
-            detailEl.textContent = `${venueVal}${condLabel}は苦手条件（回収率${s.recovery}%）`;
+            detailEl.textContent = `${venueVal}${condLabel}は苦手条件（実力回収率${recBase}%・万舟除く）`;
           }
         }
       };
