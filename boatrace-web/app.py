@@ -184,7 +184,7 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
-def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_arekote=False, kimari_full=None, hybrid_taikou=False, v7_kimari=False):
+def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_arekote=False, kimari_full=None, hybrid_taikou=False, v7_fix2nd=False, v7_third=False):
     # 会場プロファイル取得
     vp = VENUE_PROFILES.get(venue, {"in_rate": 0.0, "upset": 0.5, "wind": 0.5})
     wind_bonus = WIND_UPSET_BONUS.get(wind, 0.0)
@@ -413,7 +413,7 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
         sim = kimari['sim']
         if top_course in sim and 'nige_2nd_rates' in sim[top_course]:
             nige_2nd_rates = sim[top_course]['nige_2nd_rates']
-        elif v7_kimari:
+        elif v7_fix2nd or v7_third:
             # v7: JSON経由だとsimのキーが文字列になり従来コードでは取得できていなかった
             entry = sim.get(str(top_course)) or {}
             nige_2nd_rates = entry.get('nige_2nd_rates') or {}
@@ -478,7 +478,7 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
     # ===== v7 (2026-07-05検証用): 本命2点目の3着を「逃がし3着率」最上位に差し替え =====
     # 外れ方内訳で「3着だけズレ」が18.9%あった対策。1点目=スコア順の3着、
     # 2点目=統計上3着に来やすい艇、で3着の根拠を分散させる
-    if v7_kimari and nige_3rd_rates and len(honmei) >= 2:
+    if v7_third and nige_3rd_rates and len(honmei) >= 2:
         h1_parts = honmei[0]['combo'].split('-')
         third_sorted = [int(k) for k, _ in sorted(nige_3rd_rates.items(), key=lambda x: x[1], reverse=True)]
         for c3 in third_sorted:
@@ -895,7 +895,7 @@ def predict_route():
     # ただし裏熊モードは決まり手データ（主役判定・シナリオ）が必須なので常に渡す
     kimari_full_raw = data.get('kimari_full', None)
     kimari_full = kimari_full_raw if (USE_V5_LIVE or force_arekote) else None
-    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full, hybrid_taikou=USE_V6_LIVE, v7_kimari=USE_V7_LIVE)
+    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full, hybrid_taikou=USE_V6_LIVE, v7_fix2nd=USE_V7_LIVE, v7_third=USE_V7_LIVE)
     return jsonify(result)
 
 
@@ -1599,6 +1599,19 @@ def backtest():
     venues = data.get('venues', [])
     nige_min = data.get('nige_min', 0)
     nige_max = data.get('nige_max', 100)
+    # 検証モード: どの候補ロジックを乗せて再予想するか（v6=実戦同等）
+    variant = data.get('variant', 'full')
+    VARIANTS = {
+        'v6':      {'v5': False, 'fix2nd': False, 'third': False, 'label': 'v6のみ（実戦同等）'},
+        'v7a':     {'v5': False, 'fix2nd': True,  'third': False, 'label': 'v6+2着バグ修正のみ'},
+        'v7b':     {'v5': False, 'fix2nd': False, 'third': True,  'label': 'v6+3着差し替えのみ'},
+        'v7':      {'v5': False, 'fix2nd': True,  'third': True,  'label': 'v6+v7フル'},
+        'full':    {'v5': True,  'fix2nd': True,  'third': True,  'label': 'v5+v7全部入り'},
+    }
+    vconf = VARIANTS.get(variant, VARIANTS['full'])
+    use_v5 = vconf['v5']
+    use_fix2nd = vconf['fix2nd']
+    use_third = vconf['third']
 
     conn = get_db()
     q = "SELECT * FROM records WHERE input_data IS NOT NULL AND result_1st IS NOT NULL"
@@ -1657,7 +1670,7 @@ def backtest():
             continue
         result_combo = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}"
 
-        # 現行ロジックで再予想
+        # 現行ロジックで再予想（variantで検証対象を切り替え）
         try:
             new_result = predict(
                 inp.get('boats', []),
@@ -1665,9 +1678,10 @@ def backtest():
                 venue=inp.get('venue'),
                 wind=inp.get('wind'),
                 nige_rate=inp.get('nige_rate'),
-                kimari_full=inp.get('kimari_full'),
-                hybrid_taikou=True,  # v6ハイブリッド対抗を検証
-                v7_kimari=True,      # v7: 3着への逃がし3着率活用を検証
+                kimari_full=inp.get('kimari_full') if use_v5 else None,
+                hybrid_taikou=True,  # v6ハイブリッド対抗（採用済み）は常にON
+                v7_fix2nd=use_fix2nd,
+                v7_third=use_third,
             )
             new_preds = new_result['predictions']
         except Exception:
@@ -1749,7 +1763,7 @@ def backtest():
 
     return jsonify({
         'races': n_races,
-        'model_version': 'v5+v7検証中（実戦はv6）',
+        'model_version': vconf['label'] + '（実戦はv6）',
         'stored': fmt(stored_stats),
         'current': fmt(new_stats),
         'v3_taikou': v3_result,
