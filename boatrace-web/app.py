@@ -75,6 +75,9 @@ init_db()
 MODEL_VERSION = 'v4'
 # v5ロジックのon/off: 実戦(/predict)はFalse=v4動作、バックテストはTrueでv5を検証
 USE_V5_LIVE = False
+# v6ハイブリッド対抗のon/off: イン逃げ率65%以上は1位艇1着固定3点（旧v3方式）
+# バックテストで検証中。採用時はTrueにしてMODEL_VERSIONを'v6'へ
+USE_V6_LIVE = False
 
 VENUES = [
     "桐生", "戸田", "江戸川", "平和島", "多摩川", "浜名湖",
@@ -172,7 +175,7 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
-def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_arekote=False, kimari_full=None):
+def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_arekote=False, kimari_full=None, hybrid_taikou=False):
     # 会場プロファイル取得
     vp = VENUE_PROFILES.get(venue, {"in_rate": 0.0, "upset": 0.5, "wind": 0.5})
     wind_bonus = WIND_UPSET_BONUS.get(wind, 0.0)
@@ -457,12 +460,23 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
         if len(honmei) >= 2:
             break
 
-    # ===== 対抗3点: 3つの異なるシナリオをカバー =====
+    # ===== 対抗3点 =====
     taikou = []
     used_combos = {c['combo'] for c in honmei}
 
+    # --- v6ハイブリッド (2026-07-04): イン逃げ率65%以上は1位艇1着固定 ---
+    # 勝負レース（堅い前提で選んだレース）では逆転シナリオを買わず、
+    # 1位艇1着の2着3着バリエーションで固める（旧v3方式）
+    if hybrid_taikou and nige_rate is not None and safe_float(nige_rate) >= 65:
+        for c in candidates:
+            if c['combo'].startswith(f"{top_bn}-") and c['combo'] not in used_combos:
+                taikou.append(c)
+                used_combos.add(c['combo'])
+            if len(taikou) >= 3:
+                break
+
     # --- 対抗1点目: スコア2位の艇が1着（展開逆転シナリオ）---
-    if len(scores) >= 2:
+    if len(taikou) < 3 and len(scores) >= 2:
         second_bn = scores[1]['boat']['boat_number']
         for c in candidates:
             if c['combo'].startswith(f"{second_bn}-") and c['combo'] not in used_combos:
@@ -471,24 +485,26 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
                 break
 
     # --- 対抗2点目: 1位1着 + STが最速の艇が2着（展示ST展開シナリオ）---
-    st_entries = [(s['course'], s['exhibit_st'], s['boat']['boat_number'])
-                  for s in scores if s.get('exhibit_st', 0) > 0
-                  and s['boat']['boat_number'] != top_bn]
-    if st_entries:
-        best_st_bn = min(st_entries, key=lambda x: x[1])[2]  # STが小さい=速い
+    if len(taikou) < 3:
+        st_entries = [(s['course'], s['exhibit_st'], s['boat']['boat_number'])
+                      for s in scores if s.get('exhibit_st', 0) > 0
+                      and s['boat']['boat_number'] != top_bn]
+        if st_entries:
+            best_st_bn = min(st_entries, key=lambda x: x[1])[2]  # STが小さい=速い
+            for c in candidates:
+                parts = c['combo'].split('-')
+                if parts[0] == str(top_bn) and parts[1] == str(best_st_bn) and c['combo'] not in used_combos:
+                    taikou.append(c)
+                    used_combos.add(c['combo'])
+                    break
+
+    # --- 対抗3点目: 残りスコア上位コンボから本命と被らないもの ---
+    if len(taikou) < 3:
         for c in candidates:
-            parts = c['combo'].split('-')
-            if parts[0] == str(top_bn) and parts[1] == str(best_st_bn) and c['combo'] not in used_combos:
+            if c['combo'] not in used_combos:
                 taikou.append(c)
                 used_combos.add(c['combo'])
                 break
-
-    # --- 対抗3点目: 残りスコア上位コンボから本命と被らないもの ---
-    for c in candidates:
-        if c['combo'] not in used_combos:
-            taikou.append(c)
-            used_combos.add(c['combo'])
-            break
 
     # 不足分はスコア順で補完
     for c in candidates:
@@ -711,9 +727,9 @@ def predict_route():
     wind = data.get('wind', None)
     nige_rate = data.get('nige_rate', None)
     force_arekote = data.get('force_arekote', False)
-    # 実戦はv4凍結中: USE_V5_LIVEがTrueのときだけkimari_full（v5補正）を使う
+    # 実戦はv4凍結中: USE_V5_LIVE/USE_V6_LIVEがTrueのときだけ各補正を使う
     kimari_full = data.get('kimari_full', None) if USE_V5_LIVE else None
-    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full)
+    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full, hybrid_taikou=USE_V6_LIVE)
     return jsonify(result)
 
 
@@ -1449,6 +1465,7 @@ def backtest():
                 wind=inp.get('wind'),
                 nige_rate=inp.get('nige_rate'),
                 kimari_full=inp.get('kimari_full'),
+                hybrid_taikou=True,  # v6ハイブリッド対抗を検証
             )
             new_preds = new_result['predictions']
         except Exception:
@@ -1530,7 +1547,7 @@ def backtest():
 
     return jsonify({
         'races': n_races,
-        'model_version': 'v5(検証中・実戦はv4)',
+        'model_version': 'v5+v6ハイブリッド対抗(検証中・実戦はv4)',
         'stored': fmt(stored_stats),
         'current': fmt(new_stats),
         'v3_taikou': v3_result,
