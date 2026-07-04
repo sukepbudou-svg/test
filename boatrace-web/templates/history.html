@@ -682,7 +682,9 @@ function renderRecords() {
   }
   tbody.innerHTML = allRecords.map(r => {
     const predHtml = r.predictions.map(p =>
-      `<span class="pred-tag ${p.type}">${p.combo}${p.odds != null ? `<span style="opacity:0.65;font-size:9px;"> ${p.odds}倍</span>` : ''}</span>`
+      p.odds != null
+        ? `<span class="pred-tag ${p.type}" style="display:inline-flex;flex-direction:column;align-items:center;line-height:1.2;padding:2px 6px;">${p.combo}<span style="opacity:0.6;font-size:8px;">${p.odds}倍</span></span>`
+        : `<span class="pred-tag ${p.type}">${p.combo}</span>`
     ).join('');
 
     const resultStr = r.result_1st
