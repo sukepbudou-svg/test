@@ -2204,7 +2204,7 @@ const TYPE_ORDER = ['本命', '対抗', '中穴', '万舟'];
 // 会場グループ（2026-07-04 ユーザー設定）
 // 得意会場: 勝負レース対象。検証中: データ蓄積で判定。それ以外: 対象外
 const TOKUI_VENUES = ['大村', '福岡', '桐生', '徳山'];
-const KENSHO_VENUES = ['芦屋', '宮島', '常滑', '三国', '浜名湖', '尼崎', '若松', '蒲郡', '多摩川', '住之江', 'びわこ'];
+const KENSHO_VENUES = ['芦屋', '宮島', '常滑', '三国', '浜名湖', '尼崎', '若松', '蒲郡', '多摩川', '住之江', 'びわこ', '津', '丸亀', '児島'];
 const TYPE_LIMITS = { '本命': 2, '対抗': 3, '中穴': 1, '万舟': 2 };
 
 function classifyByOdds(candidates) {
@@ -2305,6 +2305,9 @@ function renderResult(data) {
       if (honmeiFirst.odds >= 7) reasons.push(`本命${honmeiFirst.odds.toFixed(1)}倍（妙味あり）`);
       else warns.push(`本命${honmeiFirst.odds.toFixed(1)}倍（7倍未満・回収困難）`);
     }
+    // 会場を除く条件（逃げ率・オッズ）がここまでクリアできているか（対象外会場の自動昇格判定に使う）
+    const condOkExceptVenue = warns.length === 0 && reasons.length > 0;
+
     // 条件3: 会場グループ（得意/検証中/対象外）
     const venueTier = TOKUI_VENUES.includes(venueVal) ? 'tokui'
                     : KENSHO_VENUES.includes(venueVal) ? 'kensho' : 'other';
@@ -2326,6 +2329,8 @@ function renderResult(data) {
     }
     const isShobu = condOk && venueTier === 'tokui';
     const isKensho = condOk && venueTier === 'kensho';
+    // 対象外会場でも逃げ率・オッズはクリアしている場合のみ、高いハードルでの自動昇格対象にする
+    const isOther = condOkExceptVenue && venueTier === 'other';
     html += `<div id="shobu-banner" style="background:${bg};border:1.5px solid ${bd};border-radius:10px;padding:8px 14px;margin-bottom:10px;">
       <div style="display:flex;align-items:center;gap:8px;">
         <span id="shobu-icon" style="font-size:16px;">${icon}</span>
@@ -2374,6 +2379,14 @@ function renderResult(data) {
           titleEl.textContent = '勝負レース（データ昇格）';
           titleEl.style.color = '#00e676';
           detailEl.textContent = `${venueVal}${condLabel}は実力回収率${recBase}%（${s.with_result}レース）で好条件`;
+        } else if (isOther && s.with_result >= 20 && recBase >= 120) {
+          // 対象外会場（経験則で苦手と判断済み）は検証中会場より高いハードルでのみ自動昇格
+          banner.style.background = 'rgba(0,230,118,0.12)';
+          banner.style.borderColor = '#00e676';
+          iconEl.textContent = '✅';
+          titleEl.textContent = '勝負レース（データ昇格・要注意）';
+          titleEl.style.color = '#00e676';
+          detailEl.textContent = `${venueVal}${condLabel}は実力回収率${recBase}%（${s.with_result}レース、20レース以上+120%超のみ昇格）で好条件`;
         }
       };
 
