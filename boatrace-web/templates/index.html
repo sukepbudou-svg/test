@@ -625,9 +625,7 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
       <h2>データ貼り付け</h2>
       <div class="tab-buttons">
         <button class="tab-btn active" onclick="switchTab('bulk',this)">一括貼り付け</button>
-        <button class="tab-btn" onclick="switchTab('avg-st',this)">平均ST</button>
-        <button class="tab-btn" onclick="switchTab('player',this)">選手成績</button>
-        <button class="tab-btn" onclick="switchTab('kimari',this)">決まり手</button>
+        <button class="tab-btn" onclick="switchTab('chotenkai',this)">超展開データ</button>
         <button class="tab-btn" onclick="switchTab('motor',this)">モーター</button>
         <button class="tab-btn" onclick="switchTab('exhibit',this)">展示情報</button>
         <button class="tab-btn" onclick="switchTab('odds',this)">オッズ</button>
@@ -665,58 +663,31 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
         <div class="status-msg" id="status-bulk"></div>
       </div>
 
-      <div class="tab-pane" id="tab-avg-st">
-        <div class="tab-desc">ボートレース日和の「平均ST」表をそのままコピー＆ペーストしてください</div>
-        <select class="period-select" id="st-period" onchange="applyAvgST()">
-          <option value="今期">今期</option>
-          <option value="直近6ヶ月">直近6ヶ月</option>
-          <option value="直近3ヶ月">直近3ヶ月</option>
-          <option value="直近1ヶ月">直近1ヶ月</option>
-          <option value="当地">当地</option>
-          <option value="一般戦">一般戦</option>
-          <option value="SG/G1">SG/G1</option>
-          <option value="初日">初日</option>
-          <option value="最終日">最終日</option>
-          <option value="ナイター">ナイター</option>
-          <option value="F持">F持</option>
-        </select>
-        <textarea id="paste-avg-st" rows="7" placeholder="ここにコピペ"></textarea>
-        <div style="display:flex;gap:8px;margin-top:8px;">
-          <button class="btn btn-apply" onclick="parseData('avg-st')">適用</button>
-        </div>
-        <div class="status-msg" id="status-avg-st"></div>
-      </div>
+      <!-- 内部処理用の隠し要素（旧・平均ST/選手成績/決まり手タブの名残。一括貼り付けの適用処理が参照する） -->
+      <select id="st-period" style="display:none;">
+        <option value="今期">今期</option><option value="直近6ヶ月">直近6ヶ月</option>
+        <option value="直近3ヶ月">直近3ヶ月</option><option value="直近1ヶ月">直近1ヶ月</option>
+        <option value="当地">当地</option><option value="一般戦">一般戦</option>
+        <option value="SG/G1">SG/G1</option><option value="初日">初日</option>
+        <option value="最終日">最終日</option><option value="ナイター">ナイター</option><option value="F持">F持</option>
+      </select>
+      <select id="player-period" style="display:none;">
+        <option value="今期">今期</option><option value="直近6ヶ月">直近6ヶ月</option>
+        <option value="直近3ヶ月">直近3ヶ月</option><option value="直近1ヶ月">直近1ヶ月</option>
+        <option value="当地">当地</option><option value="一般戦">一般戦</option>
+        <option value="SG/G1">SG/G1</option><option value="女子戦">女子戦</option>
+      </select>
+      <select id="kimari-period" style="display:none;">
+        <option value="直近6ヶ月">直近6ヶ月</option><option value="直近1年">直近1年</option>
+      </select>
 
-      <div class="tab-pane" id="tab-player">
-        <div class="tab-desc">ボートレース日和の「選手成績」（1着率・2連対率・3連対率）をまとめてコピー＆ペーストしてください</div>
-        <select class="period-select" id="player-period" onchange="applyPlayerStats()">
-          <option value="今期">今期</option>
-          <option value="直近6ヶ月">直近6ヶ月</option>
-          <option value="直近3ヶ月">直近3ヶ月</option>
-          <option value="直近1ヶ月">直近1ヶ月</option>
-          <option value="当地">当地</option>
-          <option value="一般戦">一般戦</option>
-          <option value="SG/G1">SG/G1</option>
-          <option value="女子戦">女子戦</option>
-        </select>
-        <textarea id="paste-player" rows="9" placeholder="ここにコピペ"></textarea>
+      <div class="tab-pane" id="tab-chotenkai">
+        <div class="tab-desc">ボートレース日和の「超展開データ」をコピー＆ペーストしてください（現行の予想には未使用・将来のモデル検証用に保存されます）</div>
+        <textarea id="paste-chotenkai" rows="14" placeholder="ここにコピペ（超展開データの欄）"></textarea>
         <div style="display:flex;gap:8px;margin-top:8px;">
-          <button class="btn btn-apply" onclick="parseData('player')">適用</button>
+          <button class="btn btn-apply" onclick="parseData('chotenkai')">適用</button>
         </div>
-        <div class="status-msg" id="status-player"></div>
-      </div>
-
-      <div class="tab-pane" id="tab-kimari">
-        <div class="tab-desc">ボートレース日和の「決まり手」と「逃げシミュレーション」をまとめてコピー＆ペーストしてください</div>
-        <select class="period-select" id="kimari-period">
-          <option value="直近6ヶ月">直近6ヶ月</option>
-          <option value="直近1年">直近1年</option>
-        </select>
-        <textarea id="paste-kimari" rows="11" placeholder="ここにコピペ"></textarea>
-        <div style="display:flex;gap:8px;margin-top:8px;">
-          <button class="btn btn-apply" onclick="parseData('kimari')">適用</button>
-        </div>
-        <div class="status-msg" id="status-kimari"></div>
+        <div class="status-msg" id="status-chotenkai"></div>
       </div>
 
       <div class="tab-pane" id="tab-motor">
@@ -1801,6 +1772,15 @@ function parseData(name) {
     motorStats = parseMotorStats(text);
     applyMotorStats();
     statusEl.textContent = '✓ モーターデータを適用しました';
+  } else if (name === 'chotenkai') {
+    const ct = parseChoTenkai(rawText);
+    if (ct) {
+      extraStats = Object.assign(extraStats || {}, { cho_tenkai: ct });
+      statusEl.textContent = '✓ 超展開データを保存しました（現行の予想には未使用・将来のモデル検証用）';
+    } else {
+      statusEl.style.color = 'var(--accent)';
+      statusEl.textContent = '× 解析失敗: データ形式を確認してください';
+    }
   } else if (name === 'exhibit') {
     const text = document.getElementById('paste-exhibit').value;
     const data = parseExhibitInfo(text);
@@ -2760,7 +2740,7 @@ function allClear() {
   document.getElementById('nige-rate-value').textContent = '-';
   document.getElementById('nige-rate-comment').textContent = '';
   updateSlit();
-  ['avg-st','player','kimari','motor','exhibit','odds'].forEach(n => {
+  ['chotenkai','motor','exhibit','odds'].forEach(n => {
     const el = document.getElementById(`status-${n}`); if (el) el.textContent = '';
     const ta = document.getElementById(`paste-${n}`); if (ta) ta.value = '';
   });
