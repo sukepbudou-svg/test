@@ -1962,6 +1962,9 @@ def strategy_sim():
         'taikou3':  {'name': '対抗3点のみ', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
         'full7':    {'name': '7点（5点+万舟2点）', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
         'smart':    {'name': 'スマート（本命7倍未満は本命2点のみ、他は5点）', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
+        'ruleA':    {'name': 'A: 本命どちらかが7倍未満なら見送り', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
+        'ruleB':    {'name': 'B: 安い方の本命1点だけ除外し4点', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
+        'ruleC':    {'name': 'C: 本命どちらかが7倍未満なら対抗抜き本命2点のみ', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
     }
     # 裏熊向け戦略
     ura_strategies = {
@@ -1998,7 +2001,8 @@ def strategy_sim():
             settle(ura_strategies['ura_30_150'], band, result_combo, result_odds)
             continue
 
-        honmei = [p['combo'] for p in preds if p.get('type') == '本命' and p.get('combo')]
+        honmei_preds = [p for p in preds if p.get('type') == '本命' and p.get('combo')]
+        honmei = [p['combo'] for p in honmei_preds]
         taikou = [p['combo'] for p in preds if p.get('type') == '対抗' and p.get('combo')]
         manshu = [p['combo'] for p in preds if p.get('type') == '万舟' and p.get('combo')]
         if not honmei:
@@ -2009,14 +2013,29 @@ def strategy_sim():
         settle(strategies['skip1'], honmei[1:] + taikou, result_combo, result_odds)
         settle(strategies['taikou3'], taikou, result_combo, result_odds)
         settle(strategies['full7'], base5 + manshu, result_combo, result_odds)
-        # スマート: 本命1点目のオッズで買い方を変える（ユーザーの実運用パターン）
-        h1_odds = None
-        for p in preds:
-            if p.get('type') == '本命':
-                h1_odds = p.get('odds')
-                break
+        # スマート: 本命1点目のオッズだけで判定（従来の運用パターン）
+        h1_odds = honmei_preds[0].get('odds') if honmei_preds else None
         smart_set = honmei if (h1_odds is not None and h1_odds < 7) else base5
         settle(strategies['smart'], smart_set, result_combo, result_odds)
+
+        # A/B/C: 本命2点のうち「最も安い方」のオッズで判定（オッズ未記録の点は判定対象外）
+        honmei_odds_list = [p['odds'] for p in honmei_preds if p.get('odds') is not None]
+        min_honmei_odds = min(honmei_odds_list) if honmei_odds_list else None
+        is_cheap = min_honmei_odds is not None and min_honmei_odds < 7
+        if min_honmei_odds is not None:
+            # A: 安い本命があるレースはまるごと見送り（0点=settleされずrace集計外）
+            if not is_cheap:
+                settle(strategies['ruleA'], base5, result_combo, result_odds)
+            # B: 安い方の本命1点だけ除外し、残り（もう1本命+対抗3）を買う
+            if is_cheap:
+                cheapest_combo = min(honmei_preds, key=lambda p: p.get('odds', 999))['combo']
+                b_set = [c for c in honmei if c != cheapest_combo] + taikou
+            else:
+                b_set = base5
+            settle(strategies['ruleB'], b_set, result_combo, result_odds)
+            # C: 安い本命があれば対抗を切って本命2点のみ、なければ5点フル
+            c_set = honmei if is_cheap else base5
+            settle(strategies['ruleC'], c_set, result_combo, result_odds)
 
     def fmt(d):
         out = []
