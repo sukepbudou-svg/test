@@ -1603,6 +1603,7 @@ def backtest():
     variant = data.get('variant', 'full')
     VARIANTS = {
         'v6':      {'v5': False, 'fix2nd': False, 'third': False, 'label': 'v6のみ（実戦同等）'},
+        'v5only':  {'v5': True,  'fix2nd': False, 'third': False, 'label': 'v6+v5のみ（決まり手展開補正）'},
         'v7a':     {'v5': False, 'fix2nd': True,  'third': False, 'label': 'v6+2着バグ修正のみ'},
         'v7b':     {'v5': False, 'fix2nd': False, 'third': True,  'label': 'v6+3着差し替えのみ'},
         'v7':      {'v5': False, 'fix2nd': True,  'third': True,  'label': 'v6+v7フル'},
