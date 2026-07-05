@@ -1644,6 +1644,75 @@ function parseExtraStats(text) {
   return false;
 }
 
+// 超展開データ: 直接対戦の決まり手 勝ち数/試行数（1コース=受け方、2〜6コース=仕掛け方）
+// 将来のモデル検証用（現行ロジックでは未使用）。保存専用
+function parseWL(s) {
+  s = (s || '').trim();
+  if (!s || s === '-') return null;
+  const m = s.match(/^(-?\d+)\/(-?\d+)$/);
+  if (!m) return null;
+  return [parseInt(m[1]), parseInt(m[2])];
+}
+
+function parseChoTenkai(text) {
+  const lines = text.split('\n').map(l => l.trim());
+  const start = lines.findIndex(l => l.startsWith('超展開データ'));
+  if (start === -1) return null;
+
+  function readSixRows(idx) {
+    const vals = [];
+    for (let k = 0; k < 6; k++) {
+      const row = lines[idx + k] || '';
+      const parts = row.split('\t').map(s => s.trim()).filter(s => s.length > 0);
+      vals.push(parts.length > 0 ? parseWL(parts[0]) : null);
+    }
+    return { vals, next: idx + 6 };
+  }
+
+  const out = {
+    measured: null, nige: null, sasare: null, sashi: null,
+    makurare: null, makuri: null, makurisare: null, makurisashi: null,
+    sonota_ukemi: null, sonota_shikake: null, teikou: null, shibori: null,
+  };
+  let found = false;
+
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === '計測回数') {
+      const r = readSixRows(i + 1);
+      out.measured = r.vals; i = r.next - 1; found = true;
+    } else if (line.startsWith('逃げ')) {
+      const row1 = (lines[i + 1] || '').split('\t').map(s => s.trim()).filter(s => s.length > 0);
+      const row2 = (lines[i + 2] || '').split('\t').map(s => s.trim());
+      const nige = [parseWL(row1[0])];
+      for (let k = 0; k < 5; k++) nige.push(parseWL(row2[k] || ''));
+      out.nige = nige; i = i + 2; found = true;
+    } else if (line.startsWith('差され') && line.includes('差し')) {
+      const r = readSixRows(i + 1);
+      out.sasare = [r.vals[0]]; out.sashi = r.vals.slice(1);
+      i = r.next - 1; found = true;
+    } else if (line.startsWith('まくられ') && line.includes('まくり') && !line.includes('差')) {
+      const r = readSixRows(i + 1);
+      out.makurare = [r.vals[0]]; out.makuri = r.vals.slice(1);
+      i = r.next - 1; found = true;
+    } else if (line.includes('捲り差れ')) {
+      const r = readSixRows(i + 1);
+      out.makurisare = [r.vals[0]]; out.makurisashi = r.vals.slice(1);
+      i = r.next - 1; found = true;
+    } else if (line.startsWith('その他') && line.includes('その他')) {
+      const r = readSixRows(i + 1);
+      out.sonota_ukemi = [r.vals[0]]; out.sonota_shikake = r.vals.slice(1);
+      i = r.next - 1; found = true;
+    } else if (line.startsWith('抵抗') && line.includes('絞り')) {
+      const row = (lines[i + 1] || '').split('\t').map(s => s.trim()).filter(s => s.length > 0);
+      const nums = row.map(s => { const v = parseInt(s); return isNaN(v) ? null : v; });
+      out.teikou = nums[0] ?? null; out.shibori = nums.slice(1, 6);
+      i = i + 1; found = true;
+    }
+  }
+  return found ? out : null;
+}
+
 function parseBulk() {
   var text = document.getElementById('paste-bulk').value;
   var statusEl = document.getElementById('status-bulk');
@@ -1651,6 +1720,13 @@ function parseBulk() {
 
   // 追加統計（ST考察・部品交換など）: 保存専用
   if (parseExtraStats(text)) results.push('追加統計');
+
+  // 超展開データ（直接対戦の決まり手 勝ち数/試行数）: 保存専用
+  const choTenkai = parseChoTenkai(text);
+  if (choTenkai) {
+    extraStats = Object.assign(extraStats || {}, { cho_tenkai: choTenkai });
+    results.push('超展開データ');
+  }
 
   // 平均ST
   var stPeriod = document.getElementById('bulk-st-period').value;
@@ -1687,9 +1763,13 @@ function parseBulk() {
 function parseData(name) {
   const statusEl = document.getElementById(`status-${name}`);
   statusEl.style.color = 'var(--green)';
-  // どのタブの貼り付けからも追加統計（ST考察・部品交換等）を拾って保存用に貯める
+  // どのタブの貼り付けからも追加統計（ST考察・部品交換・超展開データ等）を拾って保存用に貯める
   const rawText = document.getElementById(`paste-${name}`)?.value || '';
-  if (rawText) parseExtraStats(rawText);
+  if (rawText) {
+    parseExtraStats(rawText);
+    const ct = parseChoTenkai(rawText);
+    if (ct) extraStats = Object.assign(extraStats || {}, { cho_tenkai: ct });
+  }
   if (name === 'avg-st') {
     const text = document.getElementById('paste-avg-st').value;
     avgStStats = parseAvgST(text);
