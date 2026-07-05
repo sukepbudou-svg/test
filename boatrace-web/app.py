@@ -1800,6 +1800,97 @@ def _filtered_result_rows(data):
     return out
 
 
+@app.route('/ura_backtest', methods=['POST'])
+def ura_backtest():
+    """裏熊バックテスト: 裏熊レコードを現行の裏熊ロジックで再予想し、
+    出動条件クリア数別の成績と保存時予想との比較を出す"""
+    data = request.get_json() or {}
+    rows = _filtered_result_rows(data)
+
+    stored_stats = {'hits': 0, 'races': 0, 'purchase': 0, 'payout': 0}
+    current_stats = {'hits': 0, 'races': 0, 'purchase': 0, 'payout': 0}
+    # 出動条件クリア数別（現行ロジックで判定し直した値）
+    by_clear = {}
+
+    for r in rows:
+        if '"裏熊"' not in (r['predictions'] or ''):
+            continue
+        try:
+            inp = json.loads(r['input_data']) if r['input_data'] else None
+            stored_preds = json.loads(r['predictions'])
+        except Exception:
+            continue
+        if not inp:
+            continue
+        result_combo = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}"
+        odds_all = inp.get('odds_all') or {}
+        result_odds = safe_float(odds_all.get(result_combo, 0))
+
+        # 保存時の裏熊予想の成績
+        stored_combos = [p['combo'] for p in stored_preds if p.get('combo')]
+        if stored_combos:
+            stored_stats['races'] += 1
+            stored_stats['purchase'] += 100 * len(stored_combos)
+            if result_combo in stored_combos:
+                stored_stats['hits'] += 1
+                if r['payout']:
+                    stored_stats['payout'] += r['payout']
+                elif result_odds:
+                    stored_stats['payout'] += int(result_odds * 100)
+
+        # 現行ロジックで再予想
+        try:
+            pred = predict(
+                inp.get('boats', []),
+                kimari=inp.get('kimari'),
+                venue=inp.get('venue'),
+                wind=inp.get('wind'),
+                nige_rate=inp.get('nige_rate'),
+                force_arekote=True,
+                kimari_full=inp.get('kimari_full'),
+            )
+        except Exception:
+            continue
+        ura = pred.get('ura_judge') or {}
+        conds = ura.get('conds') or {}
+        new_combos = [p['combo'] for p in (pred.get('arekote_predictions') or [])]
+        # オッズ足切り（20倍未満）を再現
+        if odds_all:
+            new_combos = [c for c in new_combos if safe_float(odds_all.get(c, 999)) >= 20]
+        if new_combos:
+            current_stats['races'] += 1
+            current_stats['purchase'] += 100 * len(new_combos)
+            hit = result_combo in new_combos
+            if hit:
+                current_stats['hits'] += 1
+                if result_odds:
+                    current_stats['payout'] += int(result_odds * 100)
+            clear = conds.get('clear', 0)
+            if clear not in by_clear:
+                by_clear[clear] = {'hits': 0, 'races': 0, 'purchase': 0, 'payout': 0}
+            b = by_clear[clear]
+            b['races'] += 1
+            b['purchase'] += 100 * len(new_combos)
+            if hit:
+                b['hits'] += 1
+                if result_odds:
+                    b['payout'] += int(result_odds * 100)
+
+    def fmt(s):
+        return {
+            'races': s['races'], 'hits': s['hits'],
+            'hit_rate': round(s['hits'] / s['races'] * 100, 1) if s['races'] > 0 else 0,
+            'purchase': s['purchase'], 'payout': s['payout'],
+            'recovery': round(s['payout'] / s['purchase'] * 100, 1) if s['purchase'] > 0 else 0,
+        }
+
+    return jsonify({
+        'stored': fmt(stored_stats),
+        'current': fmt(current_stats),
+        'by_clear': {str(k): fmt(v) for k, v in sorted(by_clear.items(), reverse=True)},
+    })
+
+
 @app.route('/strategy_sim', methods=['POST'])
 def strategy_sim():
     """買い方シミュレーター: odds_all付きレースで複数の買い方の回収率を一括比較"""

@@ -386,7 +386,9 @@ h1 {
       <option value="full" selected>v5+v7全部入り</option>
     </select>
     <button onclick="runBacktest()" style="padding:6px 16px;background:linear-gradient(135deg,#7000b0,#b000dc);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">バックテスト実行</button>
+    <button onclick="runUraBacktest()" style="padding:6px 16px;background:linear-gradient(135deg,#4a0070,#8000a0);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;margin-left:6px;">🐻 裏熊バックテスト</button>
     <div id="backtest-result" style="margin-top:10px;"></div>
+    <div id="ura-backtest-result" style="margin-top:10px;"></div>
   </div>
 
   <!-- 的中パターン分析・収支グラフ -->
@@ -1342,6 +1344,43 @@ async function runBacktest() {
       </table>${v3Html}${recoveryHtml}`;
   } catch(e) {
     el.innerHTML = '<span style="color:var(--accent);font-size:11px;">バックテスト実行エラー</span>';
+  }
+}
+
+// ======== 裏熊バックテスト ========
+async function runUraBacktest() {
+  const el = document.getElementById('ura-backtest-result');
+  el.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">🐻 再予想中...</span>';
+  try {
+    const resp = await fetch('/ura_backtest', { method: 'POST', headers: {'Content-Type':'application/json'}, body: currentFilterBody() });
+    const d = await resp.json();
+    if (d.stored.races === 0 && d.current.races === 0) {
+      el.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">🐻 裏熊レコードがまだありません（裏熊予想を保存すると検証できるようになります）</span>';
+      return;
+    }
+    const row = (label, s) => `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:4px 8px;font-weight:700;white-space:nowrap;">${label}</td>
+      <td style="padding:4px 8px;text-align:center;">${s.hits}/${s.races}（${s.hit_rate}%）</td>
+      <td style="padding:4px 8px;text-align:center;font-weight:700;color:${s.recovery >= 100 ? 'var(--green)' : s.recovery >= 80 ? 'var(--yellow)' : 'var(--accent)'};">${s.recovery}%</td>
+      <td style="padding:4px 8px;text-align:right;">${(s.payout - s.purchase) >= 0 ? '+' : ''}${(s.payout - s.purchase).toLocaleString()}円</td>
+    </tr>`;
+    const clearRows = Object.entries(d.by_clear || {}).map(([clear, s]) =>
+      row(`出動条件 ${clear}/3 クリア`, s)).join('');
+    el.innerHTML = `<div style="font-size:10px;color:#d95cff;margin-bottom:6px;font-weight:700;">🐻 裏熊バックテスト結果（100円/点想定）</div>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead><tr style="color:var(--text-muted);font-size:10px;">
+          <th style="padding:3px 8px;text-align:left;">区分</th><th style="padding:3px 8px;">的中</th>
+          <th style="padding:3px 8px;">回収率</th><th style="padding:3px 8px;text-align:right;">収支</th>
+        </tr></thead>
+        <tbody>
+          ${row('保存時の予想', d.stored)}
+          ${row('現行ロジック', d.current)}
+          ${clearRows}
+        </tbody>
+      </table>
+      <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">💡 「出動条件3/3」の回収率が高く「1〜2/3」が低ければ、出動ラインが正しく機能している証拠</div>`;
+  } catch(e) {
+    el.innerHTML = '<span style="color:var(--accent);font-size:11px;">裏熊バックテストエラー</span>';
   }
 }
 
