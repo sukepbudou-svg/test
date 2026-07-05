@@ -397,6 +397,14 @@ h1 {
     <div id="ura-backtest-result" style="margin-top:10px;"></div>
   </div>
 
+  <!-- 2連単換算チェック -->
+  <div class="chart-card" style="margin-bottom:16px;">
+    <div class="chart-title">🎯 2連単換算チェック</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">本命・対抗の各コンボを「1-2着だけ」に切り詰めた場合の的中率・回収率を検証します（3連単で保存済みのレース対象・絞り込みに連動）</div>
+    <button onclick="runNirentanCheck()" style="padding:6px 16px;background:linear-gradient(135deg,#0077b6,#00b4d8);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">検証実行</button>
+    <div id="nirentan-result" style="margin-top:10px;"></div>
+  </div>
+
   <!-- 的中パターン分析・収支グラフ -->
   <div class="analysis-grid" id="analysis-section" style="display:none;">
     <div class="chart-card">
@@ -1373,6 +1381,41 @@ async function runBacktest() {
 }
 
 // ======== 裏熊バックテスト ========
+// ======== 2連単換算チェック ========
+async function runNirentanCheck() {
+  const el = document.getElementById('nirentan-result');
+  el.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">集計中...</span>';
+  try {
+    const resp = await fetch('/nirentan_check', { method: 'POST', headers: {'Content-Type':'application/json'}, body: currentFilterBody() });
+    const d = await resp.json();
+    const row = (label, s, color) => {
+      if (!s || s.total === 0) return `<tr style="border-bottom:1px solid var(--border);"><td style="padding:4px 8px;font-weight:700;color:${color};">${label}</td><td colspan="3" style="padding:4px 8px;color:var(--text-muted);">該当なし</td></tr>`;
+      const recStr = s.recovery != null ? `${s.recovery}%（${s.odds_races}レース分のみ）` : '2連単オッズ未記録';
+      const recCol = s.recovery != null ? (s.recovery >= 100 ? 'var(--green)' : s.recovery >= 80 ? 'var(--yellow)' : 'var(--accent)') : 'var(--text-muted)';
+      return `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:4px 8px;font-weight:700;color:${color};">${label}</td>
+        <td style="padding:4px 8px;">${s.hits}/${s.total}（${s.hit_rate}%）</td>
+        <td style="padding:4px 8px;color:${recCol};">${recStr}</td>
+      </tr>`;
+    };
+    el.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead><tr style="color:var(--text-muted);font-size:10px;">
+          <th style="padding:4px 8px;text-align:left;">種別</th>
+          <th style="padding:4px 8px;text-align:left;">2連単換算 的中</th>
+          <th style="padding:4px 8px;text-align:left;">2連単 回収率</th>
+        </tr></thead>
+        <tbody>
+          ${row('本命', d['本命'], 'var(--accent)')}
+          ${row('対抗', d['対抗'], 'var(--accent2)')}
+        </tbody>
+      </table>
+      <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">💡 的中率は全レース対象（3連単の1-2着結果と一致するか）。回収率は2連単オッズ（bi_odds）が保存されたレースのみ計算（今日以降の保存分から蓄積されます）</div>`;
+  } catch(e) {
+    el.innerHTML = '<span style="color:var(--accent);font-size:11px;">検証エラー</span>';
+  }
+}
+
 async function runUraBacktest() {
   const el = document.getElementById('ura-backtest-result');
   el.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">🐻 再予想中...</span>';

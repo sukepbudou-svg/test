@@ -1588,6 +1588,17 @@ function getTriOdds(combo) {
   return oddsData.triOdds[combo] || null;
 }
 
+// 2連単オッズ取得: from号艇→to号艇。byBoat[from].cols[i]がtoに一致するインデックスのtan2値
+function getBiOdds(from, to) {
+  if (!oddsData) return null;
+  const b = oddsData.byBoat[from];
+  if (!b || !b.cols || !b.tan2) return null;
+  const idx = b.cols.indexOf(parseInt(to));
+  if (idx === -1 || idx >= b.tan2.length) return null;
+  const v = b.tan2[idx];
+  return isNaN(v) ? null : v;
+}
+
 // ======== 一括貼り付け ========
 // ======== 追加統計のパース（将来のモデル検証用・現行ロジックでは未使用） ========
 // ST考察（安定率/抜出率/出遅率）・ST順位・部品交換・調整重量を読み取り保存する
@@ -2609,7 +2620,20 @@ async function saveRecord() {
     }
     if (Object.keys(oddsAll).length === 0) oddsAll = null;
   }
-  const inputData = lastPredictInput ? Object.assign({}, lastPredictInput, { odds_all: oddsAll }) : null;
+  // 全30通りの2連単オッズを保存（2連単換算の回収率検証用）
+  let biOdds = null;
+  if (oddsData) {
+    biOdds = {};
+    for (let b1 = 1; b1 <= 6; b1++) {
+      for (let b2 = 1; b2 <= 6; b2++) {
+        if (b2 === b1) continue;
+        const o = getBiOdds(b1, b2);
+        if (o !== null) biOdds[`${b1}-${b2}`] = o;
+      }
+    }
+    if (Object.keys(biOdds).length === 0) biOdds = null;
+  }
+  const inputData = lastPredictInput ? Object.assign({}, lastPredictInput, { odds_all: oddsAll, bi_odds: biOdds }) : null;
 
   const resp = await fetch('/save_record', {
     method: 'POST',

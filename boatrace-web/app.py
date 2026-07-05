@@ -1877,6 +1877,71 @@ def _filtered_result_rows(data):
     return out
 
 
+@app.route('/nirentan_check', methods=['POST'])
+def nirentan_check():
+    """2連単換算チェック: 本命/対抗の各コンボを1-2着だけに切り詰めて、
+    もし2連単で買っていたら的中していたかを過去データから集計する。
+    bi_odds（2連単オッズ）が保存されているレースは回収率も併せて計算する。
+    """
+    data = request.get_json() or {}
+    rows = _filtered_result_rows(data)
+
+    TYPE_BY_INDEX = ['本命', '本命', '対抗', '対抗', '対抗', '万舟', '万舟']
+    stats = {
+        '本命': {'hits': 0, 'total': 0, 'purchase': 0, 'payout': 0, 'has_odds_races': 0},
+        '対抗': {'hits': 0, 'total': 0, 'purchase': 0, 'payout': 0, 'has_odds_races': 0},
+    }
+
+    for r in rows:
+        try:
+            preds = json.loads(r['predictions'])
+        except Exception:
+            continue
+        try:
+            inp = json.loads(r['input_data']) if r['input_data'] else None
+        except Exception:
+            inp = None
+        bi_odds = (inp or {}).get('bi_odds')
+        result_ni = f"{r['result_1st']}-{r['result_2nd']}"
+
+        henkan_str = r['henkan'] if 'henkan' in r.keys() else None
+        henkan_boats = set((henkan_str or '').split(',')) if henkan_str else set()
+
+        for t in ('本命', '対抗'):
+            combos = []
+            for idx, p in enumerate(preds):
+                pt = p.get('type') or (TYPE_BY_INDEX[idx] if idx < len(TYPE_BY_INDEX) else '')
+                combo = p.get('combo')
+                if pt != t or not combo:
+                    continue
+                parts = combo.split('-')
+                if len(parts) < 2 or (henkan_boats & set(parts)):
+                    continue
+                ni = f"{parts[0]}-{parts[1]}"
+                if ni not in combos:
+                    combos.append(ni)
+            if not combos:
+                continue
+            s = stats[t]
+            s['total'] += 1
+            is_hit = result_ni in combos
+            if is_hit:
+                s['hits'] += 1
+            if bi_odds:
+                s['has_odds_races'] += 1
+                s['purchase'] += 100 * len(combos)
+                if is_hit:
+                    s['payout'] += int(safe_float(bi_odds.get(result_ni, 0)) * 100)
+
+    out = {}
+    for t, s in stats.items():
+        hr = round(s['hits'] / s['total'] * 100, 1) if s['total'] > 0 else 0
+        rec = round(s['payout'] / s['purchase'] * 100, 1) if s['purchase'] > 0 else None
+        out[t] = {'hits': s['hits'], 'total': s['total'], 'hit_rate': hr,
+                  'recovery': rec, 'odds_races': s['has_odds_races']}
+    return jsonify(out)
+
+
 @app.route('/ura_backtest', methods=['POST'])
 def ura_backtest():
     """裏熊バックテスト: 裏熊レコードを現行の裏熊ロジックで再予想し、
