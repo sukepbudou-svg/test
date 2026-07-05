@@ -2431,7 +2431,7 @@ function renderResult(data) {
     }
     const allCut = hasOdds && uraItems.length === 0 && (data.arekote_predictions || []).length > 0;
 
-    // 出動判定（3条件+オッズ妙味）
+    // 出動判定（3条件+オッズ妙味）。見出しの分数は下に並ぶチェック項目数と必ず一致させる
     const oddsOk = hasOdds ? !allCut : null;
     const fullClear = conds.clear === conds.total && (oddsOk !== false);
     const condRows = [
@@ -2440,9 +2440,11 @@ function renderResult(data) {
       { ok: conds.shuyaku_ok, label: `仕留める主役${conds.shuyaku_ok && uj.shuyaku ? `（${uj.shuyaku}号艇）` : 'なし'}` },
     ];
     if (hasOdds) condRows.push({ ok: oddsOk, label: `オッズ妙味（20倍未満${cutCount}点を足切り）` });
+    const clearCount = condRows.filter(c => c.ok).length;
+    const totalCount = condRows.length;
 
     const bd2 = fullClear ? '#b000dc' : '#5a6a80';
-    const title2 = fullClear ? '🐻 裏熊出動（勝負）' : (allCut ? '🐻 妙味なし・見送り推奨' : `🐻 参考予想（出動条件 ${conds.clear || 0}/${conds.total || 3}）`);
+    const title2 = fullClear ? '🐻 裏熊出動（勝負）' : (allCut ? '🐻 妙味なし・見送り推奨' : `🐻 参考予想（出動条件 ${clearCount}/${totalCount}）`);
     html += `<div style="background:linear-gradient(135deg,rgba(180,0,220,0.15),rgba(100,0,180,0.08));border:1.5px solid ${bd2};border-radius:10px;padding:10px 14px;margin-bottom:10px;">
       <div style="font-weight:900;color:${fullClear ? '#d95cff' : 'var(--text-muted)'};letter-spacing:1px;font-size:14px;margin-bottom:6px;">${title2}</div>
       ${condRows.map(c => `<div style="font-size:11px;margin-bottom:2px;color:${c.ok ? 'var(--green)' : 'var(--text-muted)'};">${c.ok ? '✓' : '✗'} ${c.label}</div>`).join('')}
