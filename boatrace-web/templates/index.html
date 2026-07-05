@@ -610,6 +610,9 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
       {% for w in wind_options %}<option value="{{ w }}">{{ w }}</option>{% endfor %}
     </select>
     <input type="date" id="race_date">
+    <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);cursor:pointer;white-space:nowrap;">
+      <input type="checkbox" id="is_womens" style="width:auto;">女子戦
+    </label>
   </div>
 </div>
 
@@ -2611,7 +2614,7 @@ async function saveRecord() {
   const resp = await fetch('/save_record', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ race_date, venue, race_no: parseInt(race_no), predictions: lastPredictions, nige_rate: lastNigeRate, wind: document.getElementById('wind').value || null, input_data: inputData })
+    body: JSON.stringify({ race_date, venue, race_no: parseInt(race_no), predictions: lastPredictions, nige_rate: lastNigeRate, wind: document.getElementById('wind').value || null, input_data: inputData, is_womens: document.getElementById('is_womens')?.checked || false })
   });
   const data = await resp.json();
   if (data.success) {
@@ -2719,6 +2722,8 @@ function allClear() {
   lastPredictInput = null;
   document.getElementById('btn-save').style.display = 'none';
   document.getElementById('status-save').textContent = '';
+  const womensEl = document.getElementById('is_womens');
+  if (womensEl) womensEl.checked = false;
   for (let i = 1; i <= 6; i++) {
     ['exhibit_time','laps','mawariashi','avg_st','exhibit_st','weight'].forEach(f => {
       const el = document.getElementById(`b${i}_${f}`); if (el) el.value = '';

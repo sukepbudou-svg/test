@@ -457,6 +457,10 @@ h1 {
     <button class="filter-btn kind-btn active" onclick="setKindFilter('all',this)">すべて</button>
     <button class="filter-btn kind-btn" onclick="setKindFilter('normal',this)">通常予想</button>
     <button class="filter-btn kind-btn" onclick="setKindFilter('ura',this)">🐻裏熊</button>
+    <span style="width:12px;"></span>
+    <button class="filter-btn womens-btn active" onclick="setWomensFilter('all',this)">性別すべて</button>
+    <button class="filter-btn womens-btn" onclick="setWomensFilter('only',this)">女子戦のみ</button>
+    <button class="filter-btn womens-btn" onclick="setWomensFilter('exclude',this)">女子戦除く</button>
   </div>
 
   <!-- 記録一覧 -->
@@ -542,6 +546,7 @@ let manzokuOnly = false;
 
 // ======== 絞り込みロジック ========
 let kindFilter = 'all';
+let womensFilter = 'all';
 
 function isUraRecord(r) {
   return (r.predictions || []).some(p => p.type === '裏熊');
@@ -554,10 +559,19 @@ function setKindFilter(kind, btn) {
   applyFilter();
 }
 
+function setWomensFilter(w, btn) {
+  womensFilter = w;
+  document.querySelectorAll('.womens-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilter();
+}
+
 function getFilteredRecords() {
   return allRecords.filter(r => {
     if (kindFilter === 'ura' && !isUraRecord(r)) return false;
     if (kindFilter === 'normal' && isUraRecord(r)) return false;
+    if (womensFilter === 'only' && !r.is_womens) return false;
+    if (womensFilter === 'exclude' && r.is_womens) return false;
     if (selectedVenues.size > 0 && !selectedVenues.has(r.venue)) return false;
     if (nigeFilterMin > 0 || nigeFilterMax < 100) {
       if (r.nige_rate == null) return false;
@@ -639,6 +653,7 @@ async function applyFilterNow() {
   const body = {
     period: currentFilter,
     kind: kindFilter,
+    womens: womensFilter,
     venues: [...selectedVenues],
     nige_min: nigeFilterMin,
     nige_max: nigeFilterMax,
@@ -1158,6 +1173,7 @@ function currentFilterBody(extra) {
     venues: Array.from(selectedVenues),
     nige_min: nigeFilterMin,
     nige_max: nigeFilterMax,
+    womens: womensFilter,
   }, extra || {}));
 }
 
@@ -1195,6 +1211,8 @@ async function runWeeklyReport() {
           ${sumRow('通常予想', d.normal, 'var(--accent3)')}
           ${sumRow('✅勝負レース', d.shobu, 'var(--green)')}
           ${sumRow('🐻裏熊', d.ura, '#d95cff')}
+          ${sumRow('👩女子戦', d.womens, '#ff69b4')}
+          ${sumRow('女子戦以外', d.non_womens, 'var(--text-muted)')}
         </tbody>
       </table>
       ${kenshoRows ? `<div style="font-size:10px;color:var(--text-muted);margin-top:10px;margin-bottom:4px;">🔍 検証中会場の状況（逃げ率65%以上・実力回収率ベース）</div>

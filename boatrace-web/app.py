@@ -63,6 +63,11 @@ def init_db():
         conn.commit()
     except Exception:
         pass
+    try:
+        conn.execute('ALTER TABLE records ADD COLUMN is_womens INTEGER DEFAULT 0')
+        conn.commit()
+    except Exception:
+        pass
     conn.close()
 
 init_db()
@@ -950,8 +955,8 @@ def save_record():
     data = request.get_json()
     conn = get_db()
     conn.execute('''
-        INSERT INTO records (race_date, venue, race_no, predictions, created_at, nige_rate, wind, input_data, model_version)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO records (race_date, venue, race_no, predictions, created_at, nige_rate, wind, input_data, model_version, is_womens)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         data.get('race_date', ''),
         data.get('venue', ''),
@@ -961,7 +966,8 @@ def save_record():
         data.get('nige_rate'),
         data.get('wind'),
         json.dumps(data.get('input_data'), ensure_ascii=False) if data.get('input_data') else None,
-        MODEL_VERSION
+        MODEL_VERSION,
+        1 if data.get('is_womens') else 0
     ))
     conn.commit()
     record_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
@@ -1168,13 +1174,13 @@ def get_records():
     period = request.args.get('period', 'all')
     conn = get_db()
     if period == 'today':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
     elif period == 'week':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
     elif period == 'month':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
     else:
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records ORDER BY id DESC").fetchall()
     conn.close()
 
     records = []
@@ -1195,6 +1201,7 @@ def get_records():
             'nige_rate': r['nige_rate'],
             'wind': r['wind'],
             'henkan': r['henkan'] if 'henkan' in r.keys() else None,
+            'is_womens': bool(r['is_womens']) if 'is_womens' in r.keys() and r['is_womens'] is not None else False,
         })
     return jsonify(records)
 
@@ -1436,16 +1443,17 @@ def history_stats():
     nige_max   = data.get('nige_max', 100)
     manzoku    = data.get('manzoku', False)
     kind       = data.get('kind', 'all')  # all / normal / ura（裏熊予想の分離）
+    womens     = data.get('womens', 'all')  # all / only / exclude（女子戦の絞り込み）
 
     conn = get_db()
     if period == 'today':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
     elif period == 'week':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
     elif period == 'month':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
     else:
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan FROM records ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records ORDER BY id DESC").fetchall()
     conn.close()
 
     # フィルター適用
@@ -1466,6 +1474,12 @@ def history_stats():
             if kind == 'ura' and not is_ura:
                 continue
             if kind == 'normal' and is_ura:
+                continue
+        if womens != 'all':
+            is_w = bool(r['is_womens']) if 'is_womens' in r.keys() and r['is_womens'] is not None else False
+            if womens == 'only' and not is_w:
+                continue
+            if womens == 'exclude' and is_w:
                 continue
         filtered.append(r)
 
@@ -1833,6 +1847,7 @@ def _filtered_result_rows(data):
     venues = data.get('venues', [])
     nige_min = data.get('nige_min', 0)
     nige_max = data.get('nige_max', 100)
+    womens = data.get('womens', 'all')
     conn = get_db()
     q = "SELECT * FROM records WHERE result_1st IS NOT NULL"
     if period == 'today':
@@ -1851,6 +1866,12 @@ def _filtered_result_rows(data):
             if r['nige_rate'] is None:
                 continue
             if r['nige_rate'] < nige_min or r['nige_rate'] > nige_max:
+                continue
+        if womens != 'all':
+            is_w = bool(r['is_womens']) if 'is_womens' in r.keys() and r['is_womens'] is not None else False
+            if womens == 'only' and not is_w:
+                continue
+            if womens == 'exclude' and is_w:
                 continue
         out.append(r)
     return out
@@ -2186,6 +2207,10 @@ def weekly_report():
         })
     kensho_status.sort(key=lambda x: x['recovery_base'], reverse=True)
 
+    # 女子戦別の成績（通常予想のみ対象。荒れやすいという仮説の検証用）
+    womens_rows = [r for r in normal_rows if r['is_womens']]
+    non_womens_rows = [r for r in normal_rows if not r['is_womens']]
+
     # v5再評価の進捗
     conn = get_db()
     input_data_count = conn.execute(
@@ -2198,6 +2223,8 @@ def weekly_report():
         'normal': summary(normal_rows),
         'shobu': summary(shobu_rows),
         'ura': summary(ura_rows),
+        'womens': summary(womens_rows),
+        'non_womens': summary(non_womens_rows),
         'kensho_status': kensho_status,
         'input_data_count': input_data_count,
         'v5_reeval_at': 150,
