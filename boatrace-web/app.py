@@ -185,7 +185,7 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
-def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_arekote=False, kimari_full=None, hybrid_taikou=False, v7_fix2nd=False, v7_third=False):
+def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_arekote=False, kimari_full=None, hybrid_taikou=False, v7_fix2nd=False, v7_third=False, extra_stats=None):
     # 会場プロファイル取得
     vp = VENUE_PROFILES.get(venue, {"in_rate": 0.0, "upset": 0.5, "wind": 0.5})
     wind_bonus = WIND_UPSET_BONUS.get(wind, 0.0)
@@ -561,7 +561,8 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
 
     # 裏熊モード: 強制フラグのときのみ（自動切り替えは廃止）
     if force_arekote:
-        ura = predict_arekote_v2(scores, kimari_full=kimari_full, nige_rate=nige_rate)
+        ura = predict_arekote_v3(scores, kimari_full=kimari_full, nige_rate=nige_rate,
+                                  cho_tenkai=(extra_stats or {}).get('cho_tenkai') if extra_stats else None)
         return {
             'predictions': results,
             'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2), 'prob': c.get('prob')} for c in candidates[:60]],
@@ -580,12 +581,31 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
     }
 
 
-def predict_arekote_v2(scores, kimari_full=None, nige_rate=None):
-    """裏熊予想v2 (2026-07-04): シナリオ・フォーメーション方式（穴党プロ型）
+MIN_CHOTENKAI_TRIALS = 3  # 超展開データの試行回数がこれ未満なら信頼度不足として使わない
+
+
+def _wl_rate(pair):
+    """[勝ち,試行] ペアから (成功率%, 試行数) を返す。データなし/試行0はNone"""
+    if not pair or not isinstance(pair, (list, tuple)) or len(pair) != 2:
+        return None
+    w, t = pair
+    if w is None or t is None or t <= 0:
+        return None
+    return (w / t * 100, t)
+
+
+def predict_arekote_v3(scores, kimari_full=None, nige_rate=None, cho_tenkai=None):
+    """裏熊予想v3 (2026-07-05): 超展開データ（直接対戦の決まり手 勝ち/試行）を活用
+
+    v2からの変更点:
+      - 主役の攻撃力判定: cho_tenkaiの試行回数を伴う成功率を優先使用
+        （試行回数MIN_CHOTENKAI_TRIALS未満は信頼度不足としてkimari_fullにフォールバック）
+      - 1号艇の弱点条件に「抵抗」回数（攻められた際に粘れているか）を追加
+      - 相手2艇の選定にも超展開データの差し成功率を反映
 
     出動条件（AND）:
       (1) イン逃げ率40%未満
-      (2) 1号艇に弱点2つ以上（スコア3位以下/B級/展示ST5番手以下/差され捲られ率30%超）
+      (2) 1号艇に弱点2つ以上（スコア3位以下/B級/展示ST5番手以下/差され捲られ率30%超/抵抗不足）
       (3) 仕留める主役がいる（3〜5コース・まくり系15%以上・STが1号艇より速い・スコア2位以内）
       (4) オッズ妙味（20倍未満は足切り）→ フロント側で判定
     買い目: 主役-相手2艇-全 のフォーメーション8点
@@ -606,9 +626,24 @@ def predict_arekote_v2(scores, kimari_full=None, nige_rate=None):
                 break
     maki_arr = (kdata or {}).get('maki_active') or []
     makis_arr = (kdata or {}).get('makis_active') or []
+    ct = cho_tenkai if isinstance(cho_tenkai, dict) else {}
+    ct_maki = ct.get('makuri') or []
+    ct_makis = ct.get('makurisashi') or []
+    ct_sashi = ct.get('sashi') or []
 
     def attack(bn):
+        """超展開データがあれば試行回数つきの成功率を優先、無ければkimari_fullにフォールバック"""
         i = bn - 2
+        maki_wl = _wl_rate(ct_maki[i]) if 0 <= i < len(ct_maki) else None
+        makis_wl = _wl_rate(ct_makis[i]) if 0 <= i < len(ct_makis) else None
+        has_reliable_ct = (
+            (maki_wl and maki_wl[1] >= MIN_CHOTENKAI_TRIALS) or
+            (makis_wl and makis_wl[1] >= MIN_CHOTENKAI_TRIALS)
+        )
+        if has_reliable_ct:
+            ma = maki_wl[0] if maki_wl and maki_wl[1] >= MIN_CHOTENKAI_TRIALS else 0.0
+            ms = makis_wl[0] if makis_wl and makis_wl[1] >= MIN_CHOTENKAI_TRIALS else 0.0
+            return ma, ms
         ma = safe_float(maki_arr[i]) if 0 <= i < len(maki_arr) else 0.0
         ms = safe_float(makis_arr[i]) if 0 <= i < len(makis_arr) else 0.0
         return ma, ms
@@ -637,6 +672,10 @@ def predict_arekote_v2(scores, kimari_full=None, nige_rate=None):
                   + safe_float((kdata or {}).get('makurS_passive', 0)))
         if threat > 30:
             weaknesses.append(f"差され捲られ率{round(threat)}%")
+        # 超展開データ: 「抵抗」回数が少ない = 攻められると粘れない
+        teikou = ct.get('teikou')
+        if teikou is not None and teikou <= 1:
+            weaknesses.append(f"抵抗{teikou}回（粘れていない）")
     cond_boat1 = len(weaknesses) >= 2
 
     # 条件3: 仕留める主役（3〜5コース）
@@ -666,13 +705,17 @@ def predict_arekote_v2(scores, kimari_full=None, nige_rate=None):
     scenario = 'まくり' if shuyaku['maki'] >= shuyaku['makis'] else 'まくり差し'
     bn1 = boat1['boat']['boat_number'] if boat1 else 1
 
-    # 相手2艇: シナリオ整合スコアで選ぶ
+    # 相手2艇: シナリオ整合スコア + 超展開データの差し成功率で選ぶ
     def aite_score(s):
         sc = s['score']
         if s['course'] == shuyaku['course'] + 1:
             sc += 1.0  # 直外は展開が向く
         if scenario == 'まくり' and 1 < s['course'] < shuyaku['course']:
             sc -= 1.0  # 主役より内側は沈みやすい
+        i = s['course'] - 2
+        sashi_wl = _wl_rate(ct_sashi[i]) if 0 <= i < len(ct_sashi) else None
+        if sashi_wl and sashi_wl[1] >= MIN_CHOTENKAI_TRIALS:
+            sc += sashi_wl[0] * 0.05  # 差し成功率が高い艇を2着候補として底上げ
         return sc
 
     others = [s for s in scores if s['boat']['boat_number'] != shuyaku['bn']]
@@ -896,7 +939,9 @@ def predict_route():
     # ただし裏熊モードは決まり手データ（主役判定・シナリオ）が必須なので常に渡す
     kimari_full_raw = data.get('kimari_full', None)
     kimari_full = kimari_full_raw if (USE_V5_LIVE or force_arekote) else None
-    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full, hybrid_taikou=USE_V6_LIVE, v7_fix2nd=False, v7_third=USE_V7_THIRD_LIVE)
+    # extra_stats（超展開データ等）は裏熊モードのみで使用
+    extra_stats = data.get('extra_stats', None) if force_arekote else None
+    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full, hybrid_taikou=USE_V6_LIVE, v7_fix2nd=False, v7_third=USE_V7_THIRD_LIVE, extra_stats=extra_stats)
     return jsonify(result)
 
 
@@ -1850,6 +1895,7 @@ def ura_backtest():
                 nige_rate=inp.get('nige_rate'),
                 force_arekote=True,
                 kimari_full=inp.get('kimari_full'),
+                extra_stats=inp.get('extra_stats'),
             )
         except Exception:
             continue
