@@ -1306,7 +1306,7 @@ function parseKimariStats(text) {
   document.getElementById('kr-nige-1').textContent  = `逃${(pd.nige1 || 0).toFixed(1)}%`;
   document.getElementById('kr-mak-1').textContent   = `捲${(pd.makur_passive ?? pd.makur ?? 0).toFixed(1)}%`;
   document.getElementById('kr-maks-1').textContent  = `捲差${(pd.makurS_passive ?? pd.makurS ?? 0).toFixed(1)}%`;
-  updateNigeBanner(pd.nige1 || 0);
+  updateNigeBanner(typeof pd.nige1 === 'number' && !isNaN(pd.nige1) ? pd.nige1 : null);
 
   // 2〜6号艇: 捲り率・捲り差し率・差し率
   for (let i = 2; i <= 6; i++) {
@@ -1335,7 +1335,7 @@ function applyKimariStats() {
   document.getElementById('kr-nige-1').textContent  = `逃${(pd.nige1 || 0).toFixed(1)}%`;
   document.getElementById('kr-mak-1').textContent   = `捲${(pd.makur_passive ?? pd.makur ?? 0).toFixed(1)}%`;
   document.getElementById('kr-maks-1').textContent  = `捲差${(pd.makurS_passive ?? pd.makurS ?? 0).toFixed(1)}%`;
-  updateNigeBanner(pd.nige1 || 0);
+  updateNigeBanner(typeof pd.nige1 === 'number' && !isNaN(pd.nige1) ? pd.nige1 : null);
 
   for (let i = 2; i <= 6; i++) {
     const idx = i - 2;
@@ -1784,7 +1784,7 @@ async function runPredict(forceArekote = false) {
   if (kimariStats) {
     const kperiod = document.getElementById('kimari-period')?.value || '直近6ヶ月';
     const kpd = kimariStats[kperiod] || kimariStats['直近6ヶ月'] || kimariStats['直近1年'] || {};
-    lastNigeRate = kpd.nige1 > 0 ? kpd.nige1 : null;
+    lastNigeRate = (typeof kpd.nige1 === 'number' && !isNaN(kpd.nige1)) ? kpd.nige1 : null;
   }
 
   const venue = document.getElementById('venue').value;
@@ -1807,7 +1807,7 @@ async function runPredict(forceArekote = false) {
   if (kimariStats) {
     const kperiod = document.getElementById('kimari-period')?.value || '直近6ヶ月';
     const kpd = kimariStats[kperiod] || kimariStats['直近6ヶ月'] || kimariStats['直近1年'] || {};
-    lastNigeRate = kpd.nige1 > 0 ? kpd.nige1 : null;
+    lastNigeRate = (typeof kpd.nige1 === 'number' && !isNaN(kpd.nige1)) ? kpd.nige1 : null;
   } else {
     const nigeEl = document.getElementById('nige-rate-value');
     lastNigeRate = nigeEl ? parseFloat(nigeEl.textContent) || null : null;
@@ -2003,7 +2003,7 @@ function updateNigeBanner(nige) {
   const banner = document.getElementById('nige-rate-banner');
   const valEl  = document.getElementById('nige-rate-value');
   const comEl  = document.getElementById('nige-rate-comment');
-  if (!nige || nige === 0) { banner.style.display = 'none'; return; }
+  if (nige == null || isNaN(nige)) { banner.style.display = 'none'; return; }
   banner.style.display = 'block';
   valEl.textContent = nige.toFixed(1) + '%';
   let color, comment;
@@ -2233,7 +2233,7 @@ function renderResult(data) {
     const reasons = [];
     const warns = [];
     // 条件1: イン逃げ率
-    if (lastNigeRate != null && lastNigeRate > 0) {
+    if (lastNigeRate != null) {
       if (lastNigeRate >= 65) reasons.push(`イン逃げ率${lastNigeRate.toFixed(1)}%`);
       else warns.push(`イン逃げ率${lastNigeRate.toFixed(1)}%（65%未満）`);
     } else {
@@ -2277,7 +2277,7 @@ function renderResult(data) {
     // 会場成績を非同期で取得して判定に反映（条件3: 得意会場か）
     // 今回のイン逃げ率±10%の類似条件で絞り込み、データ不足なら会場全体にフォールバック
     if (venueVal) {
-      const hasNige = lastNigeRate != null && lastNigeRate > 0;
+      const hasNige = lastNigeRate != null;
       // 下限=今回の逃げ率を5%刻みで切り下げ、上限=100%（下のレースを混ぜない）
       const bandMin = hasNige ? Math.floor(lastNigeRate / 5) * 5 : 0;
       const bandMax = 100;
