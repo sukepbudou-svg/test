@@ -1645,6 +1645,7 @@ def backtest():
     venues = data.get('venues', [])
     nige_min = data.get('nige_min', 0)
     nige_max = data.get('nige_max', 100)
+    honmei_odds_min = data.get('honmei_odds_min', 0)  # 本命1点目オッズの下限（勝負レース相当の絞り込み用）
     # 検証モード: どの候補ロジックを乗せて再予想するか（v6=実戦同等）
     variant = data.get('variant', 'v7b')
     VARIANTS = {
@@ -1671,7 +1672,7 @@ def backtest():
     rows = conn.execute(q + " ORDER BY id").fetchall()
     conn.close()
 
-    # 会場・イン逃げ率フィルター
+    # 会場・イン逃げ率・本命オッズフィルター
     filtered_rows = []
     for r in rows:
         if venues and r['venue'] not in venues:
@@ -1680,6 +1681,14 @@ def backtest():
             if r['nige_rate'] is None:
                 continue
             if r['nige_rate'] < nige_min or r['nige_rate'] > nige_max:
+                continue
+        if honmei_odds_min > 0:
+            try:
+                preds = json.loads(r['predictions'])
+            except Exception:
+                continue
+            h1 = next((p for p in preds if p.get('type') == '本命'), None)
+            if not h1 or h1.get('odds') is None or h1['odds'] < honmei_odds_min:
                 continue
         filtered_rows.append(r)
     rows = filtered_rows

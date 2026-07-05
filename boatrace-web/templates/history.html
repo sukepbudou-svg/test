@@ -378,6 +378,11 @@ h1 {
   <div class="chart-card" style="margin-bottom:16px;">
     <div class="chart-title">🧪 バックテスト（現行ロジック vs 保存時の予想）</div>
     <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">入力データ付きで保存されたレースを現行ロジックで再予想し、当時の予想と成績を比較します。<b>上の期間・会場・イン逃げ率の絞り込みに連動します</b></div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+      <label style="font-size:11px;color:var(--text-muted);">本命1点目オッズ下限:</label>
+      <input type="number" id="backtest-honmei-odds-min" value="7" min="0" step="0.5" style="width:60px;padding:4px 6px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:11px;">
+      <span style="font-size:10px;color:var(--text-muted);">倍以上（✅勝負レース相当にするなら7を推奨・0で無効化）</span>
+    </div>
     <select id="backtest-variant" style="padding:5px 8px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:11px;margin-right:8px;">
       <option value="v7b" selected>v7（現在の実戦・3着差し替え）</option>
       <option value="v6">v6のみ（旧・実戦相当）</option>
@@ -1289,6 +1294,7 @@ async function runBacktest() {
         nige_min: nigeFilterMin,
         nige_max: nigeFilterMax,
         variant: document.getElementById('backtest-variant')?.value || 'full',
+        honmei_odds_min: parseFloat(document.getElementById('backtest-honmei-odds-min')?.value) || 0,
       })
     });
     const d = await resp.json();
