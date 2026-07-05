@@ -69,20 +69,21 @@ init_db()
 
 # モデルバージョン: 予想ロジックを変更したら必ず上げること
 # v4: 2026-07-03 タイム符号バグ修正 + 対抗3シナリオ + 中穴廃止
-# v5: 2026-07-04 選手個人の決まり手傾向による展開補正（検証中・実戦未採用）
-#     初回バックテスト87レース: 本命-1.2pt/対抗±0 → 効果確認できず。
-#     150レース貯まったら再評価する
+# v5: 2026-07-04 選手個人の決まり手傾向による展開補正 → 効果なしと確定（採用見送り）
+#     87レース検証: 本命-1.2pt/対抗±0。71レース再検証: v6と完全一致（0pt）。3回とも無効果
 # v6: 2026-07-04 ハイブリッド対抗を採用。イン逃げ率65%以上は対抗3点を
 #     1位艇1着固定（旧v3方式）、65%未満は3シナリオ維持。
 #     バックテスト（得意会場×65%以上、18レース）: 対抗11.1%→27.8%で採用
-MODEL_VERSION = 'v6'
-# v5ロジックのon/off: 実戦(/predict)はFalse=v4動作、バックテストはTrueでv5を検証
+# v7: 2026-07-05 本命2点目の3着を「逃がし3着率」最上位に差し替えて採用。
+#     71レース検証: 本命+4.2pt/回収率+15.7pt（106%→121.7%）。2着バグ修正・v5は
+#     3回の検証で一貫して無効果と判明したため不採用、3着差し替えのみ単体で採用
+MODEL_VERSION = 'v7'
+# v5ロジックのon/off: 3回の検証で無効果と確定。実戦・バックテストとも常時False
 USE_V5_LIVE = False
 # v6ハイブリッド対抗: 採用済み（2026-07-04）
 USE_V6_LIVE = True
-# v7: 本命2点目の3着に逃がし3着率を活用 + 逃がし2着率の文字列キーバグ修正
-# バックテスト専用で検証中。採用時はTrueにしてMODEL_VERSIONを'v7'へ
-USE_V7_LIVE = False
+# v7: 本命2点目の3着差し替えのみ採用済み（2026-07-05）。2着バグ修正は無効果につき不採用
+USE_V7_THIRD_LIVE = True
 
 # 会場グループ（2026-07-04ユーザー設定。index.html/history.htmlの同名定数と同期すること）
 TOKUI_VENUES = ['大村', '福岡', '桐生', '徳山']
@@ -895,7 +896,7 @@ def predict_route():
     # ただし裏熊モードは決まり手データ（主役判定・シナリオ）が必須なので常に渡す
     kimari_full_raw = data.get('kimari_full', None)
     kimari_full = kimari_full_raw if (USE_V5_LIVE or force_arekote) else None
-    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full, hybrid_taikou=USE_V6_LIVE, v7_fix2nd=USE_V7_LIVE, v7_third=USE_V7_LIVE)
+    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full, hybrid_taikou=USE_V6_LIVE, v7_fix2nd=False, v7_third=USE_V7_THIRD_LIVE)
     return jsonify(result)
 
 
@@ -1600,14 +1601,14 @@ def backtest():
     nige_min = data.get('nige_min', 0)
     nige_max = data.get('nige_max', 100)
     # 検証モード: どの候補ロジックを乗せて再予想するか（v6=実戦同等）
-    variant = data.get('variant', 'full')
+    variant = data.get('variant', 'v7b')
     VARIANTS = {
-        'v6':      {'v5': False, 'fix2nd': False, 'third': False, 'label': 'v6のみ（実戦同等）'},
-        'v5only':  {'v5': True,  'fix2nd': False, 'third': False, 'label': 'v6+v5のみ（決まり手展開補正）'},
-        'v7a':     {'v5': False, 'fix2nd': True,  'third': False, 'label': 'v6+2着バグ修正のみ'},
-        'v7b':     {'v5': False, 'fix2nd': False, 'third': True,  'label': 'v6+3着差し替えのみ'},
-        'v7':      {'v5': False, 'fix2nd': True,  'third': True,  'label': 'v6+v7フル'},
-        'full':    {'v5': True,  'fix2nd': True,  'third': True,  'label': 'v5+v7全部入り'},
+        'v6':      {'v5': False, 'fix2nd': False, 'third': False, 'label': 'v6のみ（旧・実戦相当）'},
+        'v5only':  {'v5': True,  'fix2nd': False, 'third': False, 'label': 'v6+v5のみ（決まり手展開補正・不採用）'},
+        'v7a':     {'v5': False, 'fix2nd': True,  'third': False, 'label': 'v6+2着バグ修正のみ（不採用）'},
+        'v7b':     {'v5': False, 'fix2nd': False, 'third': True,  'label': 'v6+3着差し替えのみ = v7（現在の実戦）'},
+        'v7':      {'v5': False, 'fix2nd': True,  'third': True,  'label': 'v6+v7フル（2着修正込み・不採用）'},
+        'full':    {'v5': True,  'fix2nd': True,  'third': True,  'label': 'v5+v7全部入り（不採用要素込み）'},
     }
     vconf = VARIANTS.get(variant, VARIANTS['full'])
     use_v5 = vconf['v5']
