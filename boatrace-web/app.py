@@ -2059,10 +2059,21 @@ def ura_backtest():
             continue
         ura = pred.get('ura_judge') or {}
         conds = ura.get('conds') or {}
-        new_combos = [p['combo'] for p in (pred.get('arekote_predictions') or [])]
+        raw_combos = [p['combo'] for p in (pred.get('arekote_predictions') or [])]
+        new_combos = raw_combos
         # オッズ足切り（20倍未満）を再現
         if odds_all:
-            new_combos = [c for c in new_combos if safe_float(odds_all.get(c, 999)) >= 20]
+            new_combos = [c for c in raw_combos if safe_float(odds_all.get(c, 999)) >= 20]
+        # 実戦画面（index.html）はオッズ妙味を4つ目の出動条件として扱い「n/4」表示にしているため、
+        # ここでも同じ基準でclear/totalを揃える（揃えないとバックテストの「n/3」と実戦の「n/4」がズレる）
+        clear = conds.get('clear', 0)
+        total = conds.get('total', 3)
+        if odds_all:
+            all_cut = len(raw_combos) > 0 and len(new_combos) == 0
+            total += 1
+            if not all_cut:
+                clear += 1
+        clear_label = f"{clear}/{total}"
         if new_combos:
             current_stats['races'] += 1
             current_stats['purchase'] += 100 * len(new_combos)
@@ -2071,10 +2082,9 @@ def ura_backtest():
                 current_stats['hits'] += 1
                 if result_odds:
                     current_stats['payout'] += int(result_odds * 100)
-            clear = conds.get('clear', 0)
-            if clear not in by_clear:
-                by_clear[clear] = {'hits': 0, 'races': 0, 'purchase': 0, 'payout': 0}
-            b = by_clear[clear]
+            if clear_label not in by_clear:
+                by_clear[clear_label] = {'hits': 0, 'races': 0, 'purchase': 0, 'payout': 0}
+            b = by_clear[clear_label]
             b['races'] += 1
             b['purchase'] += 100 * len(new_combos)
             if hit:
@@ -2093,7 +2103,7 @@ def ura_backtest():
     return jsonify({
         'stored': fmt(stored_stats),
         'current': fmt(current_stats),
-        'by_clear': {str(k): fmt(v) for k, v in sorted(by_clear.items(), reverse=True)},
+        'by_clear': {k: fmt(v) for k, v in sorted(by_clear.items(), key=lambda kv: tuple(map(int, kv[0].split('/'))), reverse=True)},
     })
 
 

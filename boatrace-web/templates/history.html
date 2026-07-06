@@ -1428,7 +1428,7 @@ async function runUraBacktest() {
       <td style="padding:4px 8px;text-align:right;">${(s.payout - s.purchase) >= 0 ? '+' : ''}${(s.payout - s.purchase).toLocaleString()}円</td>
     </tr>`;
     const clearRows = Object.entries(d.by_clear || {}).map(([clear, s]) =>
-      row(`出動条件 ${clear}/3 クリア`, s)).join('');
+      row(`出動条件 ${clear} クリア`, s)).join('');
     el.innerHTML = `<div style="font-size:10px;color:#d95cff;margin-bottom:6px;font-weight:700;">🐻 裏熊バックテスト結果（100円/点想定）</div>
       <table style="width:100%;border-collapse:collapse;font-size:11px;">
         <thead><tr style="color:var(--text-muted);font-size:10px;">
