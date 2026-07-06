@@ -2358,7 +2358,7 @@ function renderResult(data) {
     if (venueVal) {
       const hasNige = lastNigeRate != null;
       // 下限=今回の逃げ率を5%刻みで切り下げ、上限=100%（下のレースを混ぜない）
-      const bandMin = hasNige ? Math.floor(lastNigeRate / 5) * 5 : 0;
+      const bandMin = hasNige ? (lastNigeRate >= 65 ? 65 : Math.floor(lastNigeRate / 5) * 5) : 0;
       const bandMax = 100;
       const fetchStats = (nMin, nMax) => fetch('/history_stats', {
         method: 'POST', headers: {'Content-Type':'application/json'},

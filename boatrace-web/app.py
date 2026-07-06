@@ -149,7 +149,7 @@ def _judge_tier(venue, nige_rate, honmei_odds, venue_rows_by_venue):
         tier_base = 'other'
 
     rows = venue_rows_by_venue.get(venue, [])
-    band_min = math.floor(nige_rate / 5) * 5
+    band_min = 65 if nige_rate >= 65 else math.floor(nige_rate / 5) * 5
     band_rows = [r for r in rows if r['nige_rate'] is not None and r['nige_rate'] >= band_min]
     rec_base, cnt = _calc_recovery_base(band_rows)
     if cnt < 10:
@@ -1318,10 +1318,9 @@ def stats_summary():
     ).fetchall()
     conn.close()
 
-    # イン逃げ率帯フィルタ（5%単位切り捨てを下限にする）
+    # イン逃げ率帯フィルタ（5%単位切り捨てを下限にする。ただし65%以上は一律65%以上でまとめる）
     if nige_rate is not None:
-        import math
-        nige_min = math.floor(nige_rate / 5) * 5
+        nige_min = 65 if nige_rate >= 65 else math.floor(nige_rate / 5) * 5
         filtered = [r for r in rows if r['nige_rate'] is not None and r['nige_rate'] >= nige_min]
     else:
         nige_min = None
