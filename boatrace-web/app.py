@@ -5,6 +5,7 @@ import json
 import os
 import re
 import urllib.request
+import math
 from datetime import datetime
 
 app = Flask(__name__)
@@ -93,6 +94,79 @@ USE_V7_THIRD_LIVE = True
 # 会場グループ（2026-07-04ユーザー設定。index.html/history.htmlの同名定数と同期すること）
 TOKUI_VENUES = ['大村', '福岡', '桐生', '徳山']
 KENSHO_VENUES = ['芦屋', '宮島', '常滑', '三国', '浜名湖', '尼崎', '若松', '蒲郡', '多摩川', '住之江', 'びわこ', '津', '丸亀', '児島']
+
+TYPE_BY_INDEX_BASE = ['本命', '本命', '対抗', '対抗', '対抗', '万舟', '万舟']
+
+
+def is_henkan_combo(combo, henkan_str):
+    """返還艇を含むコンボかどうか判定（返還コンボは無効＝的中にも外れにも数えない）"""
+    if not henkan_str:
+        return False
+    henkan_boats = {b.strip() for b in str(henkan_str).split(',') if b.strip()}
+    return any(b in henkan_boats for b in combo.split('-'))
+
+
+def _calc_recovery_base(with_result_rows):
+    """本命+対抗5点ベースの回収率（万舟のまぐれ当たりを除外した実力値）。(recovery_base, race_count) を返す"""
+    base_purchase = 0
+    base_payout = 0
+    base_races = 0
+    for r in with_result_rows:
+        try:
+            preds = json.loads(r['predictions'])
+        except Exception:
+            continue
+        henkan_str = r['henkan'] if 'henkan' in r.keys() else None
+        base_combos = []
+        for idx, p in enumerate(preds):
+            t = p.get('type') or (TYPE_BY_INDEX_BASE[idx] if idx < len(TYPE_BY_INDEX_BASE) else '')
+            if t in ('本命', '対抗') and p.get('combo') and not is_henkan_combo(p['combo'], henkan_str):
+                base_combos.append(p['combo'])
+        if not base_combos:
+            continue
+        base_races += 1
+        base_purchase += 100 * len(base_combos)
+        result_combo = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}"
+        if result_combo in base_combos and r['payout']:
+            base_payout += r['payout']
+    recovery_base = round(base_payout / base_purchase * 100, 1) if base_purchase > 0 else 0
+    return recovery_base, base_races
+
+
+def _judge_tier(venue, nige_rate, honmei_odds, venue_rows_by_venue):
+    """予想画面のバナー判定（renderResult）と同じロジックをサーバー側で再現。
+    成績記録のtier表示をバナーと一致させるための共通判定。"""
+    if venue is None or nige_rate is None or honmei_odds is None:
+        return None
+    cond_ok = nige_rate >= 65 and honmei_odds >= 7
+    if not cond_ok:
+        return 'miokuri'
+    if venue in TOKUI_VENUES:
+        tier_base = 'shobu'
+    elif venue in KENSHO_VENUES:
+        tier_base = 'kensho'
+    else:
+        tier_base = 'other'
+
+    rows = venue_rows_by_venue.get(venue, [])
+    band_min = math.floor(nige_rate / 5) * 5
+    band_rows = [r for r in rows if r['nige_rate'] is not None and r['nige_rate'] >= band_min]
+    rec_base, cnt = _calc_recovery_base(band_rows)
+    if cnt < 10:
+        rec_base, cnt = _calc_recovery_base(rows)
+
+    if tier_base == 'shobu':
+        if cnt >= 10 and rec_base < 80:
+            return 'miokuri'
+        return 'shobu'
+    elif tier_base == 'kensho':
+        if cnt >= 10 and rec_base >= 100:
+            return 'shobu'
+        return 'kensho'
+    else:
+        if cnt >= 20 and rec_base >= 120:
+            return 'shobu'
+        return 'miokuri'
 
 VENUES = [
     "桐生", "戸田", "江戸川", "平和島", "多摩川", "浜名湖",
@@ -1183,14 +1257,31 @@ def get_records():
         rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records ORDER BY id DESC").fetchall()
     conn.close()
 
+    # tier判定用: 結果が出ている全レコードを会場別にまとめておく（期間フィルタと無関係に全期間で判定）
+    conn2 = get_db()
+    all_result_rows = conn2.execute(
+        "SELECT venue, nige_rate, predictions, result_1st, result_2nd, result_3rd, payout, henkan FROM records WHERE result_1st IS NOT NULL"
+    ).fetchall()
+    conn2.close()
+    venue_rows_by_venue = {}
+    for rr in all_result_rows:
+        venue_rows_by_venue.setdefault(rr['venue'], []).append(rr)
+    tier_cache = {}
+
     records = []
     for r in rows:
+        preds = json.loads(r['predictions'])
+        honmei = next((p for p in preds if p.get('type') == '本命'), None)
+        honmei_odds = honmei.get('odds') if honmei else None
+        cache_key = (r['venue'], r['nige_rate'], honmei_odds)
+        if cache_key not in tier_cache:
+            tier_cache[cache_key] = _judge_tier(r['venue'], r['nige_rate'], honmei_odds, venue_rows_by_venue)
         records.append({
             'id': r['id'],
             'race_date': r['race_date'],
             'venue': r['venue'],
             'race_no': r['race_no'],
-            'predictions': json.loads(r['predictions']),
+            'predictions': preds,
             'result_1st': r['result_1st'],
             'result_2nd': r['result_2nd'],
             'result_3rd': r['result_3rd'],
@@ -1202,6 +1293,7 @@ def get_records():
             'wind': r['wind'],
             'henkan': r['henkan'] if 'henkan' in r.keys() else None,
             'is_womens': bool(r['is_womens']) if 'is_womens' in r.keys() and r['is_womens'] is not None else False,
+            'tier': tier_cache[cache_key],
         })
     return jsonify(records)
 
@@ -1492,13 +1584,6 @@ def history_stats():
     recovery = round(total_payout / total_purchase * 100, 1) if total_purchase > 0 else 0
     profit = total_payout - total_purchase
 
-    # 返還艇を含むコンボを無効化する判定
-    def is_henkan_combo(combo, henkan_str):
-        if not henkan_str:
-            return False
-        henkan_boats = {b.strip() for b in str(henkan_str).split(',') if b.strip()}
-        return any(b in henkan_boats for b in combo.split('-'))
-
     # 種別別集計
     TYPES = ['本命', '対抗', '中穴', '万舟']
     TYPE_BY_INDEX = ['本命','本命','対抗','対抗','対抗','万舟','万舟']
@@ -1540,28 +1625,7 @@ def history_stats():
 
     # 本命+対抗5点ベースの回収率（万舟のまぐれ当たりを除外した実力ベース）
     # 会場の得意/苦手判定に使用。100円/点で本命対抗のみ買った想定
-    base_purchase = 0
-    base_payout = 0
-    base_races = 0
-    for r in with_result:
-        try:
-            preds = json.loads(r['predictions'])
-        except Exception:
-            continue
-        henkan_str = r['henkan'] if 'henkan' in r.keys() else None
-        base_combos = []
-        for idx, p in enumerate(preds):
-            t = p.get('type') or (TYPE_BY_INDEX[idx] if idx < len(TYPE_BY_INDEX) else '')
-            if t in ('本命', '対抗') and p.get('combo') and not is_henkan_combo(p['combo'], henkan_str):
-                base_combos.append(p['combo'])
-        if not base_combos:
-            continue
-        base_races += 1
-        base_purchase += 100 * len(base_combos)
-        result_combo = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}"
-        if result_combo in base_combos and r['payout']:
-            base_payout += r['payout']
-    recovery_base = round(base_payout / base_purchase * 100, 1) if base_purchase > 0 else 0
+    recovery_base, base_races = _calc_recovery_base(with_result)
 
     # 外れ方内訳（1着は合っていたか？）本命・対抗それぞれ集計
     def calc_miss_breakdown(target_type):

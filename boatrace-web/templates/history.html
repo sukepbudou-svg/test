@@ -1121,15 +1121,10 @@ function renderPayoutFromStats(pattern) {
 const TOKUI_VENUES = ['大村', '福岡', '桐生', '徳山'];
 const KENSHO_VENUES = ['芦屋', '宮島', '常滑', '三国', '浜名湖', '尼崎', '若松', '蒲郡', '多摩川', '住之江', 'びわこ', '津', '丸亀', '児島'];
 
-// レースの判定を復元: 'shobu' | 'kensho' | 'miokuri' | null（データ不足）
+// レースの判定: 'shobu' | 'kensho' | 'miokuri' | null（データ不足）
+// サーバー側(/get_records)で予想画面のバナーと同じロジック（会場の実力回収率による格下げ・昇格込み）を計算済みなのでそれを使う
 function judgeRaceTier(r) {
-  const honmei1 = (r.predictions || []).find(p => p.type === '本命');
-  if (r.nige_rate == null || !honmei1 || honmei1.odds == null) return null;
-  const condOk = r.nige_rate >= 65 && honmei1.odds >= 7;
-  if (!condOk) return 'miokuri';
-  if (TOKUI_VENUES.includes(r.venue)) return 'shobu';
-  if (KENSHO_VENUES.includes(r.venue)) return 'kensho';
-  return 'miokuri';
+  return r.tier !== undefined ? r.tier : null;
 }
 
 // ======== 勝負レース判定別 成績 ========
