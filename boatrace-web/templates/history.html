@@ -1441,7 +1441,7 @@ async function runUraBacktest() {
           ${clearRows}
         </tbody>
       </table>
-      <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">💡 「出動条件3/3」の回収率が高く「1〜2/3」が低ければ、出動ラインが正しく機能している証拠</div>`;
+      <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">💡 分母が最大の「フルクリア」の回収率が一番高く、クリア数が少ないほど低ければ、出動ラインが正しく機能している証拠</div>`;
   } catch(e) {
     el.innerHTML = '<span style="color:var(--accent);font-size:11px;">裏熊バックテストエラー</span>';
   }
