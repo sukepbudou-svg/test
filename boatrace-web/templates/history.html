@@ -414,6 +414,14 @@ h1 {
     <div id="venue-thresholds-result" style="margin-top:10px;overflow-x:auto;"></div>
   </div>
 
+  <!-- 荒れ度検証 -->
+  <div class="chart-card" style="margin-bottom:16px;">
+    <div class="chart-title">🌪 荒れ度スコア検証</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">予想画面の「荒れ度」バーが実際の結果と相関しているかを検証します（入力データ付きレースを対象・絞り込みに連動）</div>
+    <button onclick="runChaosCalibration()" style="padding:6px 16px;background:linear-gradient(135deg,#c2410c,#f97316);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">検証実行</button>
+    <div id="chaos-calibration-result" style="margin-top:10px;overflow-x:auto;"></div>
+  </div>
+
   <!-- 2連単換算チェック -->
   <div class="chart-card" style="margin-bottom:16px;">
     <div class="chart-title">🎯 2連単換算チェック</div>
@@ -1439,6 +1447,47 @@ async function runVenueThresholds() {
     }
     html += `</tbody></table>
       <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">💡 会場ごとに一番回収率が高い（かつレース数が十分な）ラインが、その会場に最適な参戦ラインの目安になります</div>`;
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--accent);font-size:11px;">集計エラー</span>';
+  }
+}
+
+// ======== 荒れ度スコア検証 ========
+async function runChaosCalibration() {
+  const el = document.getElementById('chaos-calibration-result');
+  el.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">集計中...</span>';
+  try {
+    const resp = await fetch('/chaos_calibration', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: currentFilterBody()
+    });
+    const d = await resp.json();
+    const labels = { low: '低め', mid: 'やや高め', high: '高い⚠️' };
+    let html = `<table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead><tr style="color:var(--text-muted);font-size:10px;">
+        <th style="padding:3px 8px;text-align:left;">荒れ度</th>
+        <th style="padding:3px 8px;">レース数</th>
+        <th style="padding:3px 8px;">1号艇以外が1着（荒れ率）</th>
+        <th style="padding:3px 8px;">万舟発生率（100倍以上）</th>
+        <th style="padding:3px 8px;">平均払戻</th>
+      </tr></thead><tbody>`;
+    for (const level of ['low', 'mid', 'high']) {
+      const s = d[level];
+      if (!s || s.races === 0) {
+        html += `<tr style="border-bottom:1px solid var(--border);"><td style="padding:4px 8px;font-weight:700;">${labels[level]}</td><td colspan="4" style="padding:4px 8px;color:var(--text-muted);">該当なし</td></tr>`;
+        continue;
+      }
+      html += `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:4px 8px;font-weight:700;">${labels[level]}</td>
+        <td style="padding:4px 8px;text-align:center;">${s.races}</td>
+        <td style="padding:4px 8px;text-align:center;">${s.upset_rate}%</td>
+        <td style="padding:4px 8px;text-align:center;">${s.manshu_rate}%</td>
+        <td style="padding:4px 8px;text-align:center;">${s.avg_payout != null ? s.avg_payout.toLocaleString() + '円' : '-'}</td>
+      </tr>`;
+    }
+    html += `</tbody></table>
+      <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">💡 荒れ度が「高い」ほど荒れ率・万舟発生率・平均払戻が上がっていれば、荒れ度スコアは信用できるということ</div>`;
     el.innerHTML = html;
   } catch (e) {
     el.innerHTML = '<span style="color:var(--accent);font-size:11px;">集計エラー</span>';

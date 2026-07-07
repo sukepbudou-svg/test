@@ -2170,6 +2170,62 @@ def _filtered_result_rows(data):
     return out
 
 
+@app.route('/chaos_calibration', methods=['POST'])
+def chaos_calibration():
+    """荒れ度スコア（calc_chaos）が実際の結果と相関しているかを検証する。
+    保存済みinput_dataから荒れ度を再計算し、荒れ度帯（低め/やや高め/高い）別に
+    「1号艇以外が1着になった率（荒れ率）」「万舟（オッズ100倍以上）が出た率」「平均払戻」を集計する"""
+    data = request.get_json() or {}
+    rows = _filtered_result_rows(data)
+
+    buckets = {}
+    for r in rows:
+        if not r['input_data'] or not r['result_1st']:
+            continue
+        try:
+            inp = json.loads(r['input_data'])
+            pred = predict(
+                inp.get('boats', []),
+                kimari=inp.get('kimari'),
+                venue=inp.get('venue'),
+                wind=inp.get('wind'),
+                nige_rate=inp.get('nige_rate'),
+                v9_group_b_boost=USE_V9_GROUP_B_BOOST_LIVE,
+            )
+        except Exception:
+            continue
+        chaos = pred.get('chaos') or {}
+        level = chaos.get('level')
+        if not level:
+            continue
+        b = buckets.setdefault(level, {'races': 0, 'upset': 0, 'manshu': 0, 'payout_sum': 0, 'payout_count': 0})
+        b['races'] += 1
+        if str(r['result_1st']) != '1':
+            b['upset'] += 1
+        odds_all = inp.get('odds_all') or {}
+        result_combo = f"{r['result_1st']}-{r['result_2nd']}-{r['result_3rd']}"
+        result_odds = safe_float(odds_all.get(result_combo, 0))
+        if result_odds >= 100:
+            b['manshu'] += 1
+        if r['payout']:
+            b['payout_sum'] += r['payout']
+            b['payout_count'] += 1
+
+    result = {}
+    for level in ('low', 'mid', 'high'):
+        b = buckets.get(level)
+        if not b or b['races'] == 0:
+            result[level] = {'races': 0}
+            continue
+        result[level] = {
+            'races': b['races'],
+            'upset_rate': round(b['upset'] / b['races'] * 100, 1),
+            'manshu_rate': round(b['manshu'] / b['races'] * 100, 1),
+            'avg_payout': round(b['payout_sum'] / b['payout_count']) if b['payout_count'] > 0 else None,
+        }
+    return jsonify(result)
+
+
 @app.route('/venue_nige_thresholds', methods=['POST'])
 def venue_nige_thresholds():
     """得意会場ごとに、逃げ率の絞り込みライン（55/60/65/70/75/80%など）を変えると
