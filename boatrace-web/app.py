@@ -683,6 +683,7 @@ def _score_boat_group(b, venue, group):
     score = 0.0
     if group == 'A':
         et = safe_float(b.get('exhibit_time', 0))
+        avg_st = safe_float(b.get('avg_st', 0))
         exhibit_st = safe_float(b.get('exhibit_st', 0))
         tilt = safe_float(b.get('tilt', 0))
         is_f = b.get('is_f', False)
@@ -694,6 +695,10 @@ def _score_boat_group(b, venue, group):
         avg_mawari = safe_float(b.get('avg_mawari', 0))
         if et > 0:
             score -= (et - 6.7) * 10
+        # 複合モデルのベーススコアは「平均ST」を使っている（展示STではない）ため、
+        # グループA単独でも両方のST情報を反映する（平均ST=通算の癖、展示ST=当日の実際の出足）
+        if avg_st > 0:
+            score -= (avg_st - 0.15) * 8
         if exhibit_st > 0:
             score -= (exhibit_st - 0.15) * 8
         score -= tilt * 2
