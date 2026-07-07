@@ -439,8 +439,9 @@ h1 {
   <div class="chart-card" style="margin-bottom:16px;">
     <div class="chart-title">🤖 逃げ率 自前計算検証（自動化検討用）</div>
     <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">
-      公式サイトの過去結果を複数まとめて取得し、「1号艇が逃げで1着になった率」を自前で計算します。ボートレース日和の逃げ率と数字を見比べて精度を確認してください。<br>
-      <b style="color:var(--accent);">⚠️ サーバー負荷対策のため期間は短め（1〜2週間程度）にしてください。1回の実行で最大150リクエストまでです（時間がかかります）</b>
+      公式サイトの過去結果を複数まとめて取得し、「1号艇が逃げで1着になった率」を自前で計算します。<br>
+      <b style="color:var(--yellow);">⚠️ ボートレース日和の逃げ率は「直近6ヶ月」等の長期平均です。1週間程度の短い期間と比べても数字がブレて意味がないので、比較するときは3〜4週間以上の期間で実行してください（目安として同じくらいの数値の範囲に収まっていればOK、完全一致は求めなくて大丈夫です）</b><br>
+      <b style="color:var(--accent);">サーバー負荷対策のため1回の実行で最大300リクエストまでです（時間がかかります。長い期間は複数回に分けて実行してください）</b>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
       <select id="scrape-venue" style="padding:5px 8px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:11px;"></select>
@@ -1263,11 +1264,21 @@ async function runNigeScrape() {
       el.innerHTML = `<span style="color:var(--accent);">結果が取得できたレースが0件でした（${d.requests_made}件アクセス）。期間内に開催があったか確認してください</span>`;
       return;
     }
+    const rows = (d.races || []).map(r =>
+      `<tr style="border-bottom:1px solid var(--border);"><td style="padding:2px 6px;">${r.race_date}</td><td style="padding:2px 6px;text-align:center;">${r.race_no}R</td><td style="padding:2px 6px;text-align:center;">${r.result_1st}号艇</td><td style="padding:2px 6px;text-align:center;color:${r.kimari === '逃げ' ? 'var(--green)' : 'var(--text-muted)'};">${r.kimari || '(不明)'}</td></tr>`
+    ).join('');
     el.innerHTML = `
       <div>対象: ${d.venue}（${d.date_from}〜${d.date_to}）／ 取得できたレース: <b>${d.total_races}件</b>（アクセス${d.requests_made}回）</div>
       <div style="margin-top:6px;">1号艇1着率: <b>${d.boat1_win_rate}%</b>（${d.boat1_wins}/${d.total_races}）</div>
       <div style="font-size:14px;font-weight:900;color:#42a5f5;margin-top:4px;">自前計算の逃げ率: ${d.nige_rate}%（${d.nige_wins}/${d.total_races}）</div>
-      <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">💡 この数字を、同じ会場・同じ期間のボートレース日和の逃げ率と見比べてください。近ければ自前計算が使える可能性が高いです</div>`;
+      <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">💡 この数字を、同じ会場・同じくらいの期間のボートレース日和の逃げ率（直近6ヶ月等）と見比べてください。近い範囲に収まっていれば自前計算が使える可能性が高いです</div>
+      <details style="margin-top:8px;">
+        <summary style="cursor:pointer;font-size:11px;color:var(--accent3);">📋 対象レースの内訳を見る（${d.total_races}件）</summary>
+        <table style="width:100%;border-collapse:collapse;font-size:10px;margin-top:6px;">
+          <thead><tr style="color:var(--text-muted);"><th style="padding:2px 6px;text-align:left;">日付</th><th style="padding:2px 6px;">R</th><th style="padding:2px 6px;">1着</th><th style="padding:2px 6px;">決まり手</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </details>`;
   } catch (e) {
     el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
   }

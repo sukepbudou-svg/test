@@ -1456,7 +1456,7 @@ def scrape_nige_stats():
     date_from = data.get('date_from', '')
     date_to = data.get('date_to', '')
     race_nos = data.get('race_nos') or list(range(1, 13))
-    max_requests = min(int(data.get('max_requests', 50)), 150)  # 1回の実行での上限（サーバー負荷対策）
+    max_requests = min(int(data.get('max_requests', 50)), 300)  # 1回の実行での上限（サーバー負荷対策）
 
     if not venue or not date_from or not date_to:
         return jsonify({'error': '会場・開始日・終了日を指定してください'})
@@ -1478,7 +1478,7 @@ def scrape_nige_stats():
     total_races = 0
     nige_wins = 0     # 1号艇が逃げで1着
     boat1_wins = 0    # 1号艇が1着（決まり手不問）
-    errors = []
+    races_detail = []  # どの日付・何レースが対象になったか（検証用の内訳）
     requests_made = 0
 
     for race_date in dates:
@@ -1498,6 +1498,7 @@ def scrape_nige_stats():
             r1 = int(m_boats[0])
             kimari = _parse_kimari_from_html(html)
             total_races += 1
+            races_detail.append({'race_date': race_date, 'race_no': race_no, 'result_1st': r1, 'kimari': kimari})
             if r1 == 1:
                 boat1_wins += 1
                 if kimari == '逃げ':
@@ -1516,6 +1517,7 @@ def scrape_nige_stats():
         'boat1_win_rate': boat1_win_rate,
         'nige_wins': nige_wins,
         'nige_rate': nige_rate,
+        'races': races_detail,
     })
 
 
