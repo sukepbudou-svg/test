@@ -2158,6 +2158,40 @@ def _filtered_result_rows(data):
     return out
 
 
+@app.route('/venue_nige_thresholds', methods=['POST'])
+def venue_nige_thresholds():
+    """得意会場ごとに、逃げ率の絞り込みライン（55/60/65/70/75/80%など）を変えると
+    実力回収率・レース数がどう変わるかを一覧比較する（本命+対抗5点ベース・裏熊は除外・全期間対象）"""
+    data = request.get_json() or {}
+    venues = data.get('venues') or TOKUI_VENUES
+    thresholds = data.get('thresholds') or [55, 60, 65, 70, 75, 80]
+    if not venues:
+        return jsonify({})
+
+    conn = get_db()
+    placeholders = ','.join('?' * len(venues))
+    rows = conn.execute(
+        f"SELECT venue, nige_rate, predictions, result_1st, result_2nd, result_3rd, payout, henkan "
+        f"FROM records WHERE result_1st IS NOT NULL AND venue IN ({placeholders})",
+        venues
+    ).fetchall()
+    conn.close()
+
+    # 裏熊レコードは除外（本命/対抗の参戦ライン検討のため）
+    normal_rows = [r for r in rows if '"裏熊"' not in (r['predictions'] or '')]
+
+    result = {}
+    for v in venues:
+        v_rows = [r for r in normal_rows if r['venue'] == v]
+        thresh_list = []
+        for t in thresholds:
+            band_rows = [r for r in v_rows if r['nige_rate'] is not None and r['nige_rate'] >= t]
+            rec, cnt = _calc_recovery_base(band_rows)
+            thresh_list.append({'threshold': t, 'races': cnt, 'recovery_base': rec})
+        result[v] = thresh_list
+    return jsonify(result)
+
+
 @app.route('/nirentan_check', methods=['POST'])
 def nirentan_check():
     """2連単換算チェック: 本命/対抗の各コンボを1-2着だけに切り詰めて、

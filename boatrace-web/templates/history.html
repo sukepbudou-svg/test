@@ -401,6 +401,14 @@ h1 {
     <div id="ura-backtest-result" style="margin-top:10px;"></div>
   </div>
 
+  <!-- 会場別・逃げ率ライン比較 -->
+  <div class="chart-card" style="margin-bottom:16px;">
+    <div class="chart-title">📐 会場別・逃げ率ライン比較</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">得意会場ごとに、逃げ率の絞り込みラインを変えると実力回収率・レース数がどう変わるかを一覧比較します（本命+対抗5点ベース・裏熊除く・全期間対象）</div>
+    <button onclick="runVenueThresholds()" style="padding:6px 16px;background:linear-gradient(135deg,#00796b,#26a69a);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">検証実行</button>
+    <div id="venue-thresholds-result" style="margin-top:10px;overflow-x:auto;"></div>
+  </div>
+
   <!-- 2連単換算チェック -->
   <div class="chart-card" style="margin-bottom:16px;">
     <div class="chart-title">🎯 2連単換算チェック</div>
@@ -1378,6 +1386,42 @@ async function runBacktest() {
       </table>${v3Html}${recoveryHtml}`;
   } catch(e) {
     el.innerHTML = '<span style="color:var(--accent);font-size:11px;">バックテスト実行エラー</span>';
+  }
+}
+
+// ======== 会場別・逃げ率ライン比較 ========
+async function runVenueThresholds() {
+  const el = document.getElementById('venue-thresholds-result');
+  el.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">集計中...</span>';
+  try {
+    const resp = await fetch('/venue_nige_thresholds', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ venues: TOKUI_VENUES })
+    });
+    const d = await resp.json();
+    const thresholds = Object.values(d)[0]?.map(x => x.threshold) || [];
+    let html = `<table style="width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap;">
+      <thead><tr style="color:var(--text-muted);font-size:10px;">
+        <th style="padding:3px 8px;text-align:left;">会場</th>
+        ${thresholds.map(t => `<th style="padding:3px 8px;">${t}%以上</th>`).join('')}
+      </tr></thead><tbody>`;
+    for (const [venue, rows] of Object.entries(d)) {
+      html += `<tr style="border-bottom:1px solid var(--border);"><td style="padding:4px 8px;font-weight:700;">${venue}</td>`;
+      for (const r of rows) {
+        if (r.races === 0) {
+          html += `<td style="padding:4px 8px;text-align:center;color:var(--text-muted);">-</td>`;
+        } else {
+          const col = r.recovery_base >= 100 ? 'var(--green)' : r.recovery_base >= 80 ? 'var(--yellow)' : 'var(--accent)';
+          html += `<td style="padding:4px 8px;text-align:center;"><span style="color:${col};font-weight:700;">${r.recovery_base}%</span><br><span style="font-size:9px;color:var(--text-muted);">${r.races}レース</span></td>`;
+        }
+      }
+      html += `</tr>`;
+    }
+    html += `</tbody></table>
+      <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">💡 会場ごとに一番回収率が高い（かつレース数が十分な）ラインが、その会場に最適な参戦ラインの目安になります</div>`;
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--accent);font-size:11px;">集計エラー</span>';
   }
 }
 
