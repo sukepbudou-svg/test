@@ -674,6 +674,110 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
     }
 
 
+def _score_boat_group(b, venue, group):
+    """単一要素モデル比較用（2026-07-07・検証段階）: 通常モデルの要素を
+    グループA「当日の調子」（展示タイム・展示ST・チルト・周回/直線/まわり足）と
+    グループB「地力・機材」（選手勝率・級別・モーター・会場×コース別1着率）に分け、
+    片方のグループの要素だけでスコアを算出する。本命/対抗/裏熊/中穴のロジックには影響しない"""
+    course = int(b.get('course', b.get('boat_number', 1)))
+    score = 0.0
+    if group == 'A':
+        et = safe_float(b.get('exhibit_time', 0))
+        exhibit_st = safe_float(b.get('exhibit_st', 0))
+        tilt = safe_float(b.get('tilt', 0))
+        is_f = b.get('is_f', False)
+        lap = safe_float(b.get('lap', 0))
+        avg_lap = safe_float(b.get('avg_lap', 0))
+        straight = safe_float(b.get('straight', 0))
+        avg_straight = safe_float(b.get('avg_straight', 0))
+        mawariashi = safe_float(b.get('mawariashi', 0))
+        avg_mawari = safe_float(b.get('avg_mawari', 0))
+        if et > 0:
+            score -= (et - 6.7) * 10
+        if exhibit_st > 0:
+            score -= (exhibit_st - 0.15) * 8
+        score -= tilt * 2
+        if is_f:
+            score -= 1.5
+        if lap > 0 and avg_lap > 0:
+            score += (36.0 - (lap * 0.6 + avg_lap * 0.4)) * 0.5
+        elif lap > 0:
+            score += (36.0 - lap) * 0.5
+        if straight > 0 and avg_straight > 0:
+            score += (6.5 - (straight * 0.6 + avg_straight * 0.4)) * 3.0
+        elif straight > 0:
+            score += (6.5 - straight) * 3.0
+        if mawariashi > 0 and avg_mawari > 0:
+            score += (5.0 - (mawariashi * 0.6 + avg_mawari * 0.4)) * 0.5
+        elif mawariashi > 0:
+            score += (5.0 - mawariashi) * 0.5
+    else:  # group == 'B'
+        win1 = safe_float(b.get('win1_rate', 0))
+        win2 = safe_float(b.get('win2_rate', 0))
+        motor_win1 = safe_float(b.get('motor_win1', 0))
+        motor_contrib = safe_float(b.get('motor_contrib', 0))
+        player_class = b.get('player_class', '')
+        class_bonus = {'A1': 0.8, 'A2': 0.4, 'B1': 0.0, 'B2': -0.5}.get(player_class, 0.0)
+        score += class_bonus
+        score += win1 * 0.3 + win2 * 0.1
+        score += motor_win1 * 0.15 + motor_contrib * 0.05
+        course_rates = VENUE_COURSE_RATES.get(venue, DEFAULT_COURSE_RATES)
+        score += course_rates[course - 1] * 0.1
+    return score
+
+
+def predict_single_factor(boats, venue=None, group='A'):
+    """単一要素モデル比較用の簡易予想（本命2点+対抗3点、複合スコアのみで選定。
+    v6ハイブリッドやv7の3着差し替えなどは使わず、純粋にスコア順だけで選ぶ）"""
+    scores = []
+    for b in boats:
+        course = int(b.get('course', b.get('boat_number', 1)))
+        scores.append({'boat': b, 'score': _score_boat_group(b, venue, group), 'course': course})
+    scores.sort(key=lambda x: x['score'], reverse=True)
+
+    candidates = []
+    seen = set()
+    for s1 in scores[:4]:
+        bn1 = s1['boat']['boat_number']
+        seconds = [s for s in scores if s['boat']['boat_number'] != bn1]
+        for s2 in seconds[:4]:
+            bn2 = s2['boat']['boat_number']
+            for s3 in scores:
+                bn3 = s3['boat']['boat_number']
+                if bn3 in (bn1, bn2):
+                    continue
+                combo = f"{bn1}-{bn2}-{bn3}"
+                if combo not in seen:
+                    seen.add(combo)
+                    combined = s1['score'] * 3 + s2['score'] * 2 + s3['score']
+                    candidates.append({'combo': combo, 'combined': combined})
+                if len(candidates) >= 60:
+                    break
+            if len(candidates) >= 60:
+                break
+        if len(candidates) >= 60:
+            break
+    candidates.sort(key=lambda x: x['combined'], reverse=True)
+
+    top_bn = scores[0]['boat']['boat_number']
+    honmei = [c for c in candidates if c['combo'].startswith(f"{top_bn}-")][:2]
+    used = {c['combo'] for c in honmei}
+    taikou = []
+    for c in candidates:
+        if len(taikou) >= 3:
+            break
+        if c['combo'] not in used:
+            taikou.append(c)
+            used.add(c['combo'])
+
+    results = []
+    for c in honmei:
+        results.append({'combo': c['combo'], 'type': '本命', 'combined': round(c['combined'], 2)})
+    for c in taikou:
+        results.append({'combo': c['combo'], 'type': '対抗', 'combined': round(c['combined'], 2)})
+    return {'predictions': results}
+
+
 MIN_CHOTENKAI_TRIALS = 3  # 超展開データの試行回数がこれ未満なら信頼度不足として使わない
 
 
@@ -1769,7 +1873,10 @@ def backtest():
         'v7b':     {'v5': False, 'fix2nd': False, 'third': True,  'label': 'v6+3着差し替えのみ = v7（現在の実戦）'},
         'v7':      {'v5': False, 'fix2nd': True,  'third': True,  'label': 'v6+v7フル（2着修正込み・不採用）'},
         'full':    {'v5': True,  'fix2nd': True,  'third': True,  'label': 'v5+v7全部入り（不採用要素込み）'},
+        'groupA':  {'v5': False, 'fix2nd': False, 'third': False, 'label': 'グループA単独（当日の調子: 展示タイム/ST/チルト/周回直線まわり足）'},
+        'groupB':  {'v5': False, 'fix2nd': False, 'third': False, 'label': 'グループB単独（地力・機材: 選手勝率/級別/モーター/会場コース別）'},
     }
+    is_group_variant = variant in ('groupA', 'groupB')
     vconf = VARIANTS.get(variant, VARIANTS['full'])
     use_v5 = vconf['v5']
     use_fix2nd = vconf['fix2nd']
@@ -1842,17 +1949,22 @@ def backtest():
 
         # 現行ロジックで再予想（variantで検証対象を切り替え）
         try:
-            new_result = predict(
-                inp.get('boats', []),
-                kimari=inp.get('kimari'),
-                venue=inp.get('venue'),
-                wind=inp.get('wind'),
-                nige_rate=inp.get('nige_rate'),
-                kimari_full=inp.get('kimari_full') if use_v5 else None,
-                hybrid_taikou=True,  # v6ハイブリッド対抗（採用済み）は常にON
-                v7_fix2nd=use_fix2nd,
-                v7_third=use_third,
-            )
+            if is_group_variant:
+                # 単一要素モデル比較: グループA/Bのみのスコアで再予想（v6/v7とは別の簡易ロジック）
+                new_result = predict_single_factor(inp.get('boats', []), venue=inp.get('venue'),
+                                                    group='A' if variant == 'groupA' else 'B')
+            else:
+                new_result = predict(
+                    inp.get('boats', []),
+                    kimari=inp.get('kimari'),
+                    venue=inp.get('venue'),
+                    wind=inp.get('wind'),
+                    nige_rate=inp.get('nige_rate'),
+                    kimari_full=inp.get('kimari_full') if use_v5 else None,
+                    hybrid_taikou=True,  # v6ハイブリッド対抗（採用済み）は常にON
+                    v7_fix2nd=use_fix2nd,
+                    v7_third=use_third,
+                )
             new_preds = new_result['predictions']
         except Exception:
             continue
