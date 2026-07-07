@@ -2102,6 +2102,7 @@ def nirentan_check():
     stats = {
         '本命': {'hits': 0, 'total': 0, 'purchase': 0, 'payout': 0, 'has_odds_races': 0},
         '対抗': {'hits': 0, 'total': 0, 'purchase': 0, 'payout': 0, 'has_odds_races': 0},
+        '裏熊': {'hits': 0, 'total': 0, 'purchase': 0, 'payout': 0, 'has_odds_races': 0},
     }
 
     for r in rows:
@@ -2119,7 +2120,7 @@ def nirentan_check():
         henkan_str = r['henkan'] if 'henkan' in r.keys() else None
         henkan_boats = set((henkan_str or '').split(',')) if henkan_str else set()
 
-        for t in ('本命', '対抗'):
+        for t in ('本命', '対抗', '裏熊'):
             combos = []
             for idx, p in enumerate(preds):
                 pt = p.get('type') or (TYPE_BY_INDEX[idx] if idx < len(TYPE_BY_INDEX) else '')
