@@ -422,6 +422,19 @@ h1 {
     <div id="chaos-calibration-result" style="margin-top:10px;overflow-x:auto;"></div>
   </div>
 
+  <!-- 決まり手調査ツール（自動化検討用・一時ツール） -->
+  <div class="chart-card" style="margin-bottom:16px;">
+    <div class="chart-title">🔧 決まり手調査ツール（自動化検討用）</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">公式サイトの結果ページに「決まり手」（逃げ・差し・まくり等）が載っているか確認します。結果が出ている過去のレースを1つ指定してください</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+      <select id="debug-venue" style="padding:5px 8px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:11px;"></select>
+      <input type="number" id="debug-race-no" placeholder="レース番号(例:1)" min="1" max="12" style="width:120px;padding:5px 8px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:11px;">
+      <input type="date" id="debug-race-date" style="padding:5px 8px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:11px;">
+      <button onclick="runKimariCheck()" style="padding:6px 16px;background:linear-gradient(135deg,#455a64,#78909c);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">確認する</button>
+    </div>
+    <div id="kimari-check-result" style="margin-top:10px;font-size:12px;"></div>
+  </div>
+
   <!-- 2連単換算チェック -->
   <div class="chart-card" style="margin-bottom:16px;">
     <div class="chart-title">🎯 2連単換算チェック</div>
@@ -1163,6 +1176,46 @@ function renderPayoutFromStats(pattern) {
 const TOKUI_VENUES = ['大村', '福岡', '桐生', '徳山', '若松'];
 const KENSHO_VENUES = ['宮島', '常滑', '三国', '尼崎', '蒲郡', '多摩川', 'びわこ', '津', '丸亀'];
 
+// 全24会場（app.pyのVENUE_CODESと同期。決まり手調査ツールの会場プルダウン用）
+const ALL_VENUES = ['桐生', '戸田', '江戸川', '平和島', '多摩川', '浜名湖', '蒲郡', '常滑', '津', '三国',
+  'びわこ', '住之江', '尼崎', '鳴門', '丸亀', '児島', '宮島', '徳山', '下関', '若松', '芦屋', '福岡', '唐津', '大村'];
+
+function populateDebugVenueSelect() {
+  const sel = document.getElementById('debug-venue');
+  if (!sel || sel.options.length > 0) return;
+  sel.innerHTML = ALL_VENUES.map(v => `<option value="${v}">${v}</option>`).join('');
+}
+
+async function runKimariCheck() {
+  populateDebugVenueSelect();
+  const venue = document.getElementById('debug-venue').value;
+  const raceNo = document.getElementById('debug-race-no').value;
+  const raceDate = document.getElementById('debug-race-date').value;
+  const el = document.getElementById('kimari-check-result');
+  if (!venue || !raceNo || !raceDate) {
+    el.innerHTML = '<span style="color:var(--accent);">会場・レース番号・日付をすべて入力してください</span>';
+    return;
+  }
+  el.innerHTML = '<span style="color:var(--text-muted);">取得中...</span>';
+  try {
+    const resp = await fetch('/debug_html', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ venue, race_no: parseInt(raceNo, 10), race_date: raceDate })
+    });
+    const d = await resp.json();
+    if (d.error) {
+      el.innerHTML = `<span style="color:var(--accent);">エラー: ${d.error}</span>`;
+      return;
+    }
+    const foundHtml = d.kimari_found
+      ? `<span style="color:var(--green);font-weight:700;">✓ 「決まり手」が見つかりました！</span>`
+      : `<span style="color:var(--accent);font-weight:700;">✗ 「決まり手」は見つかりませんでした</span>`;
+    el.innerHTML = `${foundHtml}<div style="margin-top:6px;font-size:11px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;">${d.kimari_snippet}</div>`;
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
+  }
+}
+
 // レースの判定: 'shobu' | 'kensho' | 'miokuri' | null（データ不足）
 // サーバー側(/get_records)で予想画面のバナーと同じロジック（会場の実力回収率による格下げ・昇格込み）を計算済みなのでそれを使う
 function judgeRaceTier(r) {
@@ -1886,6 +1939,7 @@ document.getElementById('modal').addEventListener('click', function(e) {
 });
 
 loadRecords();
+populateDebugVenueSelect();
 </script>
 </body>
 </html>
