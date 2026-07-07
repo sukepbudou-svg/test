@@ -2221,6 +2221,9 @@ const TYPE_ORDER = ['本命', '対抗', '中穴', '万舟'];
 // 得意会場: 勝負レース対象。検証中: データ蓄積で判定。それ以外: 対象外
 const TOKUI_VENUES = ['大村', '福岡', '桐生', '徳山', '若松'];
 const KENSHO_VENUES = ['宮島', '常滑', '三国', '尼崎', '蒲郡', '多摩川', 'びわこ', '津', '丸亀'];
+// 会場別・逃げ率の参戦ライン（2026-07-07実装。app.pyのVENUE_NIGE_THRESHOLDと同期すること）
+const VENUE_NIGE_THRESHOLD = { '大村': 60, '若松': 60 };
+function nigeThresholdFor(venue) { return VENUE_NIGE_THRESHOLD[venue] || 65; }
 const TYPE_LIMITS = { '本命': 2, '対抗': 3, '中穴': 1, '万舟': 2 };
 
 function classifyByOdds(candidates) {
@@ -2329,10 +2332,11 @@ function renderResult(data, mode = 'normal') {
   if (mode === 'normal') {
     const reasons = [];
     const warns = [];
-    // 条件1: イン逃げ率
+    // 条件1: イン逃げ率（会場別の参戦ラインを使用。デフォルト65%、大村・若松は60%）
+    const nigeThreshold = nigeThresholdFor(venueVal);
     if (lastNigeRate != null) {
-      if (lastNigeRate >= 65) reasons.push(`イン逃げ率${lastNigeRate.toFixed(1)}%`);
-      else warns.push(`イン逃げ率${lastNigeRate.toFixed(1)}%（65%未満）`);
+      if (lastNigeRate >= nigeThreshold) reasons.push(`イン逃げ率${lastNigeRate.toFixed(1)}%`);
+      else warns.push(`イン逃げ率${lastNigeRate.toFixed(1)}%（${nigeThreshold}%未満）`);
     } else {
       warns.push('イン逃げ率 未入力');
     }
@@ -2381,7 +2385,7 @@ function renderResult(data, mode = 'normal') {
     if (venueVal) {
       const hasNige = lastNigeRate != null;
       // 下限=今回の逃げ率を5%刻みで切り下げ、上限=100%（下のレースを混ぜない）
-      const bandMin = hasNige ? (lastNigeRate >= 65 ? 65 : Math.floor(lastNigeRate / 5) * 5) : 0;
+      const bandMin = hasNige ? (lastNigeRate >= nigeThreshold ? nigeThreshold : Math.floor(lastNigeRate / 5) * 5) : 0;
       const bandMax = 100;
       const fetchStats = (nMin, nMax) => fetch('/history_stats', {
         method: 'POST', headers: {'Content-Type':'application/json'},

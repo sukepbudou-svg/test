@@ -101,6 +101,16 @@ USE_V9_GROUP_B_BOOST_LIVE = True
 TOKUI_VENUES = ['大村', '福岡', '桐生', '徳山', '若松']
 KENSHO_VENUES = ['宮島', '常滑', '三国', '尼崎', '蒲郡', '多摩川', 'びわこ', '津', '丸亀']
 
+# 会場別・逃げ率の参戦ライン（2026-07-07実装。デフォルトは65%だが、/venue_nige_thresholdsの
+# 検証結果を受けて会場ごとに個別最適化する。大村・若松は60%の方がレース数も多く回収率も
+# 良かったため引き下げ）。index.html/history.htmlの同名定数と同期すること
+DEFAULT_NIGE_THRESHOLD = 65
+VENUE_NIGE_THRESHOLD = {'大村': 60, '若松': 60}
+
+
+def _nige_threshold(venue):
+    return VENUE_NIGE_THRESHOLD.get(venue, DEFAULT_NIGE_THRESHOLD)
+
 TYPE_BY_INDEX_BASE = ['本命', '本命', '対抗', '対抗', '対抗', '万舟', '万舟']
 
 
@@ -162,7 +172,8 @@ def _judge_tier(venue, nige_rate, honmei_odds, venue_rows_by_venue):
     成績記録のtier表示をバナーと一致させるための共通判定。"""
     if venue is None or nige_rate is None or honmei_odds is None:
         return None
-    cond_ok = nige_rate >= 65 and honmei_odds >= 7
+    threshold = _nige_threshold(venue)
+    cond_ok = nige_rate >= threshold and honmei_odds >= 7
     if not cond_ok:
         return 'miokuri'
     if venue in TOKUI_VENUES:
@@ -173,7 +184,7 @@ def _judge_tier(venue, nige_rate, honmei_odds, venue_rows_by_venue):
         tier_base = 'other'
 
     rows = venue_rows_by_venue.get(venue, [])
-    band_min = 65 if nige_rate >= 65 else math.floor(nige_rate / 5) * 5
+    band_min = threshold if nige_rate >= threshold else math.floor(nige_rate / 5) * 5
     band_rows = [r for r in rows if r['nige_rate'] is not None and r['nige_rate'] >= band_min]
     rec_base, cnt = _calc_recovery_base(band_rows)
     if cnt < 10:
@@ -1521,9 +1532,10 @@ def stats_summary():
     ).fetchall()
     conn.close()
 
-    # イン逃げ率帯フィルタ（5%単位切り捨てを下限にする。ただし65%以上は一律65%以上でまとめる）
+    # イン逃げ率帯フィルタ（5%単位切り捨てを下限にする。ただし参戦ライン以上は一律その値でまとめる）
     if nige_rate is not None:
-        nige_min = 65 if nige_rate >= 65 else math.floor(nige_rate / 5) * 5
+        threshold = _nige_threshold(venue)
+        nige_min = threshold if nige_rate >= threshold else math.floor(nige_rate / 5) * 5
         filtered = [r for r in rows if r['nige_rate'] is not None and r['nige_rate'] >= nige_min]
     else:
         nige_min = None
@@ -2541,10 +2553,10 @@ def weekly_report():
             'profit': payout - purchase,
         }
 
-    # ✅勝負レース相当（得意会場+逃げ率65%+本命1点目7倍以上）
+    # ✅勝負レース相当（得意会場+逃げ率が会場別参戦ライン以上+本命1点目7倍以上）
     shobu_rows = []
     for r in normal_rows:
-        if r['nige_rate'] is None or r['nige_rate'] < 65 or r['venue'] not in TOKUI_VENUES:
+        if r['venue'] not in TOKUI_VENUES or r['nige_rate'] is None or r['nige_rate'] < _nige_threshold(r['venue']):
             continue
         try:
             preds = json.loads(r['predictions'])
