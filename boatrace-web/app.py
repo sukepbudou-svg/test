@@ -112,6 +112,24 @@ def is_henkan_combo(combo, henkan_str):
     return any(b in henkan_boats for b in combo.split('-'))
 
 
+def _ura_clear_label(ura_judge, arekote_predictions, odds_all):
+    """裏熊の出動条件クリア数を「n/4」形式で返す（実戦画面のオッズ妙味込み4条件と揃える）。
+    (clear_label, new_combos)を返す。new_combosはオッズ足切り後の買い目リスト"""
+    conds = (ura_judge or {}).get('conds') or {}
+    raw_combos = [p['combo'] for p in (arekote_predictions or [])]
+    new_combos = raw_combos
+    if odds_all:
+        new_combos = [c for c in raw_combos if safe_float(odds_all.get(c, 999)) >= 20]
+    clear = conds.get('clear', 0)
+    total = conds.get('total', 3)
+    if odds_all:
+        all_cut = len(raw_combos) > 0 and len(new_combos) == 0
+        total += 1
+        if not all_cut:
+            clear += 1
+    return f"{clear}/{total}", new_combos
+
+
 def _calc_recovery_base(with_result_rows):
     """本命+対抗5点ベースの回収率（万舟のまぐれ当たりを除外した実力値）。(recovery_base, race_count) を返す"""
     base_purchase = 0
@@ -1410,13 +1428,13 @@ def get_records():
     period = request.args.get('period', 'all')
     conn = get_db()
     if period == 'today':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
     elif period == 'week':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
     elif period == 'month':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
     else:
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records ORDER BY id DESC").fetchall()
     conn.close()
 
     # tier判定用: 結果が出ている全レコードを会場別にまとめておく（期間フィルタと無関係に全期間で判定）
@@ -1438,6 +1456,28 @@ def get_records():
         cache_key = (r['venue'], r['nige_rate'], honmei_odds)
         if cache_key not in tier_cache:
             tier_cache[cache_key] = _judge_tier(r['venue'], r['nige_rate'], honmei_odds, venue_rows_by_venue)
+
+        # 裏熊レコードの出動条件クリア数（n/4）を再計算して表示用に付与
+        ura_clear = None
+        is_ura = any(p.get('type') == '裏熊' for p in preds)
+        if is_ura and r['input_data']:
+            try:
+                inp = json.loads(r['input_data'])
+                pred = predict(
+                    inp.get('boats', []),
+                    kimari=inp.get('kimari'),
+                    venue=inp.get('venue'),
+                    wind=inp.get('wind'),
+                    nige_rate=inp.get('nige_rate'),
+                    force_arekote=True,
+                    kimari_full=inp.get('kimari_full'),
+                    extra_stats=inp.get('extra_stats'),
+                    v9_group_b_boost=USE_V9_GROUP_B_BOOST_LIVE,
+                )
+                ura_clear, _ = _ura_clear_label(pred.get('ura_judge'), pred.get('arekote_predictions'), inp.get('odds_all') or {})
+            except Exception:
+                ura_clear = None
+
         records.append({
             'id': r['id'],
             'race_date': r['race_date'],
@@ -1456,6 +1496,7 @@ def get_records():
             'henkan': r['henkan'] if 'henkan' in r.keys() else None,
             'is_womens': bool(r['is_womens']) if 'is_womens' in r.keys() and r['is_womens'] is not None else False,
             'tier': tier_cache[cache_key],
+            'ura_clear': ura_clear,
         })
     return jsonify(records)
 
@@ -1700,13 +1741,13 @@ def history_stats():
 
     conn = get_db()
     if period == 'today':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
     elif period == 'week':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
     elif period == 'month':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
     else:
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens FROM records ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records ORDER BY id DESC").fetchall()
     conn.close()
 
     # フィルター適用
@@ -2237,22 +2278,7 @@ def ura_backtest():
         except Exception:
             continue
         ura = pred.get('ura_judge') or {}
-        conds = ura.get('conds') or {}
-        raw_combos = [p['combo'] for p in (pred.get('arekote_predictions') or [])]
-        new_combos = raw_combos
-        # オッズ足切り（20倍未満）を再現
-        if odds_all:
-            new_combos = [c for c in raw_combos if safe_float(odds_all.get(c, 999)) >= 20]
-        # 実戦画面（index.html）はオッズ妙味を4つ目の出動条件として扱い「n/4」表示にしているため、
-        # ここでも同じ基準でclear/totalを揃える（揃えないとバックテストの「n/3」と実戦の「n/4」がズレる）
-        clear = conds.get('clear', 0)
-        total = conds.get('total', 3)
-        if odds_all:
-            all_cut = len(raw_combos) > 0 and len(new_combos) == 0
-            total += 1
-            if not all_cut:
-                clear += 1
-        clear_label = f"{clear}/{total}"
+        clear_label, new_combos = _ura_clear_label(ura, pred.get('arekote_predictions'), odds_all)
         if new_combos:
             current_stats['races'] += 1
             current_stats['purchase'] += 100 * len(new_combos)

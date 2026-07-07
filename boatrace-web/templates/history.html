@@ -829,6 +829,8 @@ function renderRecords() {
     if (tier === 'shobu') shobuBadge = ' <span style="font-size:9px;color:var(--green);font-weight:700;white-space:nowrap;">✅勝負</span>';
     else if (tier === 'kensho') shobuBadge = ' <span style="font-size:9px;color:var(--blue);white-space:nowrap;">🔍検証</span>';
     else if (tier === 'miokuri') shobuBadge = ' <span style="font-size:9px;color:var(--yellow);white-space:nowrap;">⚠️見送</span>';
+    // 🐻裏熊の出動条件クリア数（n/4）。サーバー側(/get_records)で入力データから再計算済み
+    if (r.ura_clear) shobuBadge += ` <span style="font-size:9px;color:#d95cff;font-weight:700;white-space:nowrap;">🐻${r.ura_clear}</span>`;
 
     return `<tr data-id="${r.id}">
       <td>${r.race_date}</td>
