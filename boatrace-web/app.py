@@ -1290,11 +1290,17 @@ def debug_html():
     trio_idx = html.find('3連単')
     trio_snippet = html[trio_idx:trio_idx+2000].replace('\n', ' ') if trio_idx >= 0 else '(3連単 not found)'
 
+    # 決まり手（逃げ/差し/まくり等）が公式ページに含まれているか調査（自動化v-auto検討用）
+    kimari_idx = html.find('決まり手')
+    kimari_snippet = html[max(0, kimari_idx - 50):kimari_idx + 300].replace('\n', ' ') if kimari_idx >= 0 else '(決まり手 not found)'
+
     return jsonify({
         'url': url,
         'html_length': len(html),
         'boatcolor_snippets': snippets,
         'trio_section': trio_snippet,
+        'kimari_found': kimari_idx >= 0,
+        'kimari_snippet': kimari_snippet,
         'saved_to': save_path,
     })
 
