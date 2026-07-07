@@ -264,7 +264,7 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
-def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_arekote=False, kimari_full=None, hybrid_taikou=False, v7_fix2nd=False, v7_third=False, extra_stats=None):
+def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_arekote=False, kimari_full=None, hybrid_taikou=False, v7_fix2nd=False, v7_third=False, extra_stats=None, v9_group_b_boost=False, v9_cho_tenkai=False):
     # 会場プロファイル取得
     vp = VENUE_PROFILES.get(venue, {"in_rate": 0.0, "upset": 0.5, "wind": 0.5})
     wind_bonus = WIND_UPSET_BONUS.get(wind, 0.0)
@@ -302,10 +302,15 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
         if is_f:
             base -= 1.5
 
+        # v9候補（2026-07-07検証用）: グループB（選手勝率・級別・モーター・会場コース別）の
+        # 重みを1.5倍にする。単一要素検証で本命的中率がグループB単独の方が複合モデルより
+        # 高かった（14% vs 12.5%）ことを受けての実験。本命/対抗/裏熊/中穴の通常ロジックには影響しない
+        group_b_mult = 1.5 if v9_group_b_boost else 1.0
+
         # 級別ST修正能力補正（展示STが悪い時ほど級の差が出る）
         exhibit_st = safe_float(b.get('exhibit_st', 0))
         st_penalty = max(0, (exhibit_st - 0.15)) if exhibit_st > 0 else 0
-        class_bonus = {'A1': 0.8, 'A2': 0.4, 'B1': 0.0, 'B2': -0.5}.get(player_class, 0.0)
+        class_bonus = {'A1': 0.8, 'A2': 0.4, 'B1': 0.0, 'B2': -0.5}.get(player_class, 0.0) * group_b_mult
         base += class_bonus * (1 + st_penalty * 10)
 
         # 周回タイム: 当日×0.6 + 平均×0.4 (小さいほど速い=良い)
@@ -330,17 +335,17 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
             base += (5.0 - mawariashi) * 0.5
 
         # Player bonus
-        player_bonus = win1 * 0.3 + win2 * 0.1
+        player_bonus = (win1 * 0.3 + win2 * 0.1) * group_b_mult
 
         # Motor bonus
-        motor_bonus = motor_win1 * 0.15 + motor_contrib * 0.05
+        motor_bonus = (motor_win1 * 0.15 + motor_contrib * 0.05) * group_b_mult
 
         score = base + player_bonus + motor_bonus
 
         # 会場×コース別1着率をベーススコアに使用（%→スケール変換）
         course_rates = VENUE_COURSE_RATES.get(venue, DEFAULT_COURSE_RATES)
         # 1着率をそのままスコアに（50%=+5, 10%=+1 程度のスケール）
-        score += course_rates[course - 1] * 0.1
+        score += course_rates[course - 1] * 0.1 * group_b_mult
 
         # 荒れやすい場・向かい風: 外枠（4〜6コース）を加点
         upset_effect = vp["upset"] + wind_effect
@@ -559,6 +564,11 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
     else:
         for c in candidates:
             c['nakaana_score'] = c['combined']
+
+    # v9候補（2026-07-07検証用）: 超展開データがあれば、本命/対抗のコンボ選定順を
+    # combinedではなくnakaana_score（差し/まくり攻め力込み）で決める
+    if v9_cho_tenkai and nakaana_bonus:
+        candidates.sort(key=lambda x: x['nakaana_score'], reverse=True)
 
     # ===== 本命2点: スコア1位の艇が1着の上位2コンボ =====
     honmei = []
@@ -1880,12 +1890,16 @@ def backtest():
         'full':    {'v5': True,  'fix2nd': True,  'third': True,  'label': 'v5+v7全部入り（不採用要素込み）'},
         'groupA':  {'v5': False, 'fix2nd': False, 'third': False, 'label': 'グループA単独（当日の調子: 展示タイム/ST/チルト/周回直線まわり足）'},
         'groupB':  {'v5': False, 'fix2nd': False, 'third': False, 'label': 'グループB単独（地力・機材: 選手勝率/級別/モーター/会場コース別）'},
+        'v9':      {'v5': False, 'fix2nd': False, 'third': True,  'label': 'v9候補（v7+グループB重み1.5倍）'},
+        'v9cho':   {'v5': False, 'fix2nd': False, 'third': True,  'label': 'v9候補+超展開データ（v7+グループB重み1.5倍+攻め力補正）'},
     }
     is_group_variant = variant in ('groupA', 'groupB')
     vconf = VARIANTS.get(variant, VARIANTS['full'])
     use_v5 = vconf['v5']
     use_fix2nd = vconf['fix2nd']
     use_third = vconf['third']
+    use_v9_boost = variant in ('v9', 'v9cho')
+    use_v9_cho = variant == 'v9cho'
 
     conn = get_db()
     q = "SELECT * FROM records WHERE input_data IS NOT NULL AND result_1st IS NOT NULL"
@@ -1969,6 +1983,9 @@ def backtest():
                     hybrid_taikou=True,  # v6ハイブリッド対抗（採用済み）は常にON
                     v7_fix2nd=use_fix2nd,
                     v7_third=use_third,
+                    extra_stats=inp.get('extra_stats') if use_v9_cho else None,
+                    v9_group_b_boost=use_v9_boost,
+                    v9_cho_tenkai=use_v9_cho,
                 )
             new_preds = new_result['predictions']
         except Exception:
