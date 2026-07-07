@@ -435,6 +435,24 @@ h1 {
     <div id="kimari-check-result" style="margin-top:10px;font-size:12px;"></div>
   </div>
 
+  <!-- 逃げ率 自前計算検証（自動化v-auto検討用） -->
+  <div class="chart-card" style="margin-bottom:16px;">
+    <div class="chart-title">🤖 逃げ率 自前計算検証（自動化検討用）</div>
+    <div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">
+      公式サイトの過去結果を複数まとめて取得し、「1号艇が逃げで1着になった率」を自前で計算します。ボートレース日和の逃げ率と数字を見比べて精度を確認してください。<br>
+      <b style="color:var(--accent);">⚠️ サーバー負荷対策のため期間は短め（1〜2週間程度）にしてください。1回の実行で最大150リクエストまでです（時間がかかります）</b>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+      <select id="scrape-venue" style="padding:5px 8px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:11px;"></select>
+      <span style="font-size:10px;color:var(--text-muted);">開始日</span>
+      <input type="date" id="scrape-date-from" style="padding:5px 8px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:11px;">
+      <span style="font-size:10px;color:var(--text-muted);">終了日</span>
+      <input type="date" id="scrape-date-to" style="padding:5px 8px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:11px;">
+      <button onclick="runNigeScrape()" style="padding:6px 16px;background:linear-gradient(135deg,#1565c0,#42a5f5);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">収集開始</button>
+    </div>
+    <div id="nige-scrape-result" style="margin-top:10px;font-size:12px;"></div>
+  </div>
+
   <!-- 2連単換算チェック -->
   <div class="chart-card" style="margin-bottom:16px;">
     <div class="chart-title">🎯 2連単換算チェック</div>
@@ -1180,10 +1198,14 @@ const KENSHO_VENUES = ['宮島', '常滑', '三国', '尼崎', '蒲郡', '多摩
 const ALL_VENUES = ['桐生', '戸田', '江戸川', '平和島', '多摩川', '浜名湖', '蒲郡', '常滑', '津', '三国',
   'びわこ', '住之江', '尼崎', '鳴門', '丸亀', '児島', '宮島', '徳山', '下関', '若松', '芦屋', '福岡', '唐津', '大村'];
 
-function populateDebugVenueSelect() {
-  const sel = document.getElementById('debug-venue');
+function populateVenueSelect(id) {
+  const sel = document.getElementById(id);
   if (!sel || sel.options.length > 0) return;
   sel.innerHTML = ALL_VENUES.map(v => `<option value="${v}">${v}</option>`).join('');
+}
+function populateDebugVenueSelect() {
+  populateVenueSelect('debug-venue');
+  populateVenueSelect('scrape-venue');
 }
 
 async function runKimariCheck() {
@@ -1211,6 +1233,41 @@ async function runKimariCheck() {
       ? `<span style="color:var(--green);font-weight:700;">✓ 「決まり手」が見つかりました！</span>`
       : `<span style="color:var(--accent);font-weight:700;">✗ 「決まり手」は見つかりませんでした</span>`;
     el.innerHTML = `${foundHtml}<div style="margin-top:6px;font-size:11px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;">${d.kimari_snippet}</div>`;
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
+  }
+}
+
+async function runNigeScrape() {
+  populateDebugVenueSelect();
+  const venue = document.getElementById('scrape-venue').value;
+  const dateFrom = document.getElementById('scrape-date-from').value;
+  const dateTo = document.getElementById('scrape-date-to').value;
+  const el = document.getElementById('nige-scrape-result');
+  if (!venue || !dateFrom || !dateTo) {
+    el.innerHTML = '<span style="color:var(--accent);">会場・開始日・終了日をすべて入力してください</span>';
+    return;
+  }
+  el.innerHTML = '<span style="color:var(--text-muted);">収集中...（レース数によっては数分かかります）</span>';
+  try {
+    const resp = await fetch('/scrape_nige_stats', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ venue, date_from: dateFrom, date_to: dateTo })
+    });
+    const d = await resp.json();
+    if (d.error) {
+      el.innerHTML = `<span style="color:var(--accent);">エラー: ${d.error}</span>`;
+      return;
+    }
+    if (d.total_races === 0) {
+      el.innerHTML = `<span style="color:var(--accent);">結果が取得できたレースが0件でした（${d.requests_made}件アクセス）。期間内に開催があったか確認してください</span>`;
+      return;
+    }
+    el.innerHTML = `
+      <div>対象: ${d.venue}（${d.date_from}〜${d.date_to}）／ 取得できたレース: <b>${d.total_races}件</b>（アクセス${d.requests_made}回）</div>
+      <div style="margin-top:6px;">1号艇1着率: <b>${d.boat1_win_rate}%</b>（${d.boat1_wins}/${d.total_races}）</div>
+      <div style="font-size:14px;font-weight:900;color:#42a5f5;margin-top:4px;">自前計算の逃げ率: ${d.nige_rate}%（${d.nige_wins}/${d.total_races}）</div>
+      <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">💡 この数字を、同じ会場・同じ期間のボートレース日和の逃げ率と見比べてください。近ければ自前計算が使える可能性が高いです</div>`;
   } catch (e) {
     el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
   }

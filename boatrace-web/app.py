@@ -6,7 +6,8 @@ import os
 import re
 import urllib.request
 import math
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
@@ -1407,6 +1408,114 @@ def fetch_result():
         'payout': payout,
         'payout_debug': payout_debug if payout == 0 else '',
         'url': url
+    })
+
+
+KIMARI_TYPES = ['まくり差し', '逃げ', '差し', 'まくり', '抜き', '恵まれ']
+
+
+def _parse_kimari_from_html(html):
+    """結果ページのHTMLから決まり手（逃げ/差し/まくり等）を抽出する。
+    見つからなければNone（自動化モデル検討用・2026-07-07実装）"""
+    idx = html.find('決まり手')
+    if idx < 0:
+        return None
+    window = html[idx:idx + 300]
+    for t in KIMARI_TYPES:
+        if t in window:
+            return t
+    return None
+
+
+def _fetch_race_html(venue, race_no, race_date):
+    jcd = VENUE_CODES.get(venue)
+    if not jcd:
+        return None, None, '会場コードが見つかりません'
+    hd = race_date.replace('-', '')
+    url = 'https://www.boatrace.jp/owpc/pc/race/raceresult?rno=' + str(race_no) + '&jcd=' + jcd + '&hd=' + hd
+    try:
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'ja,en;q=0.5',
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.read().decode('utf-8', errors='ignore'), url, None
+    except Exception as e:
+        return None, url, str(e)
+
+
+@app.route('/scrape_nige_stats', methods=['POST'])
+def scrape_nige_stats():
+    """過去レース結果を複数まとめて取得し、1号艇（boat_number=1、courseの近似値）が
+    逃げで1着になった率を自前で計算する（自動化モデル検討用・2026-07-07実装）。
+    ボートレース日和の逃げ率と精度を比較検証するための第一段階。
+    サーバー負荷に配慮し、date_from〜date_toの範囲＋レース数の上限を設ける"""
+    data = request.get_json() or {}
+    venue = data.get('venue', '')
+    date_from = data.get('date_from', '')
+    date_to = data.get('date_to', '')
+    race_nos = data.get('race_nos') or list(range(1, 13))
+    max_requests = min(int(data.get('max_requests', 50)), 150)  # 1回の実行での上限（サーバー負荷対策）
+
+    if not venue or not date_from or not date_to:
+        return jsonify({'error': '会場・開始日・終了日を指定してください'})
+
+    try:
+        d_from = datetime.strptime(date_from, '%Y-%m-%d')
+        d_to = datetime.strptime(date_to, '%Y-%m-%d')
+    except Exception:
+        return jsonify({'error': '日付の形式が不正です'})
+    if d_to < d_from:
+        return jsonify({'error': '終了日は開始日より後にしてください'})
+
+    dates = []
+    d = d_from
+    while d <= d_to:
+        dates.append(d.strftime('%Y-%m-%d'))
+        d += timedelta(days=1)
+
+    total_races = 0
+    nige_wins = 0     # 1号艇が逃げで1着
+    boat1_wins = 0    # 1号艇が1着（決まり手不問）
+    errors = []
+    requests_made = 0
+
+    for race_date in dates:
+        if requests_made >= max_requests:
+            break
+        for race_no in race_nos:
+            if requests_made >= max_requests:
+                break
+            html, url, err = _fetch_race_html(venue, race_no, race_date)
+            requests_made += 1
+            time.sleep(0.5)  # サーバー負荷対策の間隔
+            if err or not html:
+                continue
+            m_boats = re.findall(r'boatColor\d+">\s*([1-6])\s*</td>', html)
+            if len(m_boats) < 1:
+                continue
+            r1 = int(m_boats[0])
+            kimari = _parse_kimari_from_html(html)
+            total_races += 1
+            if r1 == 1:
+                boat1_wins += 1
+                if kimari == '逃げ':
+                    nige_wins += 1
+
+    nige_rate = round(nige_wins / total_races * 100, 1) if total_races > 0 else None
+    boat1_win_rate = round(boat1_wins / total_races * 100, 1) if total_races > 0 else None
+
+    return jsonify({
+        'venue': venue,
+        'date_from': date_from,
+        'date_to': date_to,
+        'requests_made': requests_made,
+        'total_races': total_races,
+        'boat1_wins': boat1_wins,
+        'boat1_win_rate': boat1_win_rate,
+        'nige_wins': nige_wins,
+        'nige_rate': nige_rate,
     })
 
 
