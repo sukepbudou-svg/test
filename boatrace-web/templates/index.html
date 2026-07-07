@@ -802,8 +802,9 @@ textarea:focus { border-color: var(--accent3); box-shadow: 0 0 0 2px rgba(0,212,
         <div id="nige-rate-value" style="font-size:28px;font-weight:900;font-family:'Orbitron',monospace;letter-spacing:2px;">-</div>
         <div id="nige-rate-comment" style="font-size:10px;margin-top:4px;"></div>
       </div>
-      <button class="btn btn-predict" onclick="runPredict()">🎯 予想する</button>
-      <button class="btn" onclick="runPredict(true)" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#7000b0,#b000dc);color:#fff;font-weight:900;letter-spacing:1px;border:none;border-radius:8px;padding:10px 0;font-size:14px;">🐻 裏熊予想</button>
+      <button class="btn btn-predict" onclick="runPredict('normal')">🎯 予想する</button>
+      <button class="btn" onclick="runPredict('arekote')" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#7000b0,#b000dc);color:#fff;font-weight:900;letter-spacing:1px;border:none;border-radius:8px;padding:10px 0;font-size:14px;">🐻 裏熊予想</button>
+      <button class="btn" onclick="runPredict('nakaana')" style="width:100%;margin-top:6px;background:linear-gradient(135deg,#a88600,#ffd740);color:#000;font-weight:900;letter-spacing:1px;border:none;border-radius:8px;padding:10px 0;font-size:14px;">💰 中穴予想</button>
       <button class="btn" id="btn-save" onclick="saveRecord()" style="display:none;width:100%;margin-top:8px;background:linear-gradient(135deg,var(--green),#00a854);color:#000;font-weight:900;">💾 予想を保存</button>
       <div style="margin-top:8px;text-align:right;">
         <a href="/history" target="_blank" style="font-size:11px;color:var(--accent3);text-decoration:none;letter-spacing:1px;">📊 記録・成績を見る →</a>
@@ -1821,7 +1822,8 @@ function parseData(name) {
 }
 
 // ======== Predict ========
-async function runPredict(forceArekote = false) {
+async function runPredict(mode = 'normal') {
+  const forceArekote = mode === 'arekote';
   const area = document.getElementById('result-area');
   area.innerHTML = `<div class="loading"><div class="loading-dots"><span></span><span></span><span></span></div><span>予想計算中...</span></div>`;
 
@@ -1875,7 +1877,7 @@ async function runPredict(forceArekote = false) {
   });
   const data = await resp.json();
   document.getElementById('status-save').textContent = '';
-  const displayed = renderResult(data);
+  const displayed = renderResult(data, mode);
   lastPredictions = displayed;
   // kimariStatsから直接nige_rateを取得（DOMより確実）
   if (kimariStats) {
@@ -2244,7 +2246,7 @@ function classifyByScore(predictions) {
   return result;
 }
 
-function renderResult(data) {
+function renderResult(data, mode = 'normal') {
   const area = document.getElementById('result-area');
   const venueVal = document.getElementById('venue').value;
   const raceVal  = document.getElementById('race_no').value;
@@ -2274,7 +2276,7 @@ function renderResult(data) {
   // 各帯でスコア上位2点ずつ＝計6点を選ぶ。可能性が高い順に選びつつ帯を分けることで倍率が偏らないようにする
   const NAKAANA_BANDS = [[20, 40], [40, 70], [70, 100]];
   let nakaanaDisplayed = [];
-  if (hasOdds && candidates && candidates.length) {
+  if (mode === 'nakaana' && hasOdds && candidates && candidates.length) {
     const usedNakaana = new Set();
     const nakaanaPicks = [];
     for (const [lo, hi] of NAKAANA_BANDS) {
@@ -2322,8 +2324,8 @@ function renderResult(data) {
     }
   }
 
-  // 勝負レース判定バナー
-  if (!data.arekote_mode) {
+  // 勝負レース判定バナー（通常予想の時だけ表示）
+  if (mode === 'normal') {
     const reasons = [];
     const warns = [];
     // 条件1: イン逃げ率
@@ -2448,7 +2450,9 @@ function renderResult(data) {
 
   // 🐻 裏熊モード（v2: シナリオ・フォーメーション方式）
   let uraDisplayed = [];
-  if (data.arekote_mode) {
+  if (mode === 'nakaana') {
+    // 中穴予想モードでは本命/対抗/万舟・裏熊は表示しない（下の中穴カードのみ）
+  } else if (mode === 'arekote') {
     const uj = data.ura_judge || {};
     const conds = uj.conds || {};
 
@@ -2541,16 +2545,19 @@ function renderResult(data) {
   }
   } // end else (normal mode)
 
-  // 🎯中穴予想カード（検証段階・記録のみ。20〜99倍を3帯に分けて計6点）
-  if (nakaanaDisplayed.length > 0) {
-    html += `<div class="divider"></div>
-    <div style="font-size:12px;font-weight:900;color:#ffd740;letter-spacing:1px;margin-bottom:6px;">🎯 中穴予想（20〜99倍・検証段階）</div>`;
-    for (const item of nakaanaDisplayed) {
-      const oddsHtml = item.odds !== null ? `<span class="odds-tag">${item.odds.toFixed(1)}倍</span>` : '';
-      html += `<div class="pred-item" style="background:rgba(255,215,64,0.10);border-color:#ffd740;">
-        <span class="pred-label" style="background:#ffd740;color:#000;">中穴</span>
-        <span class="pred-combo">${item.combo}</span>${oddsHtml}
-      </div>`;
+  // 🎯中穴予想カード（独立ボタン・検証段階・記録のみ。20〜99倍を3帯に分けて計6点）
+  if (mode === 'nakaana') {
+    if (nakaanaDisplayed.length > 0) {
+      html += `<div style="font-size:12px;font-weight:900;color:#ffd740;letter-spacing:1px;margin-bottom:6px;">🎯 中穴予想（20〜99倍・検証段階）</div>`;
+      for (const item of nakaanaDisplayed) {
+        const oddsHtml = item.odds !== null ? `<span class="odds-tag">${item.odds.toFixed(1)}倍</span>` : '';
+        html += `<div class="pred-item" style="background:rgba(255,215,64,0.10);border-color:#ffd740;">
+          <span class="pred-label" style="background:#ffd740;color:#000;">中穴</span>
+          <span class="pred-combo">${item.combo}</span>${oddsHtml}
+        </div>`;
+      }
+    } else {
+      html += `<div style="opacity:0.6;font-size:12px;color:var(--text-muted);padding:8px;">オッズが未入力、または20〜99倍の範囲に該当する組み合わせがありません。</div>`;
     }
   }
 
@@ -2607,7 +2614,9 @@ function renderResult(data) {
   }, 100);
   // 表示した予想を返す（saveRecordで使用）
   const displayed = [];
-  if (data.arekote_mode) {
+  if (mode === 'nakaana') {
+    displayed.push(...nakaanaDisplayed);
+  } else if (mode === 'arekote') {
     // 足切り後の裏熊買い目のみ保存対象（全滅=妙味なしの場合は空）
     displayed.push(...uraDisplayed);
   } else {
@@ -2618,7 +2627,6 @@ function renderResult(data) {
       }
     }
   }
-  displayed.push(...nakaanaDisplayed);
   return displayed;
 }
 
