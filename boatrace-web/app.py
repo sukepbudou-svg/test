@@ -2221,7 +2221,7 @@ def ura_backtest():
                 elif result_odds:
                     stored_stats['payout'] += int(result_odds * 100)
 
-        # 現行ロジックで再予想
+        # 現行ロジックで再予想（実戦の裏熊も内部scoresはv9のグループB補正込みで計算される）
         try:
             pred = predict(
                 inp.get('boats', []),
@@ -2232,6 +2232,7 @@ def ura_backtest():
                 force_arekote=True,
                 kimari_full=inp.get('kimari_full'),
                 extra_stats=inp.get('extra_stats'),
+                v9_group_b_boost=USE_V9_GROUP_B_BOOST_LIVE,
             )
         except Exception:
             continue
