@@ -286,7 +286,12 @@ h1 {
     </div>
     <div class="filter-row">
       <div class="filter-label">会場選択</div>
-      <div class="venue-chips" id="venue-chips"></div>
+      <div style="display:flex;flex-direction:column;gap:6px;flex:1;">
+        <div>
+          <button onclick="selectTokuiVenues()" style="padding:4px 10px;background:linear-gradient(135deg,#00796b,#26a69a);color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:bold;cursor:pointer;">✅ 得意会場だけ選択</button>
+        </div>
+        <div class="venue-chips" id="venue-chips"></div>
+      </div>
     </div>
     <div class="filter-row">
       <div class="filter-label">イン逃げ率</div>
@@ -618,6 +623,16 @@ function buildFilterPanel() {
 function toggleVenue(v) {
   if (selectedVenues.has(v)) selectedVenues.delete(v);
   else selectedVenues.add(v);
+  document.querySelectorAll('.venue-chip').forEach(el => {
+    el.classList.toggle('selected', selectedVenues.has(el.textContent));
+  });
+  applyFilter();
+}
+
+function selectTokuiVenues() {
+  // 得意会場（TOKUI_VENUES）のうち、実際に記録が存在する会場だけを一括選択する
+  const existingVenues = new Set(allRecords.map(r => r.venue));
+  selectedVenues = new Set(TOKUI_VENUES.filter(v => existingVenues.has(v)));
   document.querySelectorAll('.venue-chip').forEach(el => {
     el.classList.toggle('selected', selectedVenues.has(el.textContent));
   });
