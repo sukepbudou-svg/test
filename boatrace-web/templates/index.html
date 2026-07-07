@@ -2281,9 +2281,10 @@ function renderResult(data, mode = 'normal') {
     const nakaanaPicks = [];
     for (const [lo, hi] of NAKAANA_BANDS) {
       const inBand = candidates
-        .map(c => ({ combo: c.combo, prob: c.prob, combined: c.combined, odds: getTriOdds(c.combo) }))
+        .map(c => ({ combo: c.combo, prob: c.prob, combined: c.combined, nakaana_score: c.nakaana_score, odds: getTriOdds(c.combo) }))
         .filter(c => c.odds !== null && c.odds >= lo && c.odds < hi && !usedNakaana.has(c.combo));
-      inBand.sort((a, b) => (b.prob ?? b.combined ?? 0) - (a.prob ?? a.combined ?? 0));
+      // 超展開データ（cho_tenkai）があればnakaana_score（攻め成功率で補正済み）を優先、なければ従来通りprob/combined
+      inBand.sort((a, b) => (b.nakaana_score ?? b.prob ?? b.combined ?? 0) - (a.nakaana_score ?? a.prob ?? a.combined ?? 0));
       for (const c of inBand.slice(0, 2)) {
         nakaanaPicks.push(c);
         usedNakaana.add(c.combo);

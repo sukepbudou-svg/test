@@ -546,6 +546,20 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
         for c, e in zip(candidates, exps):
             c['prob'] = round(e / total_exp, 4)
 
+    # 中穴予想（20〜99倍・独立モード）用のスコア補正: 超展開データの差し/まくり/まくり差し
+    # 成功率（試行回数MIN_CHOTENKAI_TRIALS以上のみ信頼）で2・3着候補の「攻め力」を上乗せする。
+    # combined/probはそのまま保持し、本命/対抗/裏熊の選定には一切影響させない
+    ct_for_nakaana = (extra_stats or {}).get('cho_tenkai') if extra_stats else None
+    nakaana_bonus = _nakaana_attack_bonus(ct_for_nakaana) if ct_for_nakaana else {}
+    if nakaana_bonus:
+        for c in candidates:
+            parts = c['combo'].split('-')
+            bn2, bn3 = int(parts[1]), int(parts[2])
+            c['nakaana_score'] = round(c['combined'] + nakaana_bonus.get(bn2, 0.0) * 0.05 + nakaana_bonus.get(bn3, 0.0) * 0.03, 2)
+    else:
+        for c in candidates:
+            c['nakaana_score'] = c['combined']
+
     # ===== 本命2点: スコア1位の艇が1着の上位2コンボ =====
     honmei = []
     top_bn = scores[0]['boat']['boat_number']
@@ -644,7 +658,7 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
                                   cho_tenkai=(extra_stats or {}).get('cho_tenkai') if extra_stats else None)
         return {
             'predictions': results,
-            'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2), 'prob': c.get('prob')} for c in candidates[:60]],
+            'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2), 'prob': c.get('prob'), 'nakaana_score': c.get('nakaana_score')} for c in candidates[:60]],
             'score_order': [{'course': s['course'], 'boat_number': s['boat']['boat_number'], 'score': round(s['score'], 2)} for s in scores],
             'chaos': chaos,
             'arekote_mode': True,
@@ -654,7 +668,7 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
 
     return {
         'predictions': results,
-        'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2), 'prob': c.get('prob')} for c in candidates[:60]],
+        'candidates': [{'combo': c['combo'], 'combined': round(c['combined'], 2), 'prob': c.get('prob'), 'nakaana_score': c.get('nakaana_score')} for c in candidates[:60]],
         'score_order': [{'course': s['course'], 'boat_number': s['boat']['boat_number'], 'score': round(s['score'], 2)} for s in scores],
         'chaos': chaos,
     }
@@ -671,6 +685,28 @@ def _wl_rate(pair):
     if w is None or t is None or t <= 0:
         return None
     return (w / t * 100, t)
+
+
+def _nakaana_attack_bonus(cho_tenkai):
+    """超展開データ（差し/まくり/まくり差しの試行回数つき成功率）から、
+    2〜6号艇それぞれの「攻め成功率」ボーナスを返す（中穴予想の2・3着候補の底上げに使用）。
+    試行回数がMIN_CHOTENKAI_TRIALS未満の項目は信頼度不足として無視する。"""
+    ct = cho_tenkai if isinstance(cho_tenkai, dict) else {}
+    ct_maki = ct.get('makuri') or []
+    ct_makis = ct.get('makurisashi') or []
+    ct_sashi = ct.get('sashi') or []
+    bonus = {}
+    for bn in range(2, 7):
+        i = bn - 2
+        rates = []
+        for arr in (ct_maki, ct_makis, ct_sashi):
+            if 0 <= i < len(arr):
+                wl = _wl_rate(arr[i])
+                if wl and wl[1] >= MIN_CHOTENKAI_TRIALS:
+                    rates.append(wl[0])
+        if rates:
+            bonus[bn] = max(rates)
+    return bonus
 
 
 def predict_arekote_v3(scores, kimari_full=None, nige_rate=None, cho_tenkai=None):
@@ -1018,8 +1054,9 @@ def predict_route():
     # ただし裏熊モードは決まり手データ（主役判定・シナリオ）が必須なので常に渡す
     kimari_full_raw = data.get('kimari_full', None)
     kimari_full = kimari_full_raw if (USE_V5_LIVE or force_arekote) else None
-    # extra_stats（超展開データ等）は裏熊モードのみで使用
-    extra_stats = data.get('extra_stats', None) if force_arekote else None
+    # extra_stats（超展開データ等）: 裏熊モードでは主役判定に使用、
+    # 通常モードでも中穴予想のnakaana_score算出にのみ使う（本命/対抗のスコアには影響しない）
+    extra_stats = data.get('extra_stats', None)
     result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full, hybrid_taikou=USE_V6_LIVE, v7_fix2nd=False, v7_third=USE_V7_THIRD_LIVE, extra_stats=extra_stats)
     return jsonify(result)
 
