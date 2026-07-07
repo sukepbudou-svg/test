@@ -838,7 +838,12 @@ function renderRecords() {
     else if (tier === 'kensho') shobuBadge = ' <span style="font-size:9px;color:var(--blue);white-space:nowrap;">🔍検証</span>';
     else if (tier === 'miokuri') shobuBadge = ' <span style="font-size:9px;color:var(--yellow);white-space:nowrap;">⚠️見送</span>';
     // 🐻裏熊の出動条件クリア数（n/4）。サーバー側(/get_records)で入力データから再計算済み
-    if (r.ura_clear) shobuBadge += ` <span style="font-size:9px;color:#d95cff;font-weight:700;white-space:nowrap;">🐻${r.ura_clear}</span>`;
+    // バックテストで3/4以上のみ回収率プラスだったため、3/4以上は緑で強調
+    if (r.ura_clear) {
+      const uraClearNum = parseInt(r.ura_clear.split('/')[0], 10);
+      const uraColor = uraClearNum >= 3 ? 'var(--green)' : '#d95cff';
+      shobuBadge += ` <span style="font-size:9px;color:${uraColor};font-weight:700;white-space:nowrap;">🐻${r.ura_clear}</span>`;
+    }
 
     return `<tr data-id="${r.id}">
       <td>${r.race_date}</td>

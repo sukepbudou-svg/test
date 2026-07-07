@@ -2488,9 +2488,18 @@ function renderResult(data, mode = 'normal') {
 
     const bd2 = fullClear ? '#b000dc' : '#5a6a80';
     const title2 = fullClear ? '🐻 裏熊出動（勝負）' : (allCut ? '🐻 妙味なし・見送り推奨' : `🐻 参考予想（出動条件 ${clearCount}/${totalCount}）`);
+    // 出動ライン（2026-07-07実装）: バックテストで3/4クリアの回収率が唯一プラス（110%）だったことから、
+    // オッズ込みの4条件が揃っている場合のみ「3/4以上」を出動ラインの目安として表示
+    let lineHtml = '';
+    if (totalCount === 4) {
+      lineHtml = clearCount >= 3
+        ? `<div style="font-size:11px;margin-top:6px;font-weight:700;color:#00e676;">🎯 出動ライン到達（3/4以上・バックテストで回収率110%）</div>`
+        : `<div style="font-size:11px;margin-top:6px;color:var(--text-muted);">🎯 出動ラインには届いていません（目安は3/4以上）</div>`;
+    }
     html += `<div style="background:linear-gradient(135deg,rgba(180,0,220,0.15),rgba(100,0,180,0.08));border:1.5px solid ${bd2};border-radius:10px;padding:10px 14px;margin-bottom:10px;">
       <div style="font-weight:900;color:${fullClear ? '#d95cff' : 'var(--text-muted)'};letter-spacing:1px;font-size:14px;margin-bottom:6px;">${title2}</div>
       ${condRows.map(c => `<div style="font-size:11px;margin-bottom:2px;color:${c.ok ? 'var(--green)' : 'var(--text-muted)'};">${c.ok ? '✓' : '✗'} ${c.label}</div>`).join('')}
+      ${lineHtml}
       ${uj.shuyaku && !allCut ? `<div style="font-size:12px;margin-top:6px;color:var(--text);">シナリオ: <b>${uj.shuyaku}号艇 ${uj.scenario || ''}</b> ／ 買い目: <b style="color:#d95cff;">フォーメーション ${uj.formation || ''}</b>（${uraItems.length}点）</div>` : ''}
     </div>`;
 
