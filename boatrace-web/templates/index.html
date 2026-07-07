@@ -2270,6 +2270,26 @@ function renderResult(data) {
     }
   }
 
+  // 🎯中穴予想（2026-07-07実装・検証段階）: 20〜99倍を3帯（20〜40/40〜70/70〜99倍）に分け、
+  // 各帯でスコア上位2点ずつ＝計6点を選ぶ。可能性が高い順に選びつつ帯を分けることで倍率が偏らないようにする
+  const NAKAANA_BANDS = [[20, 40], [40, 70], [70, 100]];
+  let nakaanaDisplayed = [];
+  if (hasOdds && candidates && candidates.length) {
+    const usedNakaana = new Set();
+    const nakaanaPicks = [];
+    for (const [lo, hi] of NAKAANA_BANDS) {
+      const inBand = candidates
+        .map(c => ({ combo: c.combo, prob: c.prob, combined: c.combined, odds: getTriOdds(c.combo) }))
+        .filter(c => c.odds !== null && c.odds >= lo && c.odds < hi && !usedNakaana.has(c.combo));
+      inBand.sort((a, b) => (b.prob ?? b.combined ?? 0) - (a.prob ?? a.combined ?? 0));
+      for (const c of inBand.slice(0, 2)) {
+        nakaanaPicks.push(c);
+        usedNakaana.add(c.combo);
+      }
+    }
+    nakaanaDisplayed = nakaanaPicks.map(c => ({ combo: c.combo, type: '中穴', odds: c.odds }));
+  }
+
   // 万舟補完: スコア候補に入らない万舟をオッズデータ全体からピックアップ
   if (hasOdds && classified['万舟'].length < TYPE_LIMITS['万舟']) {
     const usedCombos = new Set([
@@ -2521,6 +2541,19 @@ function renderResult(data) {
   }
   } // end else (normal mode)
 
+  // 🎯中穴予想カード（検証段階・記録のみ。20〜99倍を3帯に分けて計6点）
+  if (nakaanaDisplayed.length > 0) {
+    html += `<div class="divider"></div>
+    <div style="font-size:12px;font-weight:900;color:#ffd740;letter-spacing:1px;margin-bottom:6px;">🎯 中穴予想（20〜99倍・検証段階）</div>`;
+    for (const item of nakaanaDisplayed) {
+      const oddsHtml = item.odds !== null ? `<span class="odds-tag">${item.odds.toFixed(1)}倍</span>` : '';
+      html += `<div class="pred-item" style="background:rgba(255,215,64,0.10);border-color:#ffd740;">
+        <span class="pred-label" style="background:#ffd740;color:#000;">中穴</span>
+        <span class="pred-combo">${item.combo}</span>${oddsHtml}
+      </div>`;
+    }
+  }
+
   // 荒れ度（万舟予想の直下）
   if (data.chaos) {
     const c = data.chaos;
@@ -2585,6 +2618,7 @@ function renderResult(data) {
       }
     }
   }
+  displayed.push(...nakaanaDisplayed);
   return displayed;
 }
 

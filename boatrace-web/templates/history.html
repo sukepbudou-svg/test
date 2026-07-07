@@ -1621,13 +1621,9 @@ function openModal(id, venue, race_no, race_date) {
   document.getElementById('modal-combo').textContent = '?-?-?';
   document.getElementById('auto-fetch-status').textContent = '';
 
-  // 購入金額のデフォルト: 通常予想=500円（5点×100円）、裏熊=点数×100円
+  // 購入金額のデフォルト: 保存されている点数×100円（万舟・中穴込みで自動計算）
   const rec = allRecords.find(r => r.id === id);
-  if (rec && isUraRecord(rec)) {
-    document.getElementById('r-purchase').value = (rec.predictions || []).length * 100;
-  } else {
-    document.getElementById('r-purchase').value = 500;
-  }
+  document.getElementById('r-purchase').value = rec ? (rec.predictions || []).length * 100 : 500;
   document.getElementById('r-henkan').value = '';
   document.getElementById('henkan-info').textContent = '';
 
