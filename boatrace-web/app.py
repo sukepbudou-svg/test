@@ -83,13 +83,19 @@ init_db()
 # v7: 2026-07-05 本命2点目の3着を「逃がし3着率」最上位に差し替えて採用。
 #     71レース検証: 本命+4.2pt/回収率+15.7pt（106%→121.7%）。2着バグ修正・v5は
 #     3回の検証で一貫して無効果と判明したため不採用、3着差し替えのみ単体で採用
-MODEL_VERSION = 'v7'
+# v9: 2026-07-07 グループB（選手勝率・級別・モーター・会場コース別）の重みを1.5倍に採用。
+#     単一要素モデル比較でグループB単独の本命的中率がv7を上回ったことを受けて追加。
+#     335レース検証: 本命+1.8pt/対抗+1.5pt/回収率+10.7pt（88.2%→98.9%）。
+#     65%以上96レースでも一貫: 本命+3.1pt/対抗+3.2pt/回収率+9.0pt（81.7%→90.7%）で採用
+MODEL_VERSION = 'v9'
 # v5ロジックのon/off: 3回の検証で無効果と確定。実戦・バックテストとも常時False
 USE_V5_LIVE = False
 # v6ハイブリッド対抗: 採用済み（2026-07-04）
 USE_V6_LIVE = True
 # v7: 本命2点目の3着差し替えのみ採用済み（2026-07-05）。2着バグ修正は無効果につき不採用
 USE_V7_THIRD_LIVE = True
+# v9: グループB（選手勝率・級別・モーター・会場コース別）の重みを1.5倍。採用済み（2026-07-07）
+USE_V9_GROUP_B_BOOST_LIVE = True
 
 # 会場グループ（2026-07-04ユーザー設定。index.html/history.htmlの同名定数と同期すること）
 TOKUI_VENUES = ['大村', '福岡', '桐生', '徳山']
@@ -1176,7 +1182,7 @@ def predict_route():
     # extra_stats（超展開データ等）: 裏熊モードでは主役判定に使用、
     # 通常モードでも中穴予想のnakaana_score算出にのみ使う（本命/対抗のスコアには影響しない）
     extra_stats = data.get('extra_stats', None)
-    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full, hybrid_taikou=USE_V6_LIVE, v7_fix2nd=False, v7_third=USE_V7_THIRD_LIVE, extra_stats=extra_stats)
+    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full, hybrid_taikou=USE_V6_LIVE, v7_fix2nd=False, v7_third=USE_V7_THIRD_LIVE, extra_stats=extra_stats, v9_group_b_boost=USE_V9_GROUP_B_BOOST_LIVE)
     return jsonify(result)
 
 
@@ -1880,17 +1886,17 @@ def backtest():
     nige_max = data.get('nige_max', 100)
     honmei_odds_min = data.get('honmei_odds_min', 0)  # 本命1点目オッズの下限（勝負レース相当の絞り込み用）
     # 検証モード: どの候補ロジックを乗せて再予想するか（v6=実戦同等）
-    variant = data.get('variant', 'v7b')
+    variant = data.get('variant', 'v9')
     VARIANTS = {
         'v6':      {'v5': False, 'fix2nd': False, 'third': False, 'label': 'v6のみ（旧・実戦相当）'},
         'v5only':  {'v5': True,  'fix2nd': False, 'third': False, 'label': 'v6+v5のみ（決まり手展開補正・不採用）'},
         'v7a':     {'v5': False, 'fix2nd': True,  'third': False, 'label': 'v6+2着バグ修正のみ（不採用）'},
-        'v7b':     {'v5': False, 'fix2nd': False, 'third': True,  'label': 'v6+3着差し替えのみ = v7（現在の実戦）'},
+        'v7b':     {'v5': False, 'fix2nd': False, 'third': True,  'label': 'v6+3着差し替えのみ = v7（旧・実戦相当）'},
         'v7':      {'v5': False, 'fix2nd': True,  'third': True,  'label': 'v6+v7フル（2着修正込み・不採用）'},
         'full':    {'v5': True,  'fix2nd': True,  'third': True,  'label': 'v5+v7全部入り（不採用要素込み）'},
         'groupA':  {'v5': False, 'fix2nd': False, 'third': False, 'label': 'グループA単独（当日の調子: 展示タイム/ST/チルト/周回直線まわり足）'},
         'groupB':  {'v5': False, 'fix2nd': False, 'third': False, 'label': 'グループB単独（地力・機材: 選手勝率/級別/モーター/会場コース別）'},
-        'v9':      {'v5': False, 'fix2nd': False, 'third': True,  'label': 'v9候補（v7+グループB重み1.5倍）'},
+        'v9':      {'v5': False, 'fix2nd': False, 'third': True,  'label': 'v9候補（v7+グループB重み1.5倍）＝現在の実戦'},
         'v9cho':   {'v5': False, 'fix2nd': False, 'third': True,  'label': 'v9候補+超展開データ（v7+グループB重み1.5倍+攻め力補正）'},
     }
     is_group_variant = variant in ('groupA', 'groupB')
