@@ -1691,13 +1691,17 @@ def debug_beforeinfo_stats():
     percent_count = len(re.findall(r'\d+\.\d+', html))
     js_render_hint = any(k in html for k in ['data-url', 'ajax', 'fetch(', 'XMLHttpRequest'])
 
-    # パーサー設計用の生スニペット（見つかったキーワードのうち最初のものを起点に）
+    # パーサー設計用の生スニペット。展示タイム/チルトの表と、進入コースが載っている
+    # 「スタート展示」の表は別セクションなので、両方を別々に返す
     raw_table_snippet = None
-    for anchor_kw in ['チルト', 'スタート展示', '進入', '部品交換', '展示タイム']:
+    for anchor_kw in ['チルト', '部品交換', '展示タイム']:
         anchor_idx = html.find(anchor_kw)
         if anchor_idx >= 0:
             raw_table_snippet = html[max(0, anchor_idx - 500):anchor_idx + 4000]
             break
+
+    start_display_idx = html.find('スタート展示')
+    start_display_snippet = html[start_display_idx:start_display_idx + 4000] if start_display_idx >= 0 else None
 
     return jsonify({
         'url': url,
@@ -1706,6 +1710,7 @@ def debug_beforeinfo_stats():
         'number_like_count': percent_count,
         'js_render_hint': js_render_hint,
         'raw_table_snippet': raw_table_snippet,
+        'start_display_snippet': start_display_snippet,
         'saved_to': save_path,
     })
 

@@ -1387,6 +1387,14 @@ async function runBeforeinfoCheck() {
         <textarea readonly style="width:100%;height:150px;margin-top:6px;font-size:10px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px;" onclick="this.select()">${d.raw_table_snippet.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</textarea>
       </div>`;
     }
+    if (d.start_display_snippet) {
+      html += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
+        <div style="font-weight:700;">📋 「スタート展示」周辺の生HTML（進入コース用・これもコピーして送ってください）</div>
+        <textarea readonly style="width:100%;height:150px;margin-top:6px;font-size:10px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px;" onclick="this.select()">${d.start_display_snippet.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</textarea>
+      </div>`;
+    } else {
+      html += `<div style="margin-top:6px;color:var(--text-muted);">「スタート展示」セクションが見つかりませんでした</div>`;
+    }
     el.innerHTML = html;
   } catch (e) {
     el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
