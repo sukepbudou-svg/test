@@ -1615,6 +1615,57 @@ def auto_predict():
     })
 
 
+@app.route('/debug_beforeinfo_stats', methods=['POST'])
+def debug_beforeinfo_stats():
+    """直前情報（beforeinfo）ページに、実際の進入コース（前付け対応）・展示タイム・
+    展示ST・チルト・部品交換が静的HTMLで取得できるか調査する（v-auto検討用・2026-07-08実装）"""
+    data = request.get_json() or {}
+    venue = data.get('venue', '')
+    race_no = data.get('race_no', 1)
+    race_date = data.get('race_date', '')
+    jcd = VENUE_CODES.get(venue)
+    if not jcd:
+        return jsonify({'error': '会場コード不明'})
+    hd = race_date.replace('-', '')
+    url = 'https://www.boatrace.jp/owpc/pc/race/beforeinfo?rno=' + str(race_no) + '&jcd=' + jcd + '&hd=' + hd
+    try:
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'ja,en;q=0.5',
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read().decode('utf-8', errors='ignore')
+    except Exception as e:
+        return jsonify({'error': str(e), 'url': url})
+
+    save_path = os.path.join(os.path.dirname(__file__), 'debug_beforeinfo.html')
+    with open(save_path, 'w', encoding='utf-8') as f:
+        f.write(html)
+
+    found_keywords = {}
+    for kw in ['展示タイム', '進入', 'チルト', '部品交換', 'スタート展示', '周回展示', '直線展示', 'まわり足']:
+        idx = html.find(kw)
+        found_keywords[kw] = html[max(0, idx - 30):idx + 200].replace('\n', ' ') if idx >= 0 else None
+
+    percent_count = len(re.findall(r'\d+\.\d+', html))
+    js_render_hint = any(k in html for k in ['data-url', 'ajax', 'fetch(', 'XMLHttpRequest'])
+
+    # パーサー設計用の生スニペット（「展示タイム」を起点に）
+    ex_idx = html.find('展示タイム')
+    raw_table_snippet = html[max(0, ex_idx - 500):ex_idx + 4000] if ex_idx >= 0 else None
+
+    return jsonify({
+        'url': url,
+        'html_length': len(html),
+        'found_keywords': found_keywords,
+        'number_like_count': percent_count,
+        'js_render_hint': js_render_hint,
+        'raw_table_snippet': raw_table_snippet,
+        'saved_to': save_path,
+    })
+
+
 @app.route('/debug_racelist_stats', methods=['POST'])
 def debug_racelist_stats():
     """出走表（racelist）ページに、グループB（選手勝率・級別・モーター成績）に

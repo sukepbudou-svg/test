@@ -446,6 +446,9 @@ h1 {
     <div id="racelist-parse-result" style="margin-top:10px;font-size:11px;overflow-x:auto;"></div>
     <button onclick="runAutoPredict()" style="margin-top:6px;padding:6px 16px;background:linear-gradient(135deg,#b000dc,#7000b0);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">🤖 v-auto予想を自動生成してみる</button>
     <div id="auto-predict-result" style="margin-top:10px;font-size:12px;"></div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">💡 直前情報ページ（前付け後の進入コース・展示タイム等）が静的HTMLで取れるか確認します</div>
+    <button onclick="runBeforeinfoCheck()" style="margin-top:6px;padding:6px 16px;background:linear-gradient(135deg,#455a64,#78909c);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">直前情報を確認</button>
+    <div id="beforeinfo-check-result" style="margin-top:10px;font-size:11px;"></div>
   </div>
 
   <!-- 逃げ率 自前計算検証（自動化v-auto検討用） -->
@@ -1342,6 +1345,48 @@ async function runRacelistParse() {
         <td style="padding:2px 6px;text-align:center;">${b.motor_win1}</td>
       </tr>`).join('')}</tbody>
     </table>`;
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
+  }
+}
+
+async function runBeforeinfoCheck() {
+  populateDebugVenueSelect();
+  const venue = document.getElementById('debug-venue').value;
+  const raceNo = document.getElementById('debug-race-no').value;
+  const raceDate = document.getElementById('debug-race-date').value;
+  const el = document.getElementById('beforeinfo-check-result');
+  if (!venue || !raceNo || !raceDate) {
+    el.innerHTML = '<span style="color:var(--accent);">上の会場・レース番号・日付をすべて入力してください</span>';
+    return;
+  }
+  el.innerHTML = '<span style="color:var(--text-muted);">取得中...</span>';
+  try {
+    const resp = await fetch('/debug_beforeinfo_stats', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ venue, race_no: parseInt(raceNo, 10), race_date: raceDate })
+    });
+    const d = await resp.json();
+    if (d.error) {
+      el.innerHTML = `<span style="color:var(--accent);">エラー: ${d.error}</span>`;
+      return;
+    }
+    let html = `<div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;">${d.url}</div>`;
+    html += `<div style="margin-bottom:4px;">${d.number_like_count > 20 ? '<span style="color:var(--green);font-weight:700;">✓ 数字が' + d.number_like_count + '個見つかりました</span>' : '<span style="color:var(--accent);font-weight:700;">✗ 数字がほとんど見つかりません（' + d.number_like_count + '個）</span>'}</div>`;
+    if (d.js_render_hint) html += `<div style="color:var(--yellow);margin-bottom:4px;">⚠️ JSで後から読み込んでいそうな痕跡があります</div>`;
+    for (const [kw, snippet] of Object.entries(d.found_keywords)) {
+      html += `<div style="margin-bottom:4px;">
+        <span style="font-weight:700;color:${snippet ? 'var(--green)' : 'var(--text-muted)'};">${snippet ? '✓' : '✗'} 「${kw}」</span>
+        ${snippet ? `<div style="font-size:10px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;">${snippet}</div>` : ''}
+      </div>`;
+    }
+    if (d.raw_table_snippet) {
+      html += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
+        <div style="font-weight:700;">📋 「展示タイム」周辺の生HTML（これをコピーして送ってください）</div>
+        <textarea readonly style="width:100%;height:150px;margin-top:6px;font-size:10px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px;" onclick="this.select()">${d.raw_table_snippet.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</textarea>
+      </div>`;
+    }
     el.innerHTML = html;
   } catch (e) {
     el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
