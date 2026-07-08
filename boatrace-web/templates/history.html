@@ -1374,7 +1374,32 @@ async function runAutoPredict() {
       <span class="pred-label" style="background:#b000dc;color:#fff;">${p.type}</span>
       <span class="pred-combo">${p.combo}</span>
     </div>`).join('');
+    html += `<button id="auto-predict-save-btn" style="margin-top:8px;padding:6px 16px;background:linear-gradient(135deg,var(--green),#00a854);color:#000;font-weight:900;border:none;border-radius:6px;font-size:12px;cursor:pointer;">💾 v-auto予想を保存（実弾なし・記録のみ）</button>
+      <div id="auto-predict-save-status" style="margin-top:6px;font-size:11px;"></div>`;
     el.innerHTML = html;
+    document.getElementById('auto-predict-save-btn').onclick = async () => {
+      const statusEl = document.getElementById('auto-predict-save-status');
+      statusEl.textContent = '保存中...';
+      try {
+        const saveResp = await fetch('/save_record', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({
+            race_date: d.race_date,
+            venue: d.venue,
+            race_no: d.race_no,
+            predictions: d.predictions.map(p => ({ combo: p.combo, type: p.type, odds: null })),
+            model_version: 'v-auto-groupB',
+            input_data: { boats: d.boats, venue: d.venue },
+          })
+        });
+        const saveResult = await saveResp.json();
+        statusEl.innerHTML = saveResult.success
+          ? '<span style="color:var(--green);">✓ 保存しました（成績記録ページで結果入力してください）</span>'
+          : '<span style="color:var(--accent);">保存に失敗しました</span>';
+      } catch (e) {
+        statusEl.innerHTML = '<span style="color:var(--accent);">保存エラー</span>';
+      }
+    };
   } catch (e) {
     el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
   }

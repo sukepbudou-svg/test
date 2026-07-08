@@ -1232,7 +1232,7 @@ def save_record():
         data.get('nige_rate'),
         data.get('wind'),
         json.dumps(data.get('input_data'), ensure_ascii=False) if data.get('input_data') else None,
-        MODEL_VERSION,
+        data.get('model_version') or MODEL_VERSION,
         1 if data.get('is_womens') else 0
     ))
     conn.commit()
