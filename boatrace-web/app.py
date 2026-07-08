@@ -1473,6 +1473,46 @@ def _fetch_race_html(venue, race_no, race_date):
         return None, url, str(e)
 
 
+def _parse_beforeinfo_html(html):
+    """直前情報（beforeinfo）ページのHTMLから、展示タイム・チルト・部品交換の有無を
+    抽出する（v-auto用・2026-07-08実装）。進入コース（前付け後）は別セクション
+    「スタート展示」にあるため、ここでは扱わない。6艇分のリストを返す"""
+    boats = []
+    blocks = re.split(r'is-boatColor(\d)\s+is-fs14', html)
+    for i in range(1, len(blocks), 2):
+        boat_number = int(blocks[i])
+        block = blocks[i + 1][:3000]
+
+        toban_m = re.search(r'toban=(\d+)', block)
+        toban = toban_m.group(1) if toban_m else None
+
+        weight_m = re.search(r'rowspan="2">\s*([\d.]+)\s*kg\s*</td>', block)
+        weight = safe_float(weight_m.group(1)) if weight_m else 0.0
+
+        # 展示タイム・チルト・プロペラは連続する「純粋テキストのrowspan="4"セル」。
+        # 写真・氏名・部品交換セルはタグを含むため、このパターンにはマッチしない。
+        # ただし艇番号セル自体もrowspan="4"の純粋テキストなので、ブロック分割後に
+        # その残骸（" rowspan="4">N</td>"）が先頭に残ってしまう点に注意し、1個スキップする
+        rs4 = re.findall(r'rowspan="4">\s*([^<]*?)\s*</td>', block)
+        exhibit_time = safe_float(rs4[1]) if len(rs4) > 1 else 0.0
+        tilt = safe_float(rs4[2]) if len(rs4) > 2 else 0.0
+
+        parts_m = re.search(r'labelGroup1">(.*?)</ul>', block, re.S)
+        parts_changed = bool(parts_m and '<li' in parts_m.group(1))
+
+        boats.append({
+            'boat_number': boat_number,
+            'toban': toban,
+            'weight': weight,
+            'exhibit_time': exhibit_time,
+            'tilt': tilt,
+            'parts_changed': parts_changed,
+        })
+        if len(boats) >= 6:
+            break
+    return boats
+
+
 def _parse_racelist_html(html):
     """出走表（racelist）ページのHTMLから、各艇のグループBデータ
     （選手勝率・級別・モーター成績）を抽出する（v-auto用・2026-07-07実装）。
