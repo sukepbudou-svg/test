@@ -1490,8 +1490,17 @@ def _parse_racelist_html(html):
         toban_m = re.search(r'toban=(\d+)', block)
         toban = toban_m.group(1) if toban_m else None
 
-        class_m = re.search(r'is-fColor\d\s*">\s*([AB][12])\s*</span>', block)
-        player_class = class_m.group(1) if class_m else None
+        # 級別: A1はis-fColorの色付きspanで囲まれるが、それ以外の級はspan無しの
+        # プレーンテキスト（"4010 / B1"のような形）で出てくるため、両方に対応する。
+        # 登録番号の直後に現れる「/ 級別」を探すことで誤マッチを避ける
+        player_class = None
+        if toban:
+            class_m = re.search(re.escape(toban) + r'\s*(?:<br\s*/?>)?\s*/\s*(?:<span[^>]*>)?\s*([AB][12])\s*(?:</span>)?', block)
+            if class_m:
+                player_class = class_m.group(1)
+        if not player_class:
+            class_m = re.search(r'is-fColor\d\s*">\s*([AB][12])\s*</span>', block)
+            player_class = class_m.group(1) if class_m else None
 
         name_m = re.search(r'<a[^>]*toban=\d+[^>]*>([^<]+)</a>', block)
         name = name_m.group(1).strip() if name_m else None
