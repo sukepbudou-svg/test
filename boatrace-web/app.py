@@ -1295,6 +1295,10 @@ def debug_html():
     kimari_idx = html.find('決まり手')
     kimari_snippet = html[max(0, kimari_idx - 50):kimari_idx + 300].replace('\n', ' ') if kimari_idx >= 0 else '(決まり手 not found)'
 
+    # 選手登録番号（toban）が結果ページに含まれているか調査（選手個人単位の統計を作る際に必要）
+    toban_matches = re.findall(r'toban=(\d+)', html)
+    toban_sample = list(dict.fromkeys(toban_matches))[:10]  # 重複除去して先頭10件
+
     return jsonify({
         'url': url,
         'html_length': len(html),
@@ -1302,6 +1306,8 @@ def debug_html():
         'trio_section': trio_snippet,
         'kimari_found': kimari_idx >= 0,
         'kimari_snippet': kimari_snippet,
+        'toban_found': len(toban_sample) > 0,
+        'toban_sample': toban_sample,
         'saved_to': save_path,
     })
 
@@ -1443,6 +1449,45 @@ def _fetch_race_html(venue, race_no, race_date):
             return resp.read().decode('utf-8', errors='ignore'), url, None
     except Exception as e:
         return None, url, str(e)
+
+
+@app.route('/debug_racer_profile', methods=['POST'])
+def debug_racer_profile():
+    """選手登録番号（toban）から公式の選手プロフィールページを取得し、
+    コース別成績など既に集計済みの統計が載っているか調査する（自動化v-auto検討用）"""
+    data = request.get_json() or {}
+    toban = str(data.get('toban', '')).strip()
+    if not toban or not toban.isdigit():
+        return jsonify({'error': '選手登録番号（数字）を指定してください'})
+
+    url = 'https://www.boatrace.jp/owpc/pc/data/racersearch/profile?toban=' + toban
+    try:
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'ja,en;q=0.5',
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read().decode('utf-8', errors='ignore')
+    except Exception as e:
+        return jsonify({'error': str(e), 'url': url})
+
+    save_path = os.path.join(os.path.dirname(__file__), 'debug_racer.html')
+    with open(save_path, 'w', encoding='utf-8') as f:
+        f.write(html)
+
+    # 「コース別」「進入」等、コース別成績集計が載っているか調査
+    found_keywords = {}
+    for kw in ['コース別', '進入', '当地', '全国', '1コース', '2コース']:
+        idx = html.find(kw)
+        found_keywords[kw] = html[max(0, idx - 30):idx + 200].replace('\n', ' ') if idx >= 0 else None
+
+    return jsonify({
+        'url': url,
+        'html_length': len(html),
+        'found_keywords': found_keywords,
+        'saved_to': save_path,
+    })
 
 
 @app.route('/scrape_nige_stats', methods=['POST'])

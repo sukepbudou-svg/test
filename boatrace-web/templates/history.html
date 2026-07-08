@@ -433,6 +433,12 @@ h1 {
       <button onclick="runKimariCheck()" style="padding:6px 16px;background:linear-gradient(135deg,#455a64,#78909c);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">確認する</button>
     </div>
     <div id="kimari-check-result" style="margin-top:10px;font-size:12px;"></div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">💡 上の結果に選手登録番号（toban）が見つかれば、下に表示されます。それを使って選手個人のページも調査できます</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px;">
+      <input type="text" id="debug-toban" placeholder="選手登録番号（例:4444）" style="width:180px;padding:5px 8px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:11px;">
+      <button onclick="runRacerProfileCheck()" style="padding:6px 16px;background:linear-gradient(135deg,#455a64,#78909c);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">選手ページを確認</button>
+    </div>
+    <div id="racer-profile-result" style="margin-top:10px;font-size:11px;"></div>
   </div>
 
   <!-- 逃げ率 自前計算検証（自動化v-auto検討用） -->
@@ -1233,7 +1239,41 @@ async function runKimariCheck() {
     const foundHtml = d.kimari_found
       ? `<span style="color:var(--green);font-weight:700;">✓ 「決まり手」が見つかりました！</span>`
       : `<span style="color:var(--accent);font-weight:700;">✗ 「決まり手」は見つかりませんでした</span>`;
-    el.innerHTML = `${foundHtml}<div style="margin-top:6px;font-size:11px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;">${d.kimari_snippet}</div>`;
+    const tobanHtml = d.toban_found
+      ? `<div style="margin-top:6px;">✓ 選手登録番号も見つかりました: ${d.toban_sample.map(t => `<button onclick="document.getElementById('debug-toban').value='${t}'" style="margin:2px;padding:2px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:10px;cursor:pointer;">${t}</button>`).join('')}<span style="font-size:10px;color:var(--text-muted);">（クリックで下の欄にセット）</span></div>`
+      : `<div style="margin-top:6px;color:var(--text-muted);">選手登録番号は見つかりませんでした</div>`;
+    el.innerHTML = `${foundHtml}${tobanHtml}<div style="margin-top:6px;font-size:11px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;">${d.kimari_snippet}</div>`;
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
+  }
+}
+
+async function runRacerProfileCheck() {
+  const toban = document.getElementById('debug-toban').value.trim();
+  const el = document.getElementById('racer-profile-result');
+  if (!toban) {
+    el.innerHTML = '<span style="color:var(--accent);">選手登録番号を入力してください</span>';
+    return;
+  }
+  el.innerHTML = '<span style="color:var(--text-muted);">取得中...</span>';
+  try {
+    const resp = await fetch('/debug_racer_profile', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ toban })
+    });
+    const d = await resp.json();
+    if (d.error) {
+      el.innerHTML = `<span style="color:var(--accent);">エラー: ${d.error}</span>`;
+      return;
+    }
+    let html = `<div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;">${d.url}</div>`;
+    for (const [kw, snippet] of Object.entries(d.found_keywords)) {
+      html += `<div style="margin-bottom:4px;">
+        <span style="font-weight:700;color:${snippet ? 'var(--green)' : 'var(--text-muted)'};">${snippet ? '✓' : '✗'} 「${kw}」</span>
+        ${snippet ? `<div style="font-size:10px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;">${snippet}</div>` : ''}
+      </div>`;
+    }
+    el.innerHTML = html;
   } catch (e) {
     el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
   }
