@@ -912,6 +912,10 @@ function renderRecords() {
       const uraColor = uraClearNum >= 3 ? 'var(--green)' : '#d95cff';
       shobuBadge += ` <span style="font-size:9px;color:${uraColor};font-weight:700;white-space:nowrap;">🐻${r.ura_clear}</span>`;
     }
+    // v-auto予想（グループB単独・公式データのみで自動生成）の印
+    if (r.model_version === 'v-auto-groupB') {
+      shobuBadge += ' <span style="font-size:9px;color:#42a5f5;font-weight:700;white-space:nowrap;">🤖v-auto</span>';
+    }
 
     return `<tr data-id="${r.id}">
       <td>${r.race_date}</td>

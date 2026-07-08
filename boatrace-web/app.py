@@ -1841,13 +1841,13 @@ def get_records():
     period = request.args.get('period', 'all')
     conn = get_db()
     if period == 'today':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data, model_version FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
     elif period == 'week':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data, model_version FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
     elif period == 'month':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data, model_version FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
     else:
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data, model_version FROM records ORDER BY id DESC").fetchall()
     conn.close()
 
     # tier判定用: 結果が出ている全レコードを会場別にまとめておく（期間フィルタと無関係に全期間で判定）
@@ -1910,6 +1910,7 @@ def get_records():
             'is_womens': bool(r['is_womens']) if 'is_womens' in r.keys() and r['is_womens'] is not None else False,
             'tier': tier_cache[cache_key],
             'ura_clear': ura_clear,
+            'model_version': r['model_version'] if 'model_version' in r.keys() else None,
         })
     return jsonify(records)
 
@@ -2155,13 +2156,13 @@ def history_stats():
 
     conn = get_db()
     if period == 'today':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data, model_version FROM records WHERE race_date = date('now', '+9 hours') ORDER BY id DESC").fetchall()
     elif period == 'week':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data, model_version FROM records WHERE race_date >= date('now', '-7 days') ORDER BY id DESC").fetchall()
     elif period == 'month':
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data, model_version FROM records WHERE race_date >= date('now', '-30 days') ORDER BY id DESC").fetchall()
     else:
-        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data FROM records ORDER BY id DESC").fetchall()
+        rows = conn.execute("SELECT id, race_date, venue, race_no, predictions, result_1st, result_2nd, result_3rd, payout, purchase, is_hit, created_at, nige_rate, wind, henkan, is_womens, input_data, model_version FROM records ORDER BY id DESC").fetchall()
     conn.close()
 
     # フィルター適用
