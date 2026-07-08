@@ -3005,6 +3005,7 @@ def strategy_sim():
         'ruleB':    {'name': 'B: 安い方の本命1点だけ除外し4点', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
         'ruleC':    {'name': 'C: 本命どちらかが7倍未満なら対抗抜き本命2点のみ', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
         'box12':    {'name': '🆕 1-2着ボックス+4番手固定（4点、ユーザー提案・荒れ対応版）', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
+        'v_auto':   {'name': '🤖 v-auto予想（本命2+対抗3、保存時の自動予想そのまま）', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
     }
     # 裏熊向け戦略
     ura_strategies = {
@@ -3048,6 +3049,9 @@ def strategy_sim():
         if not honmei:
             continue
         base5 = honmei + taikou
+        if r['model_version'] == 'v-auto-groupB':
+            settle(strategies['v_auto'], base5, result_combo, result_odds)
+            continue
         settle(strategies['full5'], base5, result_combo, result_odds)
         settle(strategies['honmei2'], honmei, result_combo, result_odds)
         settle(strategies['skip1'], honmei[1:] + taikou, result_combo, result_odds)
