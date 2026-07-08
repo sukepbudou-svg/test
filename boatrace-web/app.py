@@ -1473,6 +1473,96 @@ def _fetch_race_html(venue, race_no, race_date):
         return None, url, str(e)
 
 
+def _parse_racelist_html(html):
+    """出走表（racelist）ページのHTMLから、各艇のグループBデータ
+    （選手勝率・級別・モーター成績）を抽出する（v-auto用・2026-07-07実装）。
+    6艇分のリストを返す。パースに失敗した艇はNoneを返す"""
+    boats = []
+    # 艇ごとのブロックに分割（is-boatColorN is-fs14 が各艇ブロックの先頭マーカー）
+    blocks = re.split(r'is-boatColor(\d)\s+is-fs14', html)
+    # re.split with capturing group returns [pre, num1, block1, num2, block2, ...]
+    for i in range(1, len(blocks), 2):
+        boat_number = int(blocks[i])
+        block = blocks[i + 1]
+        # 次の艇のブロックに入り込まないよう、最初の4000文字程度に制限
+        block = block[:4000]
+
+        toban_m = re.search(r'toban=(\d+)', block)
+        toban = toban_m.group(1) if toban_m else None
+
+        class_m = re.search(r'is-fColor\d\s*">\s*([AB][12])\s*</span>', block)
+        player_class = class_m.group(1) if class_m else None
+
+        name_m = re.search(r'<a[^>]*toban=\d+[^>]*>([^<]+)</a>', block)
+        name = name_m.group(1).strip() if name_m else None
+        # 1つ目のtoban付きリンクは写真、2つ目が氏名のことが多いので両方試す
+        name_all = re.findall(r'<a[^>]*toban=\d+[^>]*>([^<]*)</a>', block)
+        for n in name_all:
+            n = n.strip()
+            if n:
+                name = n
+                break
+
+        fl_m = re.search(r'F(\d+)\s*<br\s*/?>\s*L(\d+)\s*<br\s*/?>\s*([\d.]+)\s*</td>', block)
+        is_f = bool(fl_m and int(fl_m.group(1)) > 0)
+        avg_st = safe_float(fl_m.group(3)) if fl_m else 0.0
+
+        # 全国/当地/モーター/ボートの「数値<br>数値<br>数値」の3つ組を順番に4つ取得
+        triplets = re.findall(r'([\d.]+)\s*<br\s*/?>\s*([\d.]+)\s*<br\s*/?>\s*([\d.]+)\s*</td>', block)
+        zenkoku = triplets[0] if len(triplets) > 0 else None
+        # 当地はF/L/平均STの三つ組と紛れないよう、triplets[0]がavg_stと一致する場合はスキップ
+        if fl_m and zenkoku and zenkoku[2] == fl_m.group(3):
+            triplets = triplets[1:]
+            zenkoku = triplets[0] if len(triplets) > 0 else None
+        touchi = triplets[1] if len(triplets) > 1 else None
+        motor = triplets[2] if len(triplets) > 2 else None
+
+        boats.append({
+            'boat_number': boat_number,
+            'course': boat_number,
+            'toban': toban,
+            'name': name,
+            'player_class': player_class,
+            'is_f': is_f,
+            'avg_st': avg_st,
+            'win1_rate': safe_float(zenkoku[0]) if zenkoku else 0.0,
+            'win2_rate': safe_float(zenkoku[1]) if zenkoku else 0.0,
+            'motor_win1': safe_float(motor[1]) if motor else 0.0,
+            'motor_contrib': 0.0,
+        })
+        if len(boats) >= 6:
+            break
+    return boats
+
+
+@app.route('/debug_racelist_parse', methods=['POST'])
+def debug_racelist_parse():
+    """出走表ページを取得し、_parse_racelist_html()で実際にパースした結果を返す
+    （パーサーの精度確認用・2026-07-07実装）"""
+    data = request.get_json() or {}
+    venue = data.get('venue', '')
+    race_no = data.get('race_no', 1)
+    race_date = data.get('race_date', '')
+    jcd = VENUE_CODES.get(venue)
+    if not jcd:
+        return jsonify({'error': '会場コード不明'})
+    hd = race_date.replace('-', '')
+    url = 'https://www.boatrace.jp/owpc/pc/race/racelist?rno=' + str(race_no) + '&jcd=' + jcd + '&hd=' + hd
+    try:
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'ja,en;q=0.5',
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read().decode('utf-8', errors='ignore')
+    except Exception as e:
+        return jsonify({'error': str(e), 'url': url})
+
+    boats = _parse_racelist_html(html)
+    return jsonify({'url': url, 'boats': boats})
+
+
 @app.route('/debug_racelist_stats', methods=['POST'])
 def debug_racelist_stats():
     """出走表（racelist）ページに、グループB（選手勝率・級別・モーター成績）に
