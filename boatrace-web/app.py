@@ -1297,10 +1297,31 @@ def debug_html():
 
     # 選手登録番号（toban）が結果ページに含まれているか調査（選手個人単位の統計を作る際に必要）
     toban_matches = re.findall(r'toban=(\d+)', html)
+    toban_source = 'raceresult'
+
+    # 結果ページに無ければ、出走表（レース前情報）ページも調べる。
+    # 出走表は各選手のプロフィールへのリンクを持っていることが多い
+    racelist_url = None
+    if not toban_matches:
+        racelist_url = 'https://www.boatrace.jp/owpc/pc/race/racelist?rno=' + str(race_no) + '&jcd=' + jcd + '&hd=' + hd
+        try:
+            req2 = urllib.request.Request(racelist_url, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'text/html,application/xhtml+xml',
+                'Accept-Language': 'ja,en;q=0.5',
+            })
+            with urllib.request.urlopen(req2, timeout=15) as resp2:
+                racelist_html = resp2.read().decode('utf-8', errors='ignore')
+            toban_matches = re.findall(r'toban=(\d+)', racelist_html)
+            toban_source = 'racelist'
+        except Exception:
+            pass
+
     toban_sample = list(dict.fromkeys(toban_matches))[:10]  # 重複除去して先頭10件
 
     return jsonify({
         'url': url,
+        'racelist_url': racelist_url,
         'html_length': len(html),
         'boatcolor_snippets': snippets,
         'trio_section': trio_snippet,
@@ -1308,6 +1329,7 @@ def debug_html():
         'kimari_snippet': kimari_snippet,
         'toban_found': len(toban_sample) > 0,
         'toban_sample': toban_sample,
+        'toban_source': toban_source if toban_sample else None,
         'saved_to': save_path,
     })
 

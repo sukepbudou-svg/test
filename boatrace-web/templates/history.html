@@ -1240,8 +1240,8 @@ async function runKimariCheck() {
       ? `<span style="color:var(--green);font-weight:700;">✓ 「決まり手」が見つかりました！</span>`
       : `<span style="color:var(--accent);font-weight:700;">✗ 「決まり手」は見つかりませんでした</span>`;
     const tobanHtml = d.toban_found
-      ? `<div style="margin-top:6px;">✓ 選手登録番号も見つかりました: ${d.toban_sample.map(t => `<button onclick="document.getElementById('debug-toban').value='${t}'" style="margin:2px;padding:2px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:10px;cursor:pointer;">${t}</button>`).join('')}<span style="font-size:10px;color:var(--text-muted);">（クリックで下の欄にセット）</span></div>`
-      : `<div style="margin-top:6px;color:var(--text-muted);">選手登録番号は見つかりませんでした</div>`;
+      ? `<div style="margin-top:6px;">✓ 選手登録番号も見つかりました（${d.toban_source === 'racelist' ? '出走表ページから' : '結果ページから'}）: ${d.toban_sample.map(t => `<button onclick="document.getElementById('debug-toban').value='${t}'" style="margin:2px;padding:2px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:10px;cursor:pointer;">${t}</button>`).join('')}<span style="font-size:10px;color:var(--text-muted);">（クリックで下の欄にセット）</span></div>`
+      : `<div style="margin-top:6px;color:var(--text-muted);">選手登録番号は見つかりませんでした（結果ページ・出走表ページどちらにも無し）</div>`;
     el.innerHTML = `${foundHtml}${tobanHtml}<div style="margin-top:6px;font-size:11px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;">${d.kimari_snippet}</div>`;
   } catch (e) {
     el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
