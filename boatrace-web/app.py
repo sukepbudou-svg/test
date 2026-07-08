@@ -1514,6 +1514,13 @@ def debug_racelist_stats():
 
     js_render_hint = any(k in html for k in ['data-url', 'ajax', 'fetch(', 'XMLHttpRequest'])
 
+    # パーサー設計用: 「全国」（選手成績テーブルのヘッダー）を起点に広い範囲を返す。
+    # ここにユーザーに貼ってもらい、実際の表構造を見てパーサーを組む
+    zenkoku_idx = html.find('全国')
+    raw_table_snippet = None
+    if zenkoku_idx >= 0:
+        raw_table_snippet = html[max(0, zenkoku_idx - 500):zenkoku_idx + 4000]
+
     return jsonify({
         'url': url,
         'html_length': len(html),
@@ -1521,6 +1528,7 @@ def debug_racelist_stats():
         'percent_like_number_count': percent_count,
         'class_label_count': class_count,
         'js_render_hint': js_render_hint,
+        'raw_table_snippet': raw_table_snippet,
         'saved_to': save_path,
     })
 

@@ -1282,6 +1282,12 @@ async function runRacelistCheck() {
         ${snippet ? `<div style="font-size:10px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;">${snippet}</div>` : ''}
       </div>`;
     }
+    if (d.raw_table_snippet) {
+      html += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
+        <div style="font-weight:700;">📋 選手データ表の生HTML（これをコピーして送ってください。パーサーを作るのに使います）</div>
+        <textarea readonly style="width:100%;height:150px;margin-top:6px;font-size:10px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px;" onclick="this.select()">${d.raw_table_snippet.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</textarea>
+      </div>`;
+    }
     el.innerHTML = html;
   } catch (e) {
     el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
