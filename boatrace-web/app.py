@@ -1637,20 +1637,12 @@ def debug_racelist_parse():
     return jsonify({'url': url, 'boats': boats})
 
 
-@app.route('/auto_predict', methods=['POST'])
-def auto_predict():
-    """出走表ページを自動取得し、グループB（選手勝率・級別・モーター・会場コース別）
-    だけで予想を自動生成する「v-auto」の第一段階（2026-07-07実装）。
-    展示タイム等の直前情報は使わないため、レース発走のかなり前でも実行できる"""
-    data = request.get_json() or {}
-    venue = data.get('venue', '')
-    race_no = data.get('race_no', 1)
-    race_date = data.get('race_date', '')
+def _fetch_page(path, venue, race_no, race_date):
     jcd = VENUE_CODES.get(venue)
     if not jcd:
-        return jsonify({'error': '会場コード不明'})
+        return None, None, '会場コード不明'
     hd = race_date.replace('-', '')
-    url = 'https://www.boatrace.jp/owpc/pc/race/racelist?rno=' + str(race_no) + '&jcd=' + jcd + '&hd=' + hd
+    url = f'https://www.boatrace.jp/owpc/pc/race/{path}?rno=' + str(race_no) + '&jcd=' + jcd + '&hd=' + hd
     try:
         req = urllib.request.Request(url, headers={
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -1658,23 +1650,76 @@ def auto_predict():
             'Accept-Language': 'ja,en;q=0.5',
         })
         with urllib.request.urlopen(req, timeout=15) as resp:
-            html = resp.read().decode('utf-8', errors='ignore')
+            return resp.read().decode('utf-8', errors='ignore'), url, None
     except Exception as e:
-        return jsonify({'error': str(e), 'url': url})
+        return None, url, str(e)
 
-    boats = _parse_racelist_html(html)
+
+@app.route('/auto_predict', methods=['POST'])
+def auto_predict():
+    """出走表＋直前情報を自動取得し、グループB（選手勝率・級別・モーター・会場コース別）に
+    加えて展示タイム・展示ST・チルト・前付け後の進入コースも使って予想を自動生成する
+    「v-auto」（2026-07-08拡張）。イン逃げ率（ボートレース日和依存）だけは使わないため、
+    v6/v7のハイブリッド対抗・3着差し替えは働かない（nige_rate未入力時の基本ロジックで動く）。
+    直前情報が未公開の時間帯でも、出走表の情報だけで動作は継続する（展示系は0埋め）"""
+    data = request.get_json() or {}
+    venue = data.get('venue', '')
+    race_no = data.get('race_no', 1)
+    race_date = data.get('race_date', '')
+
+    racelist_html, racelist_url, err = _fetch_page('racelist', venue, race_no, race_date)
+    if err or not racelist_html:
+        return jsonify({'error': err or '出走表の取得に失敗しました', 'url': racelist_url})
+
+    boats = _parse_racelist_html(racelist_html)
     if len(boats) != 6:
-        return jsonify({'error': f'出走表の解析に失敗しました（{len(boats)}艇のみ取得）', 'url': url, 'boats': boats})
+        return jsonify({'error': f'出走表の解析に失敗しました（{len(boats)}艇のみ取得）', 'url': racelist_url, 'boats': boats})
+
+    # 直前情報（展示タイム/チルト/部品交換・進入コース/展示ST）は未公開の場合もあるため、
+    # 取得できなければ0埋めのまま続行する（グループBだけでも動くように）
+    beforeinfo_html, beforeinfo_url, _ = _fetch_page('beforeinfo', venue, race_no, race_date)
+    info_by_boat = {}
+    start_by_boat = {}
+    if beforeinfo_html:
+        info_by_boat = {b['boat_number']: b for b in _parse_beforeinfo_html(beforeinfo_html)}
+        start_by_boat = {b['boat_number']: b for b in _parse_start_display_html(beforeinfo_html)}
+
+    merged = []
+    for b in boats:
+        bn = b['boat_number']
+        info = info_by_boat.get(bn, {})
+        start = start_by_boat.get(bn, {})
+        merged.append({
+            'boat_number': bn,
+            'course': start.get('course', bn),
+            'toban': b['toban'],
+            'name': b['name'],
+            'player_class': b['player_class'],
+            'is_f': b['is_f'],
+            'avg_st': b['avg_st'],
+            'win1_rate': b['win1_rate'],
+            'win2_rate': b['win2_rate'],
+            'motor_win1': b['motor_win1'],
+            'motor_contrib': b['motor_contrib'],
+            'exhibit_time': info.get('exhibit_time', 0.0),
+            'tilt': info.get('tilt', 0.0),
+            'exhibit_st': start.get('exhibit_st', 0.0),
+            'weight': info.get('weight', 0.0),
+            'parts_changed': info.get('parts_changed', False),
+        })
 
     incomplete = [b['boat_number'] for b in boats if not b['toban'] or b['player_class'] is None]
-    result = predict_single_factor(boats, venue=venue, group='B')
+    has_beforeinfo = bool(info_by_boat) and bool(start_by_boat)
+    result = predict(merged, venue=venue, v9_group_b_boost=USE_V9_GROUP_B_BOOST_LIVE)
 
     return jsonify({
-        'url': url,
+        'url': racelist_url,
+        'beforeinfo_url': beforeinfo_url,
+        'has_beforeinfo': has_beforeinfo,
         'venue': venue,
         'race_no': race_no,
         'race_date': race_date,
-        'boats': boats,
+        'boats': merged,
         'incomplete_boats': incomplete,
         'predictions': result['predictions'],
     })
