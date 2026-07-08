@@ -3004,7 +3004,7 @@ def strategy_sim():
         'ruleA':    {'name': 'A: 本命どちらかが7倍未満なら見送り', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
         'ruleB':    {'name': 'B: 安い方の本命1点だけ除外し4点', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
         'ruleC':    {'name': 'C: 本命どちらかが7倍未満なら対抗抜き本命2点のみ', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
-        'box12':    {'name': '🆕 1-2着ボックス+3着固定（4点、ユーザー提案）', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
+        'box12':    {'name': '🆕 1-2着ボックス+4番手固定（4点、ユーザー提案・荒れ対応版）', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
     }
     # 裏熊向け戦略
     ura_strategies = {
@@ -3093,10 +3093,10 @@ def strategy_sim():
                     v9_group_b_boost=USE_V9_GROUP_B_BOOST_LIVE,
                 )
                 score_order = box_result.get('score_order') or []
-                if len(score_order) >= 3:
+                if len(score_order) >= 4:
                     axis1 = score_order[0]['boat_number']
                     axis2 = score_order[1]['boat_number']
-                    wildcard = score_order[2]['boat_number']
+                    wildcard = score_order[3]['boat_number']
                     box_combos = [
                         f"{axis1}-{axis2}-{wildcard}", f"{axis1}-{wildcard}-{axis2}",
                         f"{axis2}-{axis1}-{wildcard}", f"{axis2}-{wildcard}-{axis1}",
