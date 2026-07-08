@@ -1651,9 +1651,13 @@ def debug_beforeinfo_stats():
     percent_count = len(re.findall(r'\d+\.\d+', html))
     js_render_hint = any(k in html for k in ['data-url', 'ajax', 'fetch(', 'XMLHttpRequest'])
 
-    # パーサー設計用の生スニペット（「展示タイム」を起点に）
-    ex_idx = html.find('展示タイム')
-    raw_table_snippet = html[max(0, ex_idx - 500):ex_idx + 4000] if ex_idx >= 0 else None
+    # パーサー設計用の生スニペット（見つかったキーワードのうち最初のものを起点に）
+    raw_table_snippet = None
+    for anchor_kw in ['チルト', 'スタート展示', '進入', '部品交換', '展示タイム']:
+        anchor_idx = html.find(anchor_kw)
+        if anchor_idx >= 0:
+            raw_table_snippet = html[max(0, anchor_idx - 500):anchor_idx + 4000]
+            break
 
     return jsonify({
         'url': url,
