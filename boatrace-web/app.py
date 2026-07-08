@@ -1473,6 +1473,58 @@ def _fetch_race_html(venue, race_no, race_date):
         return None, url, str(e)
 
 
+@app.route('/debug_racelist_stats', methods=['POST'])
+def debug_racelist_stats():
+    """出走表（racelist）ページに、グループB（選手勝率・級別・モーター成績）に
+    必要なデータが静的HTMLで取得できるか調査する（v-auto検討用・2026-07-07実装）。
+    イン逃げ率のような第三者サイト依存・JS描画待ちの問題を避けられるかを確認する"""
+    data = request.get_json() or {}
+    venue = data.get('venue', '')
+    race_no = data.get('race_no', 1)
+    race_date = data.get('race_date', '')
+    jcd = VENUE_CODES.get(venue)
+    if not jcd:
+        return jsonify({'error': '会場コード不明'})
+    hd = race_date.replace('-', '')
+    url = 'https://www.boatrace.jp/owpc/pc/race/racelist?rno=' + str(race_no) + '&jcd=' + jcd + '&hd=' + hd
+    try:
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'ja,en;q=0.5',
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read().decode('utf-8', errors='ignore')
+    except Exception as e:
+        return jsonify({'error': str(e), 'url': url})
+
+    save_path = os.path.join(os.path.dirname(__file__), 'debug_racelist.html')
+    with open(save_path, 'w', encoding='utf-8') as f:
+        f.write(html)
+
+    # グループBに必要なデータの手がかりを探す
+    found_keywords = {}
+    for kw in ['A1', 'A2', 'B1', 'B2', '全国', '当地', 'モーター', '勝率', '2連率', '3連率']:
+        idx = html.find(kw)
+        found_keywords[kw] = html[max(0, idx - 30):idx + 150].replace('\n', ' ') if idx >= 0 else None
+
+    # 級別・勝率・モーター番号らしき数字（%表記や小数）が実際に含まれているか
+    percent_count = len(re.findall(r'\d+\.\d+', html))
+    class_count = len(re.findall(r'\b[AB][12]\b', html))
+
+    js_render_hint = any(k in html for k in ['data-url', 'ajax', 'fetch(', 'XMLHttpRequest'])
+
+    return jsonify({
+        'url': url,
+        'html_length': len(html),
+        'found_keywords': found_keywords,
+        'percent_like_number_count': percent_count,
+        'class_label_count': class_count,
+        'js_render_hint': js_render_hint,
+        'saved_to': save_path,
+    })
+
+
 @app.route('/debug_racer_profile', methods=['POST'])
 def debug_racer_profile():
     """選手登録番号（toban）から公式の選手プロフィールページを取得し、

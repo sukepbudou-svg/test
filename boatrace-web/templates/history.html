@@ -439,6 +439,9 @@ h1 {
       <button onclick="runRacerProfileCheck()" style="padding:6px 16px;background:linear-gradient(135deg,#455a64,#78909c);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">選手ページを確認</button>
     </div>
     <div id="racer-profile-result" style="margin-top:10px;font-size:11px;"></div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">💡 上の会場・レース番号・日付を使って、出走表ページに選手勝率・級別・モーター成績（グループBに必要なデータ）が静的HTMLで載っているか確認できます</div>
+    <button onclick="runRacelistCheck()" style="margin-top:6px;padding:6px 16px;background:linear-gradient(135deg,#00796b,#26a69a);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">出走表を確認</button>
+    <div id="racelist-check-result" style="margin-top:10px;font-size:11px;"></div>
   </div>
 
   <!-- 逃げ率 自前計算検証（自動化v-auto検討用） -->
@@ -1243,6 +1246,43 @@ async function runKimariCheck() {
       ? `<div style="margin-top:6px;">✓ 選手登録番号も見つかりました（${d.toban_source === 'racelist' ? '出走表ページから' : '結果ページから'}）: ${d.toban_sample.map(t => `<button onclick="document.getElementById('debug-toban').value='${t}'" style="margin:2px;padding:2px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:10px;cursor:pointer;">${t}</button>`).join('')}<span style="font-size:10px;color:var(--text-muted);">（クリックで下の欄にセット）</span></div>`
       : `<div style="margin-top:6px;color:var(--text-muted);">選手登録番号は見つかりませんでした（結果ページ・出走表ページどちらにも無し）</div>`;
     el.innerHTML = `${foundHtml}${tobanHtml}<div style="margin-top:6px;font-size:11px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;">${d.kimari_snippet}</div>`;
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
+  }
+}
+
+async function runRacelistCheck() {
+  populateDebugVenueSelect();
+  const venue = document.getElementById('debug-venue').value;
+  const raceNo = document.getElementById('debug-race-no').value;
+  const raceDate = document.getElementById('debug-race-date').value;
+  const el = document.getElementById('racelist-check-result');
+  if (!venue || !raceNo || !raceDate) {
+    el.innerHTML = '<span style="color:var(--accent);">上の会場・レース番号・日付をすべて入力してください</span>';
+    return;
+  }
+  el.innerHTML = '<span style="color:var(--text-muted);">取得中...</span>';
+  try {
+    const resp = await fetch('/debug_racelist_stats', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ venue, race_no: parseInt(raceNo, 10), race_date: raceDate })
+    });
+    const d = await resp.json();
+    if (d.error) {
+      el.innerHTML = `<span style="color:var(--accent);">エラー: ${d.error}</span>`;
+      return;
+    }
+    let html = `<div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;">${d.url}</div>`;
+    html += `<div style="margin-bottom:4px;">${d.percent_like_number_count > 20 ? '<span style="color:var(--green);font-weight:700;">✓ 数字（勝率らしきもの）が' + d.percent_like_number_count + '個見つかりました</span>' : '<span style="color:var(--accent);font-weight:700;">✗ 数字がほとんど見つかりません（' + d.percent_like_number_count + '個）</span>'}</div>`;
+    html += `<div style="margin-bottom:4px;">${d.class_label_count > 0 ? '<span style="color:var(--green);font-weight:700;">✓ 級別ラベル（A1/A2/B1/B2）が' + d.class_label_count + '個見つかりました</span>' : '<span style="color:var(--accent);font-weight:700;">✗ 級別ラベルが見つかりません</span>'}</div>`;
+    if (d.js_render_hint) html += `<div style="color:var(--yellow);margin-bottom:4px;">⚠️ JSで後から読み込んでいそうな痕跡があります</div>`;
+    for (const [kw, snippet] of Object.entries(d.found_keywords)) {
+      html += `<div style="margin-bottom:4px;">
+        <span style="font-weight:700;color:${snippet ? 'var(--green)' : 'var(--text-muted)'};">${snippet ? '✓' : '✗'} 「${kw}」</span>
+        ${snippet ? `<div style="font-size:10px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;">${snippet}</div>` : ''}
+      </div>`;
+    }
+    el.innerHTML = html;
   } catch (e) {
     el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
   }
