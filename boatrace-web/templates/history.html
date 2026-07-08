@@ -444,6 +444,8 @@ h1 {
     <div id="racelist-check-result" style="margin-top:10px;font-size:11px;"></div>
     <button onclick="runRacelistParse()" style="margin-top:6px;padding:6px 16px;background:linear-gradient(135deg,#2e7d32,#66bb6a);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">🧪 パーサーで6艇分を解析してみる</button>
     <div id="racelist-parse-result" style="margin-top:10px;font-size:11px;overflow-x:auto;"></div>
+    <button onclick="runAutoPredict()" style="margin-top:6px;padding:6px 16px;background:linear-gradient(135deg,#b000dc,#7000b0);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:bold;cursor:pointer;">🤖 v-auto予想を自動生成してみる</button>
+    <div id="auto-predict-result" style="margin-top:10px;font-size:12px;"></div>
   </div>
 
   <!-- 逃げ率 自前計算検証（自動化v-auto検討用） -->
@@ -1336,6 +1338,42 @@ async function runRacelistParse() {
         <td style="padding:2px 6px;text-align:center;">${b.motor_win1}</td>
       </tr>`).join('')}</tbody>
     </table>`;
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
+  }
+}
+
+async function runAutoPredict() {
+  populateDebugVenueSelect();
+  const venue = document.getElementById('debug-venue').value;
+  const raceNo = document.getElementById('debug-race-no').value;
+  const raceDate = document.getElementById('debug-race-date').value;
+  const el = document.getElementById('auto-predict-result');
+  if (!venue || !raceNo || !raceDate) {
+    el.innerHTML = '<span style="color:var(--accent);">上の会場・レース番号・日付をすべて入力してください</span>';
+    return;
+  }
+  el.innerHTML = '<span style="color:var(--text-muted);">出走表を取得して予想中...</span>';
+  try {
+    const resp = await fetch('/auto_predict', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ venue, race_no: parseInt(raceNo, 10), race_date: raceDate })
+    });
+    const d = await resp.json();
+    if (d.error) {
+      el.innerHTML = `<span style="color:var(--accent);">エラー: ${d.error}</span>`;
+      return;
+    }
+    let html = '';
+    if (d.incomplete_boats && d.incomplete_boats.length > 0) {
+      html += `<div style="color:var(--yellow);margin-bottom:6px;">⚠️ ${d.incomplete_boats.join(',')}号艇はデータが一部欠けている可能性があります</div>`;
+    }
+    html += `<div style="font-weight:700;margin-bottom:6px;">🤖 v-auto予想（グループB単独・公式データのみ）</div>`;
+    html += d.predictions.map(p => `<div class="pred-item" style="background:rgba(176,0,220,0.08);border-color:#b000dc;">
+      <span class="pred-label" style="background:#b000dc;color:#fff;">${p.type}</span>
+      <span class="pred-combo">${p.combo}</span>
+    </div>`).join('');
     el.innerHTML = html;
   } catch (e) {
     el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';

@@ -1572,6 +1572,49 @@ def debug_racelist_parse():
     return jsonify({'url': url, 'boats': boats})
 
 
+@app.route('/auto_predict', methods=['POST'])
+def auto_predict():
+    """出走表ページを自動取得し、グループB（選手勝率・級別・モーター・会場コース別）
+    だけで予想を自動生成する「v-auto」の第一段階（2026-07-07実装）。
+    展示タイム等の直前情報は使わないため、レース発走のかなり前でも実行できる"""
+    data = request.get_json() or {}
+    venue = data.get('venue', '')
+    race_no = data.get('race_no', 1)
+    race_date = data.get('race_date', '')
+    jcd = VENUE_CODES.get(venue)
+    if not jcd:
+        return jsonify({'error': '会場コード不明'})
+    hd = race_date.replace('-', '')
+    url = 'https://www.boatrace.jp/owpc/pc/race/racelist?rno=' + str(race_no) + '&jcd=' + jcd + '&hd=' + hd
+    try:
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'ja,en;q=0.5',
+        })
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read().decode('utf-8', errors='ignore')
+    except Exception as e:
+        return jsonify({'error': str(e), 'url': url})
+
+    boats = _parse_racelist_html(html)
+    if len(boats) != 6:
+        return jsonify({'error': f'出走表の解析に失敗しました（{len(boats)}艇のみ取得）', 'url': url, 'boats': boats})
+
+    incomplete = [b['boat_number'] for b in boats if not b['toban'] or b['player_class'] is None]
+    result = predict_single_factor(boats, venue=venue, group='B')
+
+    return jsonify({
+        'url': url,
+        'venue': venue,
+        'race_no': race_no,
+        'race_date': race_date,
+        'boats': boats,
+        'incomplete_boats': incomplete,
+        'predictions': result['predictions'],
+    })
+
+
 @app.route('/debug_racelist_stats', methods=['POST'])
 def debug_racelist_stats():
     """出走表（racelist）ページに、グループB（選手勝率・級別・モーター成績）に
