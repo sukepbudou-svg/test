@@ -1473,6 +1473,31 @@ def _fetch_race_html(venue, race_no, race_date):
         return None, url, str(e)
 
 
+def _parse_start_display_html(html):
+    """直前情報ページの「スタート展示」セクションから、前付け後の実際の進入コースと
+    展示ST（フライング含む）を抽出する（v-auto用・2026-07-08実装）。
+    行の出現順=進入コース順（1〜6コース）。[{'course','boat_number','exhibit_st','is_f'}, ...]を返す"""
+    idx = html.find('スタート展示')
+    if idx < 0:
+        return []
+    section = html[idx:idx + 6000]
+    rows = re.findall(
+        r'is-type(\d)">(\d)</span>.*?table1_boatImage1Time[^"]*">\s*(F?)\.(\d+)\s*</span>',
+        section, re.S
+    )
+    boats = []
+    for course_i, (_, boat_num, f_flag, st_frac) in enumerate(rows, start=1):
+        boats.append({
+            'course': course_i,
+            'boat_number': int(boat_num),
+            'is_f': bool(f_flag),
+            'exhibit_st': safe_float('0.' + st_frac),
+        })
+        if len(boats) >= 6:
+            break
+    return boats
+
+
 def _parse_beforeinfo_html(html):
     """直前情報（beforeinfo）ページのHTMLから、展示タイム・チルト・部品交換の有無を
     抽出する（v-auto用・2026-07-08実装）。進入コース（前付け後）は別セクション
