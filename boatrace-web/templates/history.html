@@ -1426,7 +1426,8 @@ async function runAutoPredict() {
     if (d.incomplete_boats && d.incomplete_boats.length > 0) {
       html += `<div style="color:var(--yellow);margin-bottom:6px;">⚠️ ${d.incomplete_boats.join(',')}号艇はデータが一部欠けている可能性があります</div>`;
     }
-    html += `<div style="font-weight:700;margin-bottom:6px;">🤖 v-auto予想（グループB単独・公式データのみ）</div>`;
+    const labelSuffix = d.has_beforeinfo ? 'グループA+B・展示情報込み' : 'グループB単独（直前情報は未取得）';
+    html += `<div style="font-weight:700;margin-bottom:6px;">🤖 v-auto予想（${labelSuffix}）</div>`;
     html += d.predictions.map(p => `<div class="pred-item" style="background:rgba(176,0,220,0.08);border-color:#b000dc;">
       <span class="pred-label" style="background:#b000dc;color:#fff;">${p.type}</span>
       <span class="pred-combo">${p.combo}</span>
