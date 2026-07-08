@@ -1504,10 +1504,26 @@ def debug_racer_profile():
         idx = html.find(kw)
         found_keywords[kw] = html[max(0, idx - 30):idx + 200].replace('\n', ' ') if idx >= 0 else None
 
+    # 「コース別」が見つかった場合、そのタブが見出しだけ（JS描画待ち）か実データも
+    # 静的HTMLに含まれているかを判定するため、より広い範囲を取得する
+    course_idx = html.find('コース別')
+    course_wide_snippet = None
+    has_percent_nearby = False
+    if course_idx >= 0:
+        wide = html[course_idx:course_idx + 3000]
+        course_wide_snippet = wide.replace('\n', ' ')
+        has_percent_nearby = '%' in wide or '．' in wide
+
+    # JSで後から描画している可能性のヒント（fetch/ajax/data-src等）
+    js_render_hint = any(k in html for k in ['data-url', 'ajax', 'fetch(', 'XMLHttpRequest'])
+
     return jsonify({
         'url': url,
         'html_length': len(html),
         'found_keywords': found_keywords,
+        'course_wide_snippet': course_wide_snippet,
+        'has_percent_nearby': has_percent_nearby,
+        'js_render_hint': js_render_hint,
         'saved_to': save_path,
     })
 

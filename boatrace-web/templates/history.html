@@ -1273,6 +1273,14 @@ async function runRacerProfileCheck() {
         ${snippet ? `<div style="font-size:10px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;">${snippet}</div>` : ''}
       </div>`;
     }
+    if (d.course_wide_snippet) {
+      html += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
+        <div style="font-weight:700;">「コース別」周辺の広い範囲（実データが静的HTMLに含まれているか確認用）</div>
+        <div style="margin-top:4px;">${d.has_percent_nearby ? '<span style="color:var(--green);">✓ 「%」の数字らしきものが近くにあります（実データが含まれている可能性）</span>' : '<span style="color:var(--accent);">✗ 「%」等の数字が近くに見当たりません（JSで後から描画している可能性）</span>'}</div>
+        <div style="margin-top:4px;">${d.js_render_hint ? '<span style="color:var(--yellow);">⚠️ JSで後から読み込んでいそうな痕跡（ajax/fetch等）があります</span>' : ''}</div>
+        <div style="font-size:10px;color:var(--text-muted);white-space:pre-wrap;word-break:break-all;margin-top:6px;max-height:300px;overflow-y:auto;">${d.course_wide_snippet}</div>
+      </div>`;
+    }
     el.innerHTML = html;
   } catch (e) {
     el.innerHTML = '<span style="color:var(--accent);">取得エラー</span>';
