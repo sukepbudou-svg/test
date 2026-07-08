@@ -3004,6 +3004,7 @@ def strategy_sim():
         'ruleA':    {'name': 'A: 本命どちらかが7倍未満なら見送り', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
         'ruleB':    {'name': 'B: 安い方の本命1点だけ除外し4点', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
         'ruleC':    {'name': 'C: 本命どちらかが7倍未満なら対抗抜き本命2点のみ', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
+        'box12':    {'name': '🆕 1-2着ボックス+3着固定（4点、ユーザー提案）', 'purchase': 0, 'payout': 0, 'hits': 0, 'races': 0},
     }
     # 裏熊向け戦略
     ura_strategies = {
@@ -3075,6 +3076,34 @@ def strategy_sim():
             # C: 安い本命があれば対抗を切って本命2点のみ、なければ5点フル
             c_set = honmei if is_cheap else base5
             settle(strategies['ruleC'], c_set, result_combo, result_odds)
+
+        # 🆕 1-2着ボックス+3着固定（ユーザー提案）: スコア上位2艇のどちらが1-2着でも対応し、
+        # 3位の艇を3着固定にする4点（例: 1,2位が軸→1-2-3, 1-3-2, 2-1-3, 2-3-1）。
+        # スコア順位を再計算する必要があるため、input_dataからpredict()を再実行する
+        if inp and inp.get('boats'):
+            try:
+                box_result = predict(
+                    inp.get('boats', []),
+                    kimari=inp.get('kimari'),
+                    venue=inp.get('venue'),
+                    wind=inp.get('wind'),
+                    nige_rate=inp.get('nige_rate'),
+                    hybrid_taikou=USE_V6_LIVE,
+                    v7_third=USE_V7_THIRD_LIVE,
+                    v9_group_b_boost=USE_V9_GROUP_B_BOOST_LIVE,
+                )
+                score_order = box_result.get('score_order') or []
+                if len(score_order) >= 3:
+                    axis1 = score_order[0]['boat_number']
+                    axis2 = score_order[1]['boat_number']
+                    wildcard = score_order[2]['boat_number']
+                    box_combos = [
+                        f"{axis1}-{axis2}-{wildcard}", f"{axis1}-{wildcard}-{axis2}",
+                        f"{axis2}-{axis1}-{wildcard}", f"{axis2}-{wildcard}-{axis1}",
+                    ]
+                    settle(strategies['box12'], box_combos, result_combo, result_odds)
+            except Exception:
+                pass
 
     def fmt(d):
         out = []
