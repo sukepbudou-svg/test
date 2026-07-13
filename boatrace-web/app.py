@@ -88,7 +88,7 @@ init_db()
 #     単一要素モデル比較でグループB単独の本命的中率がv7を上回ったことを受けて追加。
 #     335レース検証: 本命+1.8pt/対抗+1.5pt/回収率+10.7pt（88.2%→98.9%）。
 #     65%以上96レースでも一貫: 本命+3.1pt/対抗+3.2pt/回収率+9.0pt（81.7%→90.7%）で採用
-MODEL_VERSION = 'v9'
+MODEL_VERSION = 'legacy-0627'
 # v5ロジックのon/off: 3回の検証で無効果と確定。実戦・バックテストとも常時False
 USE_V5_LIVE = False
 # v6ハイブリッド対抗: 採用済み（2026-07-04）
@@ -97,6 +97,13 @@ USE_V6_LIVE = True
 USE_V7_THIRD_LIVE = True
 # v9: グループB（選手勝率・級別・モーター・会場コース別）の重みを1.5倍。採用済み（2026-07-07）
 USE_V9_GROUP_B_BOOST_LIVE = True
+# 2026-07-13: 6/25〜6/29に動いていたモデルに実戦の通常予想（本命・対抗）を巻き戻す。
+# ユーザーの感覚として「アップデートを重ねるたび成績が悪化した」との申告を受けての切り戻し。
+# True の間は predict_route が legacy_mode=True で predict() を呼び、級別補正・周回/直線/
+# まわり足・展示ST展開補正・v6/v7/v9の全補正をスキップし、当時のシンプルな
+# 「スコア=展示タイム+平均ST+チルト+F+選手勝率+モーター+会場コース別」だけで
+# 上位2=本命/次点3=対抗を選ぶロジックに戻す。裏熊・中穴・バックテスト等の他機能には影響しない
+USE_LEGACY_0627_LIVE = True
 
 # 会場グループ（2026-07-04ユーザー設定。index.html/history.htmlの同名定数と同期すること）
 TOKUI_VENUES = ['大村', '福岡', '桐生', '徳山', '若松']
@@ -300,7 +307,10 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
-def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_arekote=False, kimari_full=None, hybrid_taikou=False, v7_fix2nd=False, v7_third=False, extra_stats=None, v9_group_b_boost=False, v9_cho_tenkai=False):
+def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_arekote=False, kimari_full=None, hybrid_taikou=False, v7_fix2nd=False, v7_third=False, extra_stats=None, v9_group_b_boost=False, v9_cho_tenkai=False, legacy_mode=False):
+    # legacy_mode（2026-07-13）はユーザー明示の通り「通常予想（本命・対抗）」だけを対象とする。
+    # 🐻裏熊（force_arekote）は現行ロジックのまま維持するため、裏熊呼び出し時はlegacy化しない
+    legacy_mode = legacy_mode and not force_arekote
     # 会場プロファイル取得
     vp = VENUE_PROFILES.get(venue, {"in_rate": 0.0, "upset": 0.5, "wind": 0.5})
     wind_bonus = WIND_UPSET_BONUS.get(wind, 0.0)
@@ -341,34 +351,38 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
         # v9候補（2026-07-07検証用）: グループB（選手勝率・級別・モーター・会場コース別）の
         # 重みを1.5倍にする。単一要素検証で本命的中率がグループB単独の方が複合モデルより
         # 高かった（14% vs 12.5%）ことを受けての実験。本命/対抗/裏熊/中穴の通常ロジックには影響しない
-        group_b_mult = 1.5 if v9_group_b_boost else 1.0
+        group_b_mult = (1.5 if v9_group_b_boost else 1.0) if not legacy_mode else 1.0
 
-        # 級別ST修正能力補正（展示STが悪い時ほど級の差が出る）
         exhibit_st = safe_float(b.get('exhibit_st', 0))
-        st_penalty = max(0, (exhibit_st - 0.15)) if exhibit_st > 0 else 0
-        class_bonus = {'A1': 0.8, 'A2': 0.4, 'B1': 0.0, 'B2': -0.5}.get(player_class, 0.0) * group_b_mult
-        base += class_bonus * (1 + st_penalty * 10)
 
-        # 周回タイム: 当日×0.6 + 平均×0.4 (小さいほど速い=良い)
-        if lap > 0 and avg_lap > 0:
-            combined_lap = lap * 0.6 + avg_lap * 0.4
-            base += (36.0 - combined_lap) * 0.5
-        elif lap > 0:
-            base += (36.0 - lap) * 0.5
+        # legacy_mode（6/25〜6/29復元）: 級別補正・周回/直線/まわり足はこの時期まだ実装されて
+        # いなかったため一切加算しない
+        if not legacy_mode:
+            # 級別ST修正能力補正（展示STが悪い時ほど級の差が出る）
+            st_penalty = max(0, (exhibit_st - 0.15)) if exhibit_st > 0 else 0
+            class_bonus = {'A1': 0.8, 'A2': 0.4, 'B1': 0.0, 'B2': -0.5}.get(player_class, 0.0) * group_b_mult
+            base += class_bonus * (1 + st_penalty * 10)
 
-        # 直線タイム: 当日×0.6 + 平均×0.4 (小さいほど速い=良い)
-        if straight > 0 and avg_straight > 0:
-            combined_str = straight * 0.6 + avg_straight * 0.4
-            base += (6.5 - combined_str) * 3.0
-        elif straight > 0:
-            base += (6.5 - straight) * 3.0
+            # 周回タイム: 当日×0.6 + 平均×0.4 (小さいほど速い=良い)
+            if lap > 0 and avg_lap > 0:
+                combined_lap = lap * 0.6 + avg_lap * 0.4
+                base += (36.0 - combined_lap) * 0.5
+            elif lap > 0:
+                base += (36.0 - lap) * 0.5
 
-        # まわり足: 当日×0.6 + 平均×0.4 (小さいほど速い=良い)
-        if mawariashi > 0 and avg_mawari > 0:
-            combined_maw = mawariashi * 0.6 + avg_mawari * 0.4
-            base += (5.0 - combined_maw) * 0.5
-        elif mawariashi > 0:
-            base += (5.0 - mawariashi) * 0.5
+            # 直線タイム: 当日×0.6 + 平均×0.4 (小さいほど速い=良い)
+            if straight > 0 and avg_straight > 0:
+                combined_str = straight * 0.6 + avg_straight * 0.4
+                base += (6.5 - combined_str) * 3.0
+            elif straight > 0:
+                base += (6.5 - straight) * 3.0
+
+            # まわり足: 当日×0.6 + 平均×0.4 (小さいほど速い=良い)
+            if mawariashi > 0 and avg_mawari > 0:
+                combined_maw = mawariashi * 0.6 + avg_mawari * 0.4
+                base += (5.0 - combined_maw) * 0.5
+            elif mawariashi > 0:
+                base += (5.0 - mawariashi) * 0.5
 
         # Player bonus
         player_bonus = (win1 * 0.3 + win2 * 0.1) * group_b_mult
@@ -396,7 +410,8 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
 
     # ===== 展開補正: コース間のST比較で差し/まくりリスクを反映 =====
     # exhibit_stが入力されている艇だけ対象（0は未入力とみなす）
-    st_by_course = {s['course']: s['exhibit_st'] for s in scores if s['exhibit_st'] > 0}
+    # legacy_mode（6/25〜6/29復元）: この展開補正はまだ実装されていなかったためスキップ
+    st_by_course = {s['course']: s['exhibit_st'] for s in scores if s['exhibit_st'] > 0} if not legacy_mode else {}
 
     if len(st_by_course) >= 2:
         def get_st(c): return st_by_course.get(c, 0.20)  # 未入力は遅め扱い
@@ -606,95 +621,107 @@ def predict(boats, kimari=None, venue=None, wind=None, nige_rate=None, force_are
     if v9_cho_tenkai and nakaana_bonus:
         candidates.sort(key=lambda x: x['nakaana_score'], reverse=True)
 
-    # ===== 本命2点: スコア1位の艇が1着の上位2コンボ =====
-    honmei = []
     top_bn = scores[0]['boat']['boat_number']
-    for c in candidates:
-        if c['combo'].startswith(f"{top_bn}-"):
-            honmei.append(c)
-        if len(honmei) >= 2:
-            break
 
-    # ===== v7 (2026-07-05検証用): 本命2点目の3着を「逃がし3着率」最上位に差し替え =====
-    # 外れ方内訳で「3着だけズレ」が18.9%あった対策。1点目=スコア順の3着、
-    # 2点目=統計上3着に来やすい艇、で3着の根拠を分散させる
-    if v7_third and nige_3rd_rates and len(honmei) >= 2:
-        h1_parts = honmei[0]['combo'].split('-')
-        third_sorted = [int(k) for k, _ in sorted(nige_3rd_rates.items(), key=lambda x: x[1], reverse=True)]
-        for c3 in third_sorted:
-            s3 = get_boat_by_course(c3)
-            if not s3:
-                continue
-            bn3 = str(s3['boat']['boat_number'])
-            if bn3 in (h1_parts[0], h1_parts[1], h1_parts[2]):
-                continue  # 1点目と同じ3着や1・2着と重複は不可
-            new_combo = f"{h1_parts[0]}-{h1_parts[1]}-{bn3}"
-            found = next((c for c in candidates if c['combo'] == new_combo), None)
-            honmei[1] = found or {'combo': new_combo, 'combined': honmei[0]['combined'] - 0.01, 'prob': None}
-            break
-
-    # ===== 対抗3点 =====
-    taikou = []
-    used_combos = {c['combo'] for c in honmei}
-
-    # --- v6ハイブリッド (2026-07-04): イン逃げ率65%以上は1位艇1着固定 ---
-    # 勝負レース（堅い前提で選んだレース）では逆転シナリオを買わず、
-    # 1位艇1着の2着3着バリエーションで固める（旧v3方式）
-    if hybrid_taikou and nige_rate is not None and safe_float(nige_rate) >= 65:
+    if legacy_mode:
+        # legacy_mode（2026-07-13: 6/25〜6/29に動いていたモデルに復元）:
+        # v6ハイブリッド対抗・v7の3着差し替えを一切使わず、combinedスコア順に
+        # 上位2点=本命/次点3点=対抗をそのまま割り当てるだけのシンプルなロジック
+        type_labels = ['本命', '本命', '対抗', '対抗', '対抗']
+        results = []
+        for i, c in enumerate(candidates[:len(type_labels)]):
+            results.append({'combo': c['combo'], 'type': type_labels[i], 'combined': round(c['combined'], 2), 'prob': c.get('prob')})
+        honmei = candidates[:2]
+        taikou = candidates[2:5]
+    else:
+        # ===== 本命2点: スコア1位の艇が1着の上位2コンボ =====
+        honmei = []
         for c in candidates:
-            if c['combo'].startswith(f"{top_bn}-") and c['combo'] not in used_combos:
-                taikou.append(c)
-                used_combos.add(c['combo'])
-            if len(taikou) >= 3:
+            if c['combo'].startswith(f"{top_bn}-"):
+                honmei.append(c)
+            if len(honmei) >= 2:
                 break
 
-    # --- 対抗1点目: スコア2位の艇が1着（展開逆転シナリオ）---
-    if len(taikou) < 3 and len(scores) >= 2:
-        second_bn = scores[1]['boat']['boat_number']
-        for c in candidates:
-            if c['combo'].startswith(f"{second_bn}-") and c['combo'] not in used_combos:
-                taikou.append(c)
-                used_combos.add(c['combo'])
+        # ===== v7 (2026-07-05検証用): 本命2点目の3着を「逃がし3着率」最上位に差し替え =====
+        # 外れ方内訳で「3着だけズレ」が18.9%あった対策。1点目=スコア順の3着、
+        # 2点目=統計上3着に来やすい艇、で3着の根拠を分散させる
+        if v7_third and nige_3rd_rates and len(honmei) >= 2:
+            h1_parts = honmei[0]['combo'].split('-')
+            third_sorted = [int(k) for k, _ in sorted(nige_3rd_rates.items(), key=lambda x: x[1], reverse=True)]
+            for c3 in third_sorted:
+                s3 = get_boat_by_course(c3)
+                if not s3:
+                    continue
+                bn3 = str(s3['boat']['boat_number'])
+                if bn3 in (h1_parts[0], h1_parts[1], h1_parts[2]):
+                    continue  # 1点目と同じ3着や1・2着と重複は不可
+                new_combo = f"{h1_parts[0]}-{h1_parts[1]}-{bn3}"
+                found = next((c for c in candidates if c['combo'] == new_combo), None)
+                honmei[1] = found or {'combo': new_combo, 'combined': honmei[0]['combined'] - 0.01, 'prob': None}
                 break
 
-    # --- 対抗2点目: 1位1着 + STが最速の艇が2着（展示ST展開シナリオ）---
-    if len(taikou) < 3:
-        st_entries = [(s['course'], s['exhibit_st'], s['boat']['boat_number'])
-                      for s in scores if s.get('exhibit_st', 0) > 0
-                      and s['boat']['boat_number'] != top_bn]
-        if st_entries:
-            best_st_bn = min(st_entries, key=lambda x: x[1])[2]  # STが小さい=速い
+        # ===== 対抗3点 =====
+        taikou = []
+        used_combos = {c['combo'] for c in honmei}
+
+        # --- v6ハイブリッド (2026-07-04): イン逃げ率65%以上は1位艇1着固定 ---
+        # 勝負レース（堅い前提で選んだレース）では逆転シナリオを買わず、
+        # 1位艇1着の2着3着バリエーションで固める（旧v3方式）
+        if hybrid_taikou and nige_rate is not None and safe_float(nige_rate) >= 65:
             for c in candidates:
-                parts = c['combo'].split('-')
-                if parts[0] == str(top_bn) and parts[1] == str(best_st_bn) and c['combo'] not in used_combos:
+                if c['combo'].startswith(f"{top_bn}-") and c['combo'] not in used_combos:
+                    taikou.append(c)
+                    used_combos.add(c['combo'])
+                if len(taikou) >= 3:
+                    break
+
+        # --- 対抗1点目: スコア2位の艇が1着（展開逆転シナリオ）---
+        if len(taikou) < 3 and len(scores) >= 2:
+            second_bn = scores[1]['boat']['boat_number']
+            for c in candidates:
+                if c['combo'].startswith(f"{second_bn}-") and c['combo'] not in used_combos:
                     taikou.append(c)
                     used_combos.add(c['combo'])
                     break
 
-    # --- 対抗3点目: 残りスコア上位コンボから本命と被らないもの ---
-    if len(taikou) < 3:
+        # --- 対抗2点目: 1位1着 + STが最速の艇が2着（展示ST展開シナリオ）---
+        if len(taikou) < 3:
+            st_entries = [(s['course'], s['exhibit_st'], s['boat']['boat_number'])
+                          for s in scores if s.get('exhibit_st', 0) > 0
+                          and s['boat']['boat_number'] != top_bn]
+            if st_entries:
+                best_st_bn = min(st_entries, key=lambda x: x[1])[2]  # STが小さい=速い
+                for c in candidates:
+                    parts = c['combo'].split('-')
+                    if parts[0] == str(top_bn) and parts[1] == str(best_st_bn) and c['combo'] not in used_combos:
+                        taikou.append(c)
+                        used_combos.add(c['combo'])
+                        break
+
+        # --- 対抗3点目: 残りスコア上位コンボから本命と被らないもの ---
+        if len(taikou) < 3:
+            for c in candidates:
+                if c['combo'] not in used_combos:
+                    taikou.append(c)
+                    used_combos.add(c['combo'])
+                    break
+
+        # 不足分はスコア順で補完
         for c in candidates:
-            if c['combo'] not in used_combos:
-                taikou.append(c)
-                used_combos.add(c['combo'])
+            if len(honmei) >= 2 and len(taikou) >= 3:
                 break
+            if c['combo'] not in used_combos:
+                if len(honmei) < 2:
+                    honmei.append(c)
+                elif len(taikou) < 3:
+                    taikou.append(c)
+                used_combos.add(c['combo'])
 
-    # 不足分はスコア順で補完
-    for c in candidates:
-        if len(honmei) >= 2 and len(taikou) >= 3:
-            break
-        if c['combo'] not in used_combos:
-            if len(honmei) < 2:
-                honmei.append(c)
-            elif len(taikou) < 3:
-                taikou.append(c)
-            used_combos.add(c['combo'])
-
-    results = []
-    for c in honmei[:2]:
-        results.append({'combo': c['combo'], 'type': '本命', 'combined': round(c['combined'], 2), 'prob': c.get('prob')})
-    for c in taikou[:3]:
-        results.append({'combo': c['combo'], 'type': '対抗', 'combined': round(c['combined'], 2), 'prob': c.get('prob')})
+        results = []
+        for c in honmei[:2]:
+            results.append({'combo': c['combo'], 'type': '本命', 'combined': round(c['combined'], 2), 'prob': c.get('prob')})
+        for c in taikou[:3]:
+            results.append({'combo': c['combo'], 'type': '対抗', 'combined': round(c['combined'], 2), 'prob': c.get('prob')})
 
     chaos = calc_chaos(scores, boats, vp, wind_effect, nige_rate)
 
@@ -1212,7 +1239,7 @@ def predict_route():
     # extra_stats（超展開データ等）: 裏熊モードでは主役判定に使用、
     # 通常モードでも中穴予想のnakaana_score算出にのみ使う（本命/対抗のスコアには影響しない）
     extra_stats = data.get('extra_stats', None)
-    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full, hybrid_taikou=USE_V6_LIVE, v7_fix2nd=False, v7_third=USE_V7_THIRD_LIVE, extra_stats=extra_stats, v9_group_b_boost=USE_V9_GROUP_B_BOOST_LIVE)
+    result = predict(boats, kimari, venue=venue, wind=wind, nige_rate=nige_rate, force_arekote=force_arekote, kimari_full=kimari_full, hybrid_taikou=USE_V6_LIVE, v7_fix2nd=False, v7_third=USE_V7_THIRD_LIVE, extra_stats=extra_stats, v9_group_b_boost=USE_V9_GROUP_B_BOOST_LIVE, legacy_mode=USE_LEGACY_0627_LIVE)
     return jsonify(result)
 
 
