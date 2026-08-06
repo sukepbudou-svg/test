@@ -1097,45 +1097,36 @@ def get_recommendations(
 
             _valid["ev"] = _valid.apply(_combo_ev, axis=1)
 
-            _df_mid = _valid[(_valid["odds_value"] >= 30)  & (_valid["odds_value"] <= 60)]   # 白熊
-            _df_ko  = _valid[(_valid["odds_value"] >= 100) & (_valid["odds_value"] <= 180)]  # 小熊
-            _df_ok  = _valid[(_valid["odds_value"] >  200) & (_valid["odds_value"] <= 350)]  # 大熊
-            _df_ka  = _valid[(_valid["odds_value"] >  350) & (_valid["odds_value"] <= 1000)] # 神熊
+            _df_okuma_lo = _valid[(_valid["odds_value"] >= 100) & (_valid["odds_value"] <= 200)].copy()
+            _df_okuma_hi = _valid[(_valid["odds_value"] >  200) & (_valid["odds_value"] <= 300)].copy()
 
-            # 暴れ熊ラベル: 3つの独立バイナリ条件の組み合わせ
-            # 連続スコアは「必ず正になる」問題があるため廃止
-
-            try:
-                _nig_val = float(str(nigerate_str).replace("逃げ推定", "").replace("逃げ", "").replace("%", "").strip())
-            except Exception:
-                _nig_val = 65.0
-
-            _cond_wind   = _tail_ok               # ①追い風5m以上
-            _cond_nigate = (_nig_val <= 50.0)     # ②逃げ率50%以下
-            _cond_b1weak = (boat1_weak_count >= 2) # ③1号艇が2条件以上で客観的に弱い
-
-            _cond_count = sum([_cond_wind, _cond_nigate, _cond_b1weak])
-
-            print(f"  [暴れ熊診断] ①追い風={_cond_wind} ②逃げ率低={_cond_nigate}({_nig_val:.0f}%) "
-                  f"③1号艇弱={_cond_b1weak}(弱{boat1_weak_count}条件) 条件数={_cond_count}")
-
-            if _cond_count >= 3:
-                _bet_label = "暴れ熊(強)"
-            elif _cond_wind and _cond_count >= 2:
-                # 追い風5m + もう1条件（逃げ率低 or 1号艇弱）
-                _bet_label = "暴れ熊(中)"
-            elif _cond_nigate and _cond_b1weak:
-                # 逃げ率50%以下 + 1号艇弱2条件（追い風なし）
-                _bet_label = "暴れ熊(弱)"
+            # 大熊ラベル: 荒れPTのみで判定
+            if arare_score >= 7:
+                _okuma_label = "大熊灼熱"
+            elif arare_score >= 6:
+                _okuma_label = "熊熱"
             else:
-                _bet_label = "見送り"
+                _okuma_label = "見送り"
+            print(f"  [大熊ラベル] 荒れPT={arare_score} → {_okuma_label}")
 
-            # 裏熊チャンスラベル: 暴れ熊見送り × 荒れPT3以下 × 逃げ率60%以上
-            if _bet_label == "見送り" and arare_score <= 3 and _nig_val >= 60:
-                _urakuma_label = "裏熊チャンス"
-            else:
-                _urakuma_label = "見送り"
-            print(f"  [裏熊チャンス診断] 荒れPT={arare_score} 逃げ率={_nig_val:.0f}% 暴れ熊={_bet_label} → {_urakuma_label}")
+            # コース展開パターンボーナス（荒れ展開の典型出目を優先）
+            def _course_bonus(row):
+                b1, b2 = int(row["boat1"]), int(row["boat2"])
+                if b1 == 5 and b2 == 1: return 1.35  # 5号艇まくり差し一択
+                if b1 == 4 and b2 == 1: return 1.25  # 4号艇まくり差し
+                if b1 == 4 and b2 == 5: return 1.20  # 4号艇まくり
+                if b1 == 3 and b2 == 4: return 1.20  # 3号艇まくり差し
+                if b1 == 6 and b2 == 1: return 1.20  # 6号艇まくり差し
+                if b1 == 3 and b2 == 5: return 1.15  # 3号艇まくり
+                if b1 == 3 and b2 == 1: return 1.10  # 3号艇差し残り
+                if b1 == 4 and b2 == 6: return 1.10  # 4号艇まくり
+                return 1.0
+
+            for _df_ok in [_df_okuma_lo, _df_okuma_hi]:
+                if not _df_ok.empty:
+                    _df_ok["okuma_score"] = _df_ok.apply(
+                        lambda r: float(r["ev"]) * _course_bonus(r), axis=1
+                    )
 
             def _add_rec(row, tier, label_override=None):
                 f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
@@ -1165,28 +1156,15 @@ def get_recommendations(
                     "boat1_risk":    _calc_boat1_risk(race_row),
                 })
 
-            # 裏熊: 1号艇1着固定の本命2点の2着・3着を入れ替え
-            # コース展開パターン: 逃げ展開では2着は2〜4号艇（内側）が基本
-            _df_b1 = _valid[_valid["boat1"] == 1].copy()
-            _df_b1["honmei_score"] = _df_b1.apply(
-                lambda r: float(r["prob"]) * (1.2 if int(r["boat2"]) in (2, 3, 4) else 0.8),
-                axis=1
-            )
-            _df_b1 = _df_b1.nlargest(2, "honmei_score")
-            for _, _honmei_r in _df_b1.iterrows():
-                _b1 = int(_honmei_r["boat1"])
-                _b2 = int(_honmei_r["boat2"])
-                _b3 = int(_honmei_r["boat3"])
-                _ura = _valid[
-                    (_valid["boat1"] == _b1) &
-                    (_valid["boat2"] == _b3) &
-                    (_valid["boat3"] == _b2)
-                ]
-                if not _ura.empty:
-                    _add_rec(_ura.iloc[0], "裏熊", label_override=_urakuma_label)
-
-            for _, _r in _df_ko.nlargest(2, "ev").iterrows():
-                _add_rec(_r, "小熊")
+            # 大熊: 100〜200倍×2点 + 201〜300倍×1点（コース展開ボーナス込み）
+            if not _df_okuma_lo.empty:
+                for _, _r in _df_okuma_lo.nlargest(2, "okuma_score").iterrows():
+                    _add_rec(_r, "大熊", label_override=_okuma_label)
+            if not _df_okuma_hi.empty:
+                _add_rec(_df_okuma_hi.nlargest(1, "okuma_score").iloc[0], "大熊", label_override=_okuma_label)
+            elif not _df_okuma_lo.empty and len(_df_okuma_lo) >= 3:
+                # 201〜300倍が存在しない場合: 100〜200倍から3点目を追加
+                _add_rec(_df_okuma_lo.nlargest(3, "okuma_score").iloc[2], "大熊", label_override=_okuma_label)
 
     return pd.DataFrame(all_recommendations)
 

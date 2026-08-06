@@ -18,8 +18,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
-RESULT_SHEET = "成績19"
-SUMMARY_SHEET = "サマリー19"
+RESULT_SHEET = "成績20"
+SUMMARY_SHEET = "サマリー20"
 
 # 24場 荒れやすさランキング（万舟率・コース特性ベース、1位=最も荒れやすい）
 _VENUE_RANKING = [
@@ -371,14 +371,13 @@ def append_prediction_row(
         return  # 色付けは諦めるがデータは書き込み済み
     try:
         sid = sheet.id
-        is_shirokuma_chance = (row.get("tier", "") == "白熊" and row.get("bet_label", "") == "白熊チャンス")
-        is_urakuma_chance   = (row.get("tier", "") == "裏熊" and row.get("bet_label", "") == "裏熊チャンス")
-        is_skip = row.get("bet_label", "") in ("見送り", "")
+        _bet_lbl = row.get("bet_label", "")
+        is_skip = _bet_lbl in ("見送り", "")
 
-        if is_shirokuma_chance:
-            row_bg = {"red": 0.60, "green": 0.82, "blue": 1.0}   # 濃い水色（白熊チャンス）
-        elif is_urakuma_chance:
-            row_bg = {"red": 0.68, "green": 0.92, "blue": 0.72}  # 薄緑（裏熊チャンス）
+        if _bet_lbl == "大熊灼熱":
+            row_bg = {"red": 0.95, "green": 0.70, "blue": 0.50}  # 濃いオレンジ（大熊灼熱）
+        elif _bet_lbl == "熊熱":
+            row_bg = {"red": 1.0, "green": 0.90, "blue": 0.70}   # 薄オレンジ（熊熱）
         elif is_skip:
             row_bg = {"red": 0.91, "green": 0.91, "blue": 0.91}
         else:
@@ -393,16 +392,10 @@ def append_prediction_row(
 
         if not is_skip:
             bet_label = row.get("bet_label", "")
-            if bet_label == "暴れ熊(強)":
-                _ab_bg = {"red": 0.72, "green": 0.07, "blue": 0.07}  # 深紅
-            elif bet_label == "暴れ熊(中)":
-                _ab_bg = {"red": 0.85, "green": 0.33, "blue": 0.10}  # オレンジ赤
-            elif bet_label == "暴れ熊(弱)":
-                _ab_bg = {"red": 0.90, "green": 0.55, "blue": 0.30}  # 薄オレンジ
-            elif bet_label == "白熊チャンス":
-                _ab_bg = {"red": 0.07, "green": 0.43, "blue": 0.80}  # 青（白熊チャンス）
-            elif bet_label == "裏熊チャンス":
-                _ab_bg = {"red": 0.13, "green": 0.55, "blue": 0.13}  # 緑（裏熊チャンス）
+            if bet_label == "大熊灼熱":
+                _ab_bg = {"red": 0.80, "green": 0.20, "blue": 0.00}  # 深オレンジ赤（大熊灼熱）
+            elif bet_label == "熊熱":
+                _ab_bg = {"red": 0.90, "green": 0.55, "blue": 0.10}  # オレンジ（熊熱）
             else:
                 _ab_bg = None
             if _ab_bg:
@@ -970,12 +963,12 @@ def update_summary_sheet(
                 "bets": total_bets, "ret": total_ret, "daily": {}}
 
     rows: list = []
-    rows.append(_r("【予想成績サマリー】"))
+    rows.append(_r("【予想成績サマリー20】"))
     rows.append(_r("集計日時", now))
     rows.append(_r())
 
-    # ① 全PT帯集計（全ティア合算）
-    rows.append(_r("■ 全PT帯集計（全ティア合算）"))
+    # ① PT帯別集計（大熊・全ラベル含む）
+    rows.append(_r("■ PT帯別集計（大熊・見送り含む全出力）"))
     rows.append(_r("荒れPT", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
     for pt in [1, 2, 3, 4, 5, 6, "7以上"]:
         s = _all_tier_stats(pt_filter=pt)
@@ -984,72 +977,26 @@ def update_summary_sheet(
     rows.append(_r())
     rows.append(_r())
 
-    # ② 暴れ熊ラベル別集計（全ティア合算）
-    rows.append(_r("■ 暴れ熊ラベル別集計（全ティア合算）"))
+    # ② ラベル別集計（大熊）
+    rows.append(_r("■ ラベル別集計（大熊）"))
     rows.append(_r("ラベル", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
-    for lbl in ["暴れ熊(弱)", "暴れ熊(中)", "暴れ熊(強)"]:
-        s = _all_tier_stats(label_filter=lbl)
+    for lbl in ["大熊灼熱", "熊熱", "見送り"]:
+        s = _pt_tier_stats("大熊", exact_label=lbl)
         rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
         rows.append(_r(lbl, rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
+    # 勝負計（熊熱＋大熊灼熱合算）
+    s_all = _pt_tier_stats("大熊", include_all_labels=True)
+    rc, hc, hitr, ivl, ret, roi, pft = _fmt(s_all)
+    rows.append(_r("大熊 全体", rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
     rows.append(_r())
     rows.append(_r())
 
-    # ③ ティア別グループ比較
-    rows.append(_r("■ ティア別グループ比較"))
-    rows.append(_r("グループ", "予想R数", "的中数", "的中率", "間隔", "総払戻", "回収率", "収支"))
-    # 白熊: チャンス絞り込み + 全体の2行
-    s_shiro_c = _pt_tier_stats("白熊", exact_label="白熊チャンス")
-    rc, hc, hitr, ivl, ret, roi, pft = _fmt(s_shiro_c)
-    rows.append(_r("白熊 チャンス", rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
-    s_shiro = _pt_tier_stats("白熊", include_all_labels=True)
-    rc, hc, hitr, ivl, ret, roi, pft = _fmt(s_shiro)
-    rows.append(_r("白熊 全体", rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
-    # 裏熊: チャンス絞り込み + 全体の2行
-    s_ura_c = _pt_tier_stats("裏熊", exact_label="裏熊チャンス")
-    rc, hc, hitr, ivl, ret, roi, pft = _fmt(s_ura_c)
-    rows.append(_r("裏熊 チャンス", rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
-    s_ura = _pt_tier_stats("裏熊", include_all_labels=True)
-    rc, hc, hitr, ivl, ret, roi, pft = _fmt(s_ura)
-    rows.append(_r("裏熊 全体", rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
-    for grp, tn, lf in [
-        ("小熊 弱", "小熊", "弱"), ("小熊 中", "小熊", "中"), ("小熊 強", "小熊", "強"),
-        ("大熊 弱", "大熊", "弱"), ("大熊 中", "大熊", "中"), ("大熊 強", "大熊", "強"),
-        ("神熊 弱", "神熊", "弱"), ("神熊 中", "神熊", "中"), ("神熊 強", "神熊", "強"),
-    ]:
-        s = _pt_tier_stats(tn, label_filter=lf)
-        rc, hc, hitr, ivl, ret, roi, pft = _fmt(s)
-        rows.append(_r(grp, rc, hc, hitr, ivl, f"¥{ret:,}", roi, pft))
-    rows.append(_r())
-    rows.append(_r())
-
-    # ④ 白熊セクション
-    rows.append(_r("■ 白熊セクション（30〜60倍）"))
-    _write_pt_section("白熊 チャンス", _pt_tier_stats("白熊", exact_label="白熊チャンス"))
-    _write_pt_section("白熊 全体", _pt_tier_stats("白熊", include_all_labels=True))
-    rows.append(_r())
-
-    # ④-2 裏熊セクション
-    rows.append(_r("■ 裏熊セクション（1号艇1着固定裏返し）"))
-    _write_pt_section("裏熊 チャンス", _pt_tier_stats("裏熊", exact_label="裏熊チャンス"))
-    _write_pt_section("裏熊 全体", _pt_tier_stats("裏熊", include_all_labels=True))
-    rows.append(_r())
-
-    # ⑤ 小熊セクション
-    rows.append(_r("■ 小熊セクション（ラベル別）"))
-    for lbl in ["弱", "中", "強"]:
-        _write_pt_section(f"小熊 {lbl}", _pt_tier_stats("小熊", label_filter=lbl))
-    rows.append(_r())
-
-    # ⑥ 大熊セクション
-    rows.append(_r("■ 大熊セクション（ラベル別）"))
-    for lbl in ["弱", "中", "強"]:
-        _write_pt_section(f"大熊 {lbl}", _pt_tier_stats("大熊", label_filter=lbl))
-    rows.append(_r())
-
-    # ⑦ 神熊セクション
-    rows.append(_r("■ 神熊セクション（ラベル別）"))
-    for lbl in ["弱", "中", "強"]:
-        _write_pt_section(f"神熊 {lbl}", _pt_tier_stats("神熊", label_filter=lbl))
+    # ③ 大熊セクション（ラベル別詳細・PT日付別内訳）
+    rows.append(_r("■ 大熊セクション（100〜300倍）"))
+    _write_pt_section("大熊灼熱（PT7以上）", _pt_tier_stats("大熊", exact_label="大熊灼熱"))
+    _write_pt_section("熊熱（PT6）", _pt_tier_stats("大熊", exact_label="熊熱"))
+    _write_pt_section("見送り（PT1〜5）", _pt_tier_stats("大熊", exact_label="見送り"))
+    _write_pt_section("大熊 全体", _pt_tier_stats("大熊", include_all_labels=True))
     rows.append(_r())
 
 
