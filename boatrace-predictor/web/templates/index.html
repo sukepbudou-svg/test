@@ -189,11 +189,26 @@ nav a.active{
 }
 .race-time{
   font-family:var(--font-mono);
-  font-size:10px;color:var(--dim2);letter-spacing:1px;
+  font-size:10px;letter-spacing:1px;
+  padding:2px 6px;border-radius:3px;
+  transition:color .3s,background .3s,border-color .3s;
+  /* デフォルト(時間未定/遠い) */
+  color:var(--dim2);
   background:rgba(79,143,255,0.08);
   border:1px solid rgba(79,143,255,0.15);
-  padding:2px 6px;border-radius:3px;
 }
+.race-time.rt-soon{
+  color:#ffcc00;background:rgba(255,200,0,0.12);border-color:rgba(255,200,0,0.4);
+}
+.race-time.rt-urgent{
+  color:#ff4d4d;background:rgba(255,30,30,0.14);border-color:rgba(255,60,60,0.5);
+  animation:rtPulse 1s ease-in-out infinite;
+}
+.race-time.rt-done{
+  color:#445;background:rgba(30,30,50,0.4);border-color:rgba(255,255,255,0.06);
+  text-decoration:line-through;
+}
+@keyframes rtPulse{0%,100%{opacity:1;}50%{opacity:.55;}}
 .pt-badge{
   margin-left:auto;
   font-family:var(--font-mono);
@@ -383,7 +398,7 @@ footer{
       <div class="race-mini-head">
         <span class="race-no">{{ race.race_no }}R</span>
         {% if race.race_time %}
-          <span class="race-time">締切 {{ race.race_time }}</span>
+          <span class="race-time" data-rt="{{ race.race_time }}">締切 {{ race.race_time }}</span>
         {% endif %}
         <span class="pt-badge {{ pt_cls }}">PT{{ pt }} {{ lbl }}</span>
       </div>
@@ -438,5 +453,27 @@ footer{
 {% endif %}
 
 <footer>PERRY AI &copy; 2026 — 競艇万舟予想システム</footer>
+
+<script>
+(function(){
+  function updateRaceTimeColors(){
+    document.querySelectorAll('.race-time[data-rt]').forEach(el=>{
+      const t = el.dataset.rt; // e.g. "14:30"
+      if(!t || !t.includes(':')) return;
+      const parts = t.split(':');
+      const now = new Date();
+      const deadline = new Date(now.getFullYear(), now.getMonth(), now.getDate(),
+                                parseInt(parts[0]), parseInt(parts[1]), 0);
+      const diff = (deadline - now) / 60000; // minutes
+      el.classList.remove('rt-soon','rt-urgent','rt-done');
+      if(diff < 0)        el.classList.add('rt-done');
+      else if(diff < 15)  el.classList.add('rt-urgent');
+      else if(diff < 40)  el.classList.add('rt-soon');
+    });
+  }
+  updateRaceTimeColors();
+  setInterval(updateRaceTimeColors, 30000);
+})();
+</script>
 </body>
 </html>

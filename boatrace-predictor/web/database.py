@@ -331,25 +331,44 @@ def get_grade_stats():
 
 
 def get_consecutive_misses():
-    """ラベル別の直近連続外れ数"""
+    """ラベル別の直近連続外れ数（後方互換）"""
+    return get_all_streaks()["label"]
+
+
+def _calc_streaks(rows, key_fn):
+    """id降順rowsからキー別の直近連続外れ数を計算"""
+    result = {}
+    done = set()
+    for row in rows:
+        key = key_fn(row)
+        if key is None or key in done:
+            continue
+        if key not in result:
+            result[key] = 0
+        if row["is_hit"] == 1:
+            done.add(key)
+        else:
+            result[key] += 1
+    return result
+
+
+def get_all_streaks():
+    """ラベル・PT・会場・等級別の直近連続外れ数を一括取得（参戦レースのみ）"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute("""
-            SELECT id, bet_label, is_hit, result_recorded_at
+            SELECT bet_label, arare_score, venue_name,
+                   COALESCE(NULLIF(race_grade,''), '不明') as race_grade,
+                   is_hit
             FROM predictions
             WHERE result_recorded_at IS NOT NULL
               AND bet_label != '見送り'
             ORDER BY id DESC
         """).fetchall()
-
-    result = {}
-    for lbl in ["プチュン", "黒船熱"]:
-        streak = 0
-        for r in rows:
-            if r["bet_label"] != lbl:
-                continue
-            if r["is_hit"] == 1:
-                break
-            streak += 1
-        result[lbl] = streak
-    return result
+    rows = [dict(r) for r in rows]
+    return {
+        "label": _calc_streaks(rows, lambda r: r["bet_label"]),
+        "pt":    _calc_streaks(rows, lambda r: r["arare_score"]),
+        "venue": _calc_streaks(rows, lambda r: r["venue_name"]),
+        "grade": _calc_streaks(rows, lambda r: r["race_grade"]),
+    }
