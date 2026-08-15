@@ -5,101 +5,186 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PERRY AI - STATS</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@600;700&display=swap');
+
 :root{
-  --bg:#06060c;--card:#0e0e1a;--card2:#13131f;
-  --red:#d93232;--red-lo:rgba(217,50,50,.15);
-  --orange:#d97c28;--orange-lo:rgba(217,124,40,.12);
-  --green:#2ecc71;--green-lo:rgba(46,204,113,.12);
-  --white:#ececec;--dim:#666680;
-  --border:rgba(255,255,255,.07);--border-red:rgba(217,50,50,.22);
+  --bg:#080c18;--bg2:#0c1022;
+  --card:#0f1528;--card2:#141c34;
+  --card-border:rgba(100,140,255,0.12);
+  --red:#ff1a3c;--red-glow:rgba(255,26,60,0.55);--red-lo:rgba(255,26,60,0.1);
+  --orange:#ff8c00;--orange-glow:rgba(255,140,0,0.5);--orange-lo:rgba(255,140,0,0.08);
+  --blue:#4f8fff;--blue-glow:rgba(79,143,255,0.4);
+  --white:#f0f4ff;--white-glow:rgba(240,244,255,0.6);
+  --dim:#5a6480;--dim2:#8090b0;
+  --green:#00ffaa;--green-glow:rgba(0,255,170,0.5);
 }
+
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--white);font-family:'Courier New',monospace}
+body{
+  background:var(--bg);
+  background-image:
+    radial-gradient(ellipse 80% 40% at 50% 0%,rgba(79,143,255,0.07) 0%,transparent 70%),
+    radial-gradient(ellipse 40% 60% at 90% 50%,rgba(255,26,60,0.04) 0%,transparent 60%);
+  color:var(--white);
+  font-family:'Share Tech Mono','Courier New',monospace;
+}
 
 header{
-  background:linear-gradient(180deg,#0b0b18 0%,#06060c 100%);
-  border-bottom:1px solid var(--border-red);
-  padding:14px 24px;display:flex;align-items:center;gap:16px;
+  background:linear-gradient(180deg,rgba(10,16,35,0.98) 0%,rgba(8,12,24,0.95) 100%);
+  border-bottom:1px solid rgba(79,143,255,0.2);
+  padding:16px 28px;display:flex;align-items:center;gap:20px;
+  position:sticky;top:0;z-index:100;
+  backdrop-filter:blur(12px);
+  box-shadow:0 4px 32px rgba(0,0,0,0.5);
 }
-.logo{font-size:26px;font-weight:900;letter-spacing:5px;
-  text-shadow:0 0 18px rgba(255,255,255,.35),0 0 36px rgba(217,50,50,.25)}
-.logo .ai{color:var(--red);
-  text-shadow:0 0 18px rgba(217,50,50,.7),0 0 40px rgba(217,50,50,.4)}
-.logo-sub{font-size:11px;color:var(--dim);letter-spacing:2px;margin-top:2px}
-nav{margin-left:auto;display:flex;gap:16px}
-nav a{color:var(--dim);text-decoration:none;font-size:13px;letter-spacing:1px;transition:color .2s}
-nav a:hover{color:var(--white)}
-nav a.active{color:var(--white);border-bottom:1px solid var(--red)}
+.logo{
+  font-family:'Rajdhani',sans-serif;
+  font-size:30px;font-weight:700;letter-spacing:6px;
+  color:var(--white);
+  text-shadow:0 0 10px var(--white-glow),0 0 30px rgba(240,244,255,0.25);
+}
+.logo .ai{
+  color:var(--red);
+  text-shadow:0 0 8px var(--red),0 0 20px var(--red-glow),0 0 50px rgba(255,26,60,0.3);
+}
+.logo-sub{font-size:10px;color:var(--dim2);letter-spacing:3px;margin-top:2px;font-family:'Share Tech Mono',monospace}
+nav{margin-left:auto;display:flex;gap:20px}
+nav a{
+  color:var(--dim2);text-decoration:none;font-size:12px;letter-spacing:2px;
+  padding:4px 12px;border-radius:3px;
+  transition:all .2s;border:1px solid transparent;
+}
+nav a:hover{
+  color:var(--white);border-color:rgba(79,143,255,0.3);
+  background:rgba(79,143,255,0.06);text-shadow:0 0 8px var(--blue-glow);
+}
+nav a.active{
+  color:var(--white);border-color:rgba(255,26,60,0.4);
+  background:rgba(255,26,60,0.07);text-shadow:0 0 8px rgba(255,26,60,0.4);
+}
 
-main{padding:20px 24px;max-width:1100px}
+main{padding:24px 28px;max-width:1100px}
 
-h2{font-size:14px;letter-spacing:2px;color:var(--dim);
-  border-left:3px solid var(--red);padding-left:10px;margin-bottom:14px}
+h2{
+  font-size:11px;letter-spacing:3px;color:var(--dim2);
+  border-left:3px solid var(--red);
+  box-shadow:-2px 0 12px rgba(255,26,60,0.4);
+  padding-left:12px;margin-bottom:16px;
+  text-transform:uppercase;
+}
 
-/* ── KPIカード行 ── */
-.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:28px}
+/* ── KPIカード ── */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:28px}
 .kpi{
-  background:var(--card);border:1px solid var(--border);border-radius:6px;
-  padding:16px 18px;
+  background:var(--card);
+  border:1px solid var(--card-border);border-radius:10px;
+  padding:18px 20px;
+  position:relative;overflow:hidden;
+  transition:border-color .2s;
 }
-.kpi-label{font-size:11px;color:var(--dim);letter-spacing:1px;margin-bottom:6px}
-.kpi-value{font-size:26px;font-weight:900}
-.kpi-value.red{color:var(--red);text-shadow:0 0 12px rgba(217,50,50,.4)}
-.kpi-value.orange{color:var(--orange);text-shadow:0 0 10px rgba(217,124,40,.35)}
-.kpi-value.green{color:var(--green);text-shadow:0 0 10px rgba(46,204,113,.35)}
-.kpi-value.white{color:var(--white)}
-.kpi-sub{font-size:11px;color:var(--dim);margin-top:4px}
+.kpi::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(79,143,255,0.4),transparent);
+}
+.kpi:hover{border-color:rgba(79,143,255,0.22)}
+.kpi-label{font-size:10px;color:var(--dim2);letter-spacing:2px;margin-bottom:8px;text-transform:uppercase}
+.kpi-value{
+  font-family:'Rajdhani',sans-serif;
+  font-size:30px;font-weight:700;line-height:1;
+}
+.kpi-value.red{color:var(--red);text-shadow:0 0 12px var(--red-glow),0 0 30px rgba(255,26,60,0.25)}
+.kpi-value.orange{color:var(--orange);text-shadow:0 0 12px var(--orange-glow),0 0 28px rgba(255,140,0,0.2)}
+.kpi-value.green{color:var(--green);text-shadow:0 0 12px var(--green-glow),0 0 28px rgba(0,255,170,0.2)}
+.kpi-value.white{color:var(--white);text-shadow:0 0 12px var(--white-glow)}
+.kpi-sub{font-size:11px;color:var(--dim2);margin-top:6px}
 
 /* ── 連続外れアラート ── */
 .streak-box{
-  background:var(--card);border:1px solid var(--border-red);border-radius:6px;
-  padding:14px 20px;margin-bottom:28px;display:flex;gap:40px;
+  background:var(--card);
+  border:1px solid rgba(255,26,60,0.2);border-radius:10px;
+  box-shadow:0 0 24px rgba(255,26,60,0.06);
+  padding:18px 28px;margin-bottom:28px;
+  display:flex;gap:48px;align-items:center;
 }
 .streak-item{text-align:center}
-.streak-lbl{font-size:11px;color:var(--dim);letter-spacing:1px;margin-bottom:6px}
-.streak-num{font-size:36px;font-weight:900}
-.streak-num.danger{color:var(--red);text-shadow:0 0 16px rgba(217,50,50,.5)}
-.streak-num.warn{color:var(--orange);text-shadow:0 0 12px rgba(217,124,40,.4)}
-.streak-num.ok{color:var(--dim)}
-.streak-unit{font-size:13px;color:var(--dim);margin-left:4px}
+.streak-lbl{font-size:10px;color:var(--dim2);letter-spacing:2px;margin-bottom:8px;text-transform:uppercase}
+.streak-num{
+  font-family:'Rajdhani',sans-serif;
+  font-size:48px;font-weight:700;line-height:1;
+}
+.streak-num.danger{
+  color:var(--red);
+  text-shadow:0 0 12px var(--red),0 0 30px var(--red-glow),0 0 60px rgba(255,26,60,0.3);
+}
+.streak-num.warn{
+  color:var(--orange);
+  text-shadow:0 0 12px var(--orange),0 0 28px var(--orange-glow),0 0 50px rgba(255,140,0,0.25);
+}
+.streak-num.ok{color:var(--dim2)}
+.streak-unit{font-size:16px;color:var(--dim2);margin-left:4px;font-family:'Share Tech Mono',monospace}
 
-/* ── テーブル ── */
+/* ── テーブル共通 ── */
 .section{margin-bottom:32px}
 table.data-table{width:100%;border-collapse:collapse}
 table.data-table th{
-  padding:8px 12px;text-align:right;font-size:11px;color:var(--dim);
-  letter-spacing:1px;border-bottom:1px solid var(--border);
+  padding:9px 14px;text-align:right;font-size:10px;color:var(--dim);
+  letter-spacing:2px;border-bottom:1px solid var(--card-border);
+  text-transform:uppercase;
+  background:rgba(79,143,255,0.03);
 }
 table.data-table th:first-child{text-align:left}
 table.data-table td{
-  padding:9px 12px;font-size:13px;text-align:right;
-  border-bottom:1px solid var(--border);
+  padding:10px 14px;font-size:13px;text-align:right;
+  border-bottom:1px solid rgba(100,140,255,0.06);
 }
 table.data-table td:first-child{text-align:left;font-weight:700}
 table.data-table tr:last-child td{border-bottom:none}
-table.data-table tr:hover td{background:rgba(255,255,255,.03)}
+table.data-table tbody tr:hover td{background:rgba(79,143,255,0.04)}
+.table-wrap{
+  background:var(--card);border:1px solid var(--card-border);
+  border-radius:10px;overflow:hidden;
+}
 
-.label-puchun{color:var(--red);text-shadow:0 0 8px rgba(217,50,50,.4)}
-.label-kokusen{color:var(--orange);text-shadow:0 0 6px rgba(217,124,40,.35)}
-.label-skip{color:var(--dim)}
+.label-puchun{
+  color:var(--red);
+  text-shadow:0 0 8px var(--red-glow),0 0 20px rgba(255,26,60,0.25);
+}
+.label-kokusen{
+  color:var(--orange);
+  text-shadow:0 0 8px var(--orange-glow),0 0 18px rgba(255,140,0,0.2);
+}
+.label-skip{color:var(--dim2)}
 
-.roi-good{color:var(--green)}
+.roi-good{
+  color:var(--green);
+  text-shadow:0 0 8px var(--green-glow);
+}
 .roi-bad{color:var(--red)}
 .roi-neutral{color:var(--white)}
 
 /* ── 収支グラフ ── */
 .chart-wrap{
-  background:var(--card);border:1px solid var(--border);
-  border-radius:6px;padding:16px 20px;margin-bottom:32px;
+  background:var(--card);border:1px solid var(--card-border);
+  border-radius:10px;padding:20px 24px;margin-bottom:32px;
+  position:relative;
 }
-.chart-title{font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:12px}
+.chart-wrap::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(79,143,255,0.4),transparent);
+}
+.chart-title{
+  font-size:11px;color:var(--dim2);letter-spacing:2px;
+  margin-bottom:14px;text-transform:uppercase;
+}
 canvas{width:100%!important}
 
-/* ── 日別テーブル ── */
 .daily-table-wrap{overflow-x:auto}
 
-footer{padding:20px 24px;font-size:11px;color:var(--dim);
-  border-top:1px solid var(--border);margin-top:16px}
+footer{
+  padding:20px 28px;font-size:11px;color:var(--dim);
+  border-top:1px solid rgba(79,143,255,0.1);margin-top:16px;
+  letter-spacing:1px;
+}
 </style>
 </head>
 <body>
@@ -162,9 +247,9 @@ footer{padding:20px 24px;font-size:11px;color:var(--dim);
     <div class="kpi-label">的中数</div>
     <div class="kpi-value {% if total_hit.v > 0 %}green{% else %}white{% endif %}">{{ total_hit.v }}</div>
     <div class="kpi-sub">
-      {% if total_bet.v > 0 %}
+      {% if total_bet.v > 0 and total_hit.v > 0 %}
         {{ "%.1f" % (total_bet.v / total_hit.v) }}回に1回
-      {% else %}-{% endif %}
+      {% else %}—{% endif %}
     </div>
   </div>
   <div class="kpi">
@@ -192,6 +277,7 @@ footer{padding:20px 24px;font-size:11px;color:var(--dim);
 <!-- ── ラベル別集計 ── -->
 <div class="section">
   <h2>ラベル別集計</h2>
+  <div class="table-wrap">
   <table class="data-table">
     <thead>
       <tr>
@@ -225,7 +311,7 @@ footer{padding:20px 24px;font-size:11px;color:var(--dim);
         <td>{{ rc }}</td>
         <td>{{ h }}</td>
         <td>{{ "%.1f" % hr }}%</td>
-        <td>{% if h > 0 %}{{ "%.1f" % (rc / h) }}回{% else %}-{% endif %}</td>
+        <td>{% if h > 0 %}{{ "%.1f" % (rc / h) }}回{% else %}—{% endif %}</td>
         <td>¥{{ "{:,}".format(pay) }}</td>
         <td>¥{{ "{:,}".format(c) }}</td>
         <td class="{% if p >= 0 %}roi-good{% else %}roi-bad{% endif %}">
@@ -238,11 +324,13 @@ footer{padding:20px 24px;font-size:11px;color:var(--dim);
     {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 
 <!-- ── PT帯別集計 ── -->
 <div class="section">
-  <h2>荒れPT帯別集計（大熊全出力）</h2>
+  <h2>荒れPT帯別集計</h2>
+  <div class="table-wrap">
   <table class="data-table">
     <thead>
       <tr>
@@ -282,12 +370,13 @@ footer{padding:20px 24px;font-size:11px;color:var(--dim);
     {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 
 <!-- ── 日別サマリー ── -->
 <div class="section">
   <h2>日別サマリー（直近30日）</h2>
-  <div class="daily-table-wrap">
+  <div class="daily-table-wrap table-wrap">
   <table class="data-table">
     <thead>
       <tr>
@@ -326,7 +415,6 @@ footer{padding:20px 24px;font-size:11px;color:var(--dim);
 <footer>PERRY AI &copy; 2026 — 競艇万舟予想システム</footer>
 
 <script>
-// ── 収支グラフ ──
 {% if cumulative %}
 (function(){
   const data = {{ cumulative | tojson }};
@@ -342,13 +430,13 @@ footer{padding:20px 24px;font-size:11px;color:var(--dim);
   const minV = Math.min(...vals, 0);
   const maxV = Math.max(...vals, 1);
   const range = maxV - minV || 1;
-  const pad = {l:50, r:20, t:16, b:30};
+  const pad = {l:56, r:20, t:16, b:30};
 
   function xOf(i){ return pad.l + (i/(data.length-1||1))*(W-pad.l-pad.r); }
   function yOf(v){ return pad.t + (1-(v-minV)/range)*(H-pad.t-pad.b); }
 
   // グリッド
-  ctx.strokeStyle = 'rgba(255,255,255,.06)';
+  ctx.strokeStyle = 'rgba(100,140,255,0.08)';
   ctx.lineWidth = 1;
   for(let n=0;n<=4;n++){
     const y = pad.t + n*(H-pad.t-pad.b)/4;
@@ -357,33 +445,49 @@ footer{padding:20px 24px;font-size:11px;color:var(--dim);
 
   // ゼロライン
   const y0 = yOf(0);
-  ctx.strokeStyle = 'rgba(255,255,255,.2)';
+  ctx.strokeStyle = 'rgba(240,244,255,0.18)';
   ctx.setLineDash([4,4]);
   ctx.beginPath(); ctx.moveTo(pad.l, y0); ctx.lineTo(W-pad.r, y0); ctx.stroke();
   ctx.setLineDash([]);
 
-  // ライン
+  // 塗りつぶし
   const lastV = vals[vals.length-1] || 0;
-  ctx.strokeStyle = lastV >= 0 ? '#2ecc71' : '#d93232';
-  ctx.lineWidth = 2;
-  ctx.shadowColor = lastV >= 0 ? 'rgba(46,204,113,.4)' : 'rgba(217,50,50,.4)';
-  ctx.shadowBlur = 8;
+  const lineColor = lastV >= 0 ? '#00ffaa' : '#ff1a3c';
+  const glowColor = lastV >= 0 ? 'rgba(0,255,170,0.4)' : 'rgba(255,26,60,0.4)';
+  const fillColor = lastV >= 0 ? 'rgba(0,255,170,0.05)' : 'rgba(255,26,60,0.05)';
+
   ctx.beginPath();
   data.forEach((d,i)=>{
-    const x=xOf(i), y=yOf(d.pnl);
+    const x=xOf(i),y=yOf(d.pnl);
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.lineTo(xOf(data.length-1), yOf(0));
+  ctx.lineTo(xOf(0), yOf(0));
+  ctx.closePath();
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+
+  // ライン
+  ctx.strokeStyle = lineColor;
+  ctx.lineWidth = 2;
+  ctx.shadowColor = glowColor;
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  data.forEach((d,i)=>{
+    const x=xOf(i),y=yOf(d.pnl);
     i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
   });
   ctx.stroke();
   ctx.shadowBlur = 0;
 
   // Y軸ラベル
-  ctx.fillStyle = '#666680';
-  ctx.font = '10px Courier New';
+  ctx.fillStyle = '#8090b0';
+  ctx.font = '10px "Share Tech Mono", monospace';
   ctx.textAlign = 'right';
   [0,1,2,3,4].forEach(n=>{
     const v = minV + (1-n/4)*range;
     const y = pad.t + n*(H-pad.t-pad.b)/4;
-    ctx.fillText('¥'+(v>=0?'+':'')+Math.round(v).toLocaleString(), pad.l-4, y+4);
+    ctx.fillText('¥'+(v>=0?'+':'')+Math.round(v).toLocaleString(), pad.l-6, y+4);
   });
 })();
 {% endif %}
