@@ -45,11 +45,12 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_pred_date ON predictions(date);
             CREATE INDEX IF NOT EXISTS idx_pred_venue_race ON predictions(date, venue_name, race_no);
         """)
-        # 既存DBへのマイグレーション（race_time列がなければ追加）
-        try:
-            conn.execute("ALTER TABLE predictions ADD COLUMN race_time TEXT")
-        except Exception:
-            pass
+        # 既存DBへのマイグレーション
+        for col in ["race_time TEXT", "race_grade TEXT"]:
+            try:
+                conn.execute(f"ALTER TABLE predictions ADD COLUMN {col}")
+            except Exception:
+                pass
 
 
 def save_prediction(rec: dict):
@@ -75,13 +76,14 @@ def save_prediction(rec: dict):
             return  # 重複は無視
         conn.execute("""
             INSERT INTO predictions
-              (date, venue_name, race_no, race_time, combination, odds, odds_value,
+              (date, venue_name, race_no, race_time, race_grade, combination, odds, odds_value,
                arare_score, arare_reasons, bet_label, tier,
                prob, expected_roi, nigerate_str, boat1_risk)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             date, venue, race_no,
             str(rec.get("race_time", "")),
+            str(rec.get("race_grade", "")),
             combo, odds_str, odds_val,
             int(rec.get("arare_score", 0) or 0),
             str(rec.get("arare_reasons", "")),
@@ -208,6 +210,65 @@ def get_daily_summary():
             GROUP BY date
             ORDER BY date DESC
             LIMIT 30
+        """).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_venue_stats():
+    """会場別集計（全期間・レース単位・参戦レースのみ）"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT
+                venue_name,
+                COUNT(*) as total,
+                SUM(has_result) as result_count,
+                SUM(is_hit_any) as hits,
+                SUM(race_payout) as total_payout
+            FROM (
+                SELECT date, venue_name, race_no,
+                    MAX(bet_label) as bet_label,
+                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
+                    MAX(is_hit) as is_hit_any,
+                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
+                FROM predictions
+                WHERE bet_label != '見送り'
+                GROUP BY date, venue_name, race_no
+            )
+            GROUP BY venue_name
+            ORDER BY total DESC
+        """).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_grade_stats():
+    """等級別集計（全期間・レース単位・参戦レースのみ）"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT
+                COALESCE(NULLIF(race_grade,''), '不明') as race_grade,
+                COUNT(*) as total,
+                SUM(has_result) as result_count,
+                SUM(is_hit_any) as hits,
+                SUM(race_payout) as total_payout
+            FROM (
+                SELECT date, venue_name, race_no,
+                    MAX(bet_label) as bet_label,
+                    MAX(COALESCE(NULLIF(race_grade,''), '不明')) as race_grade,
+                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
+                    MAX(is_hit) as is_hit_any,
+                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
+                FROM predictions
+                WHERE bet_label != '見送り'
+                GROUP BY date, venue_name, race_no
+            )
+            GROUP BY race_grade
+            ORDER BY
+                CASE race_grade
+                    WHEN 'SG' THEN 1 WHEN 'G1' THEN 2 WHEN 'G2' THEN 3
+                    WHEN 'G3' THEN 4 WHEN '一般' THEN 5 ELSE 6
+                END
         """).fetchall()
     return [dict(r) for r in rows]
 

@@ -383,6 +383,102 @@ footer{
   </div>
 </div>
 
+<!-- ── 会場別集計 ── -->
+<div class="section">
+  <h2>会場別集計（参戦レースのみ）</h2>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>会場</th>
+        <th>参戦数</th>
+        <th>結果済</th>
+        <th>的中</th>
+        <th>的中率</th>
+        <th>X連に1回</th>
+        <th>払戻合計</th>
+        <th>収支</th>
+        <th>回収率</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for s in venue_stats %}
+      {% set rc = s.result_count %}
+      {% set h = s.hits %}
+      {% set pay = s.total_payout %}
+      {% set c = rc * 200 %}
+      {% set p = pay - c %}
+      {% set roi = (pay / c * 100) if c > 0 else 0 %}
+      {% set hr = (h / rc * 100) if rc > 0 else 0 %}
+      <tr>
+        <td>{{ s.venue_name }}</td>
+        <td>{{ s.total }}</td>
+        <td>{{ rc }}</td>
+        <td>{{ h }}</td>
+        <td>{{ "%.1f" % hr }}%</td>
+        <td>{% if h > 0 %}{{ "%.1f" % (rc / h) }}回{% else %}—{% endif %}</td>
+        <td>¥{{ "{:,}".format(pay) }}</td>
+        <td class="{% if p >= 0 %}roi-good{% else %}roi-bad{% endif %}">
+          {% if p >= 0 %}+{% endif %}¥{{ "{:,}".format(p) }}
+        </td>
+        <td class="{% if roi >= 100 %}roi-good{% elif roi >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
+          {{ "%.1f" % roi }}%
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- ── 等級別集計 ── -->
+<div class="section">
+  <h2>等級別集計（参戦レースのみ）</h2>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>等級</th>
+        <th>参戦数</th>
+        <th>結果済</th>
+        <th>的中</th>
+        <th>的中率</th>
+        <th>X連に1回</th>
+        <th>払戻合計</th>
+        <th>収支</th>
+        <th>回収率</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for s in grade_stats %}
+      {% set rc = s.result_count %}
+      {% set h = s.hits %}
+      {% set pay = s.total_payout %}
+      {% set c = rc * 200 %}
+      {% set p = pay - c %}
+      {% set roi = (pay / c * 100) if c > 0 else 0 %}
+      {% set hr = (h / rc * 100) if rc > 0 else 0 %}
+      <tr>
+        <td>{{ s.race_grade }}</td>
+        <td>{{ s.total }}</td>
+        <td>{{ rc }}</td>
+        <td>{{ h }}</td>
+        <td>{{ "%.1f" % hr }}%</td>
+        <td>{% if h > 0 %}{{ "%.1f" % (rc / h) }}回{% else %}—{% endif %}</td>
+        <td>¥{{ "{:,}".format(pay) }}</td>
+        <td class="{% if p >= 0 %}roi-good{% else %}roi-bad{% endif %}">
+          {% if p >= 0 %}+{% endif %}¥{{ "{:,}".format(p) }}
+        </td>
+        <td class="{% if roi >= 100 %}roi-good{% elif roi >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
+          {{ "%.1f" % roi }}%
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
 <!-- ── 日別サマリー ── -->
 <div class="section">
   <h2>日別サマリー（直近30日）</h2>

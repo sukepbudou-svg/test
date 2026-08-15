@@ -1083,6 +1083,7 @@ def get_recommendations(
                 "date":          race_row.get("date", ""),
                 "venue_name":    race_row.get("venue_name", ""),
                 "race_no":       race_row.get("race_no", ""),
+                "race_grade":    race_row.get("meet_grade", ""),
                 "combination":   combo,
                 "prob":          f"{float(row['prob']):.4f}",
                 "odds":          odds_str,

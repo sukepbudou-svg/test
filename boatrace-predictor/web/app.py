@@ -8,6 +8,7 @@ from flask import Flask, render_template, jsonify, request
 from web.database import (
     get_today_predictions, get_pt_stats, get_label_stats,
     get_daily_summary, get_consecutive_misses, init_db, update_result,
+    get_venue_stats, get_grade_stats,
 )
 
 
@@ -62,12 +63,16 @@ def create_app():
             running += d["total_payout"] - bet_cost
             cumulative.append({"date": d["date"], "pnl": running})
 
+        venue_stats = get_venue_stats()
+        grade_stats = get_grade_stats()
         return render_template("stats.html",
                                pt_stats=pt_stats,
                                label_stats=label_stats,
                                daily=daily,
                                streaks=streaks,
-                               cumulative=cumulative)
+                               cumulative=cumulative,
+                               venue_stats=venue_stats,
+                               grade_stats=grade_stats)
 
     @app.route("/api/today")
     def api_today():
