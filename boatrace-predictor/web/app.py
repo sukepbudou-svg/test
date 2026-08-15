@@ -28,6 +28,7 @@ def create_app():
                 races[key] = {
                     "venue_name": p["venue_name"],
                     "race_no": p["race_no"],
+                    "race_time": p.get("race_time", ""),
                     "arare_score": p["arare_score"],
                     "arare_reasons": p["arare_reasons"],
                     "nigerate_str": p["nigerate_str"],
@@ -36,7 +37,15 @@ def create_app():
                 }
             races[key]["bets"].append(p)
         race_list = sorted(races.values(), key=lambda x: (x["venue_name"], x["race_no"]))
-        return render_template("index.html", date=date, race_list=race_list)
+        # 会場ごとにグループ化
+        venues = {}
+        for race in race_list:
+            vn = race["venue_name"]
+            if vn not in venues:
+                venues[vn] = []
+            venues[vn].append(race)
+        venue_list = [{"venue_name": k, "races": v} for k, v in venues.items()]
+        return render_template("index.html", date=date, race_list=race_list, venue_list=venue_list)
 
     @app.route("/stats")
     def stats():

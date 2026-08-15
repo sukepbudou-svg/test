@@ -25,6 +25,7 @@ def init_db():
                 date TEXT NOT NULL,
                 venue_name TEXT,
                 race_no INTEGER,
+                race_time TEXT,
                 combination TEXT,
                 odds TEXT,
                 odds_value REAL DEFAULT 0,
@@ -44,6 +45,11 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_pred_date ON predictions(date);
             CREATE INDEX IF NOT EXISTS idx_pred_venue_race ON predictions(date, venue_name, race_no);
         """)
+        # 既存DBへのマイグレーション（race_time列がなければ追加）
+        try:
+            conn.execute("ALTER TABLE predictions ADD COLUMN race_time TEXT")
+        except Exception:
+            pass
 
 
 def save_prediction(rec: dict):
@@ -69,13 +75,14 @@ def save_prediction(rec: dict):
             return  # 重複は無視
         conn.execute("""
             INSERT INTO predictions
-              (date, venue_name, race_no, combination, odds, odds_value,
+              (date, venue_name, race_no, race_time, combination, odds, odds_value,
                arare_score, arare_reasons, bet_label, tier,
                prob, expected_roi, nigerate_str, boat1_risk)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
-            date, venue, race_no, combo,
-            odds_str, odds_val,
+            date, venue, race_no,
+            str(rec.get("race_time", "")),
+            combo, odds_str, odds_val,
             int(rec.get("arare_score", 0) or 0),
             str(rec.get("arare_reasons", "")),
             str(rec.get("bet_label", "見送り")),

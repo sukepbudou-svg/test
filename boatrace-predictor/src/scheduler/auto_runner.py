@@ -383,9 +383,11 @@ def _predict_one_race(
     # DB + Sheetsに書き込む＆メモリキャッシュ用にリストを作成
     pred_rows = []
     date_str = today.strftime("%Y-%m-%d")
+    race_time_str = race.get("scheduled_time_str", "")
     has_bet = False
     for _, rec in recs.iterrows():
         row_dict = rec.to_dict()
+        row_dict["race_time"] = race_time_str
         # DBに保存（常時）
         if db_save_fn:
             try:

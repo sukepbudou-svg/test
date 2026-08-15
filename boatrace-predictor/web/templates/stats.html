@@ -4,8 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PERRY AI - STATS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@600;700&display=swap');
+/* fonts loaded via link tag above */
 
 :root{
   --bg:#080c18;--bg2:#0c1022;
@@ -17,6 +19,9 @@
   --white:#f0f4ff;--white-glow:rgba(240,244,255,0.6);
   --dim:#5a6480;--dim2:#8090b0;
   --green:#00ffaa;--green-glow:rgba(0,255,170,0.5);
+  --font-ui:'Space Grotesk','Helvetica Neue',sans-serif;
+  --font-mono:'Space Mono','Courier New',monospace;
+  --font-logo:'Orbitron',sans-serif;
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
@@ -26,7 +31,7 @@ body{
     radial-gradient(ellipse 80% 40% at 50% 0%,rgba(79,143,255,0.07) 0%,transparent 70%),
     radial-gradient(ellipse 40% 60% at 90% 50%,rgba(255,26,60,0.04) 0%,transparent 60%);
   color:var(--white);
-  font-family:'Share Tech Mono','Courier New',monospace;
+  font-family:var(--font-ui);
 }
 
 header{
@@ -38,20 +43,21 @@ header{
   box-shadow:0 4px 32px rgba(0,0,0,0.5);
 }
 .logo{
-  font-family:'Rajdhani',sans-serif;
-  font-size:30px;font-weight:700;letter-spacing:6px;
+  font-family:var(--font-logo);
+  font-size:22px;font-weight:900;letter-spacing:5px;
   color:var(--white);
-  text-shadow:0 0 10px var(--white-glow),0 0 30px rgba(240,244,255,0.25);
+  text-shadow:0 0 14px var(--white-glow),0 0 32px rgba(240,244,255,0.2);
 }
 .logo .ai{
   color:var(--red);
-  text-shadow:0 0 8px var(--red),0 0 20px var(--red-glow),0 0 50px rgba(255,26,60,0.3);
+  text-shadow:0 0 8px var(--red),0 0 22px var(--red-glow),0 0 50px rgba(255,26,60,0.25);
 }
-.logo-sub{font-size:10px;color:var(--dim2);letter-spacing:3px;margin-top:2px;font-family:'Share Tech Mono',monospace}
+.logo-sub{font-size:9px;color:var(--dim2);letter-spacing:3px;margin-top:3px;font-family:var(--font-mono)}
 nav{margin-left:auto;display:flex;gap:20px}
 nav a{
-  color:var(--dim2);text-decoration:none;font-size:12px;letter-spacing:2px;
-  padding:4px 12px;border-radius:3px;
+  font-family:var(--font-mono);
+  color:var(--dim2);text-decoration:none;font-size:11px;letter-spacing:2px;
+  padding:5px 14px;border-radius:4px;
   transition:all .2s;border:1px solid transparent;
 }
 nav a:hover{
@@ -89,8 +95,8 @@ h2{
 .kpi:hover{border-color:rgba(79,143,255,0.22)}
 .kpi-label{font-size:10px;color:var(--dim2);letter-spacing:2px;margin-bottom:8px;text-transform:uppercase}
 .kpi-value{
-  font-family:'Rajdhani',sans-serif;
-  font-size:30px;font-weight:700;line-height:1;
+  font-family:var(--font-logo);
+  font-size:28px;font-weight:700;line-height:1;
 }
 .kpi-value.red{color:var(--red);text-shadow:0 0 12px var(--red-glow),0 0 30px rgba(255,26,60,0.25)}
 .kpi-value.orange{color:var(--orange);text-shadow:0 0 12px var(--orange-glow),0 0 28px rgba(255,140,0,0.2)}
@@ -109,8 +115,8 @@ h2{
 .streak-item{text-align:center}
 .streak-lbl{font-size:10px;color:var(--dim2);letter-spacing:2px;margin-bottom:8px;text-transform:uppercase}
 .streak-num{
-  font-family:'Rajdhani',sans-serif;
-  font-size:48px;font-weight:700;line-height:1;
+  font-family:var(--font-logo);
+  font-size:44px;font-weight:700;line-height:1;
 }
 .streak-num.danger{
   color:var(--red);
@@ -131,11 +137,13 @@ table.data-table th{
   letter-spacing:2px;border-bottom:1px solid var(--card-border);
   text-transform:uppercase;
   background:rgba(79,143,255,0.03);
+  font-family:var(--font-mono);
 }
 table.data-table th:first-child{text-align:left}
 table.data-table td{
   padding:10px 14px;font-size:13px;text-align:right;
   border-bottom:1px solid rgba(100,140,255,0.06);
+  font-family:var(--font-ui);
 }
 table.data-table td:first-child{text-align:left;font-weight:700}
 table.data-table tr:last-child td{border-bottom:none}
@@ -181,9 +189,9 @@ canvas{width:100%!important}
 .daily-table-wrap{overflow-x:auto}
 
 footer{
-  padding:20px 28px;font-size:11px;color:var(--dim);
+  padding:20px 28px;font-size:10px;color:var(--dim);
   border-top:1px solid rgba(79,143,255,0.1);margin-top:16px;
-  letter-spacing:1px;
+  letter-spacing:1px;font-family:var(--font-mono);
 }
 </style>
 </head>
