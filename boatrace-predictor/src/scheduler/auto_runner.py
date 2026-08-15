@@ -218,6 +218,11 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
             race["predicted"] = True
             race["result_fetched"] = True
 
+    # ── 再起動補完: 予想済みで結果未取得のレースを一括チェック ──
+    _catchup_missing_results(
+        today, df_program, db_update_result, fetch_race_result
+    )
+
     upcoming = [r for r in schedule if not r["predicted"]]
     total = len(schedule)
     print(f"本日のレース数: {total}レース（残り{len(upcoming)}レース）")
@@ -311,6 +316,94 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
         if _sheets_ok:
             apply_colors_to_results_sheet(spreadsheet_id, credentials_path)
             update_summary_sheet(spreadsheet_id, credentials_path)
+
+
+def _catchup_missing_results(today, df_program, db_update_fn, fetch_race_result_fn):
+    """
+    起動時補完: 今日の予想済みレースで結果未取得のものを一括チェックして記録する。
+    発走時刻を過ぎているレースだけを対象にする。
+    """
+    from web.database import get_conn
+
+    date_str = today.strftime("%Y-%m-%d")
+    now = datetime.now()
+
+    # venue_name → venue_code マッピング
+    vc_map = {}
+    for _, row in df_program.iterrows():
+        vn = str(row.get("venue_name", ""))
+        vc = str(row.get("venue_code", "")).zfill(2)
+        if vn and vc:
+            vc_map[vn] = vc
+
+    # 結果未取得の予想レースを取得
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT DISTINCT venue_name, race_no,
+                   MIN(race_time) as race_time,
+                   MIN(created_at) as created_at
+            FROM predictions
+            WHERE date=? AND result_recorded_at IS NULL
+            GROUP BY venue_name, race_no
+        """, (date_str,)).fetchall()
+
+    if not rows:
+        return
+
+    targets = []
+    for row in rows:
+        venue_name = row["venue_name"]
+        race_no    = row["race_no"]
+        race_time_str = row["race_time"] or ""
+        created_at    = row["created_at"] or ""
+
+        # 発走済み判定: race_timeがあればそれ基準、なければcreated_at+20分
+        should_fetch = False
+        if race_time_str:
+            try:
+                hh, mm = map(int, race_time_str.split(":"))
+                scheduled_dt = datetime(now.year, now.month, now.day, hh, mm)
+                if now >= scheduled_dt + timedelta(minutes=RESULT_AFTER_MIN):
+                    should_fetch = True
+            except Exception:
+                should_fetch = True
+        elif created_at:
+            try:
+                ct = datetime.strptime(created_at[:19], "%Y-%m-%d %H:%M:%S")
+                if now >= ct + timedelta(minutes=20):
+                    should_fetch = True
+            except Exception:
+                should_fetch = True
+
+        if should_fetch:
+            targets.append((venue_name, race_no))
+
+    if not targets:
+        return
+
+    print(f"\n[補完] 結果未取得レース {len(targets)}件 → 取得開始")
+    for venue_name, race_no in targets:
+        venue_code = vc_map.get(venue_name, "")
+        if not venue_code:
+            print(f"  [SKIP] {venue_name} {race_no}R: 会場コード不明")
+            continue
+
+        print(f"  [{datetime.now().strftime('%H:%M:%S')}] {venue_name} {race_no}R 結果取得中...")
+        try:
+            result = fetch_race_result_fn(today, venue_code, race_no)
+            if result.get("available"):
+                combo  = result["combination"]
+                payout = result["payout"]
+                print(f"  → {combo} ¥{payout:,}")
+                if db_update_fn:
+                    db_update_fn(date_str, venue_name, race_no, combo, payout)
+            else:
+                print(f"  → 結果未確定（スキップ）")
+        except Exception as e:
+            print(f"  [WARN] {venue_name} {race_no}R 結果取得失敗: {e}")
+        time.sleep(1.0)  # 連続アクセス防止
+
+    print("[補完] 完了\n")
 
 
 def _predict_one_race(
