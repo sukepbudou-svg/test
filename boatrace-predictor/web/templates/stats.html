@@ -37,10 +37,15 @@ body{
 header{
   background:linear-gradient(180deg,rgba(10,16,35,0.98) 0%,rgba(8,12,24,0.95) 100%);
   border-bottom:1px solid rgba(79,143,255,0.2);
-  padding:16px 28px;display:flex;align-items:center;gap:20px;
+  padding:10px 28px;display:flex;align-items:center;gap:16px;
   position:sticky;top:0;z-index:100;
   backdrop-filter:blur(12px);
   box-shadow:0 4px 32px rgba(0,0,0,0.5);
+}
+.header-perry{
+  height:64px;width:auto;object-fit:contain;
+  filter:drop-shadow(0 0 8px rgba(255,26,60,0.35));
+  flex-shrink:0;
 }
 .logo{
   font-family:var(--font-logo);
@@ -198,6 +203,7 @@ footer{
 <body>
 
 <header>
+  <img src="/static/perry.png" alt="PERRY" class="header-perry">
   <div>
     <div class="logo">PERRY <span class="ai">AI</span></div>
     <div class="logo-sub">⛵ BLACK SHIP PREDICTION SYSTEM</div>
