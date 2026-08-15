@@ -138,13 +138,8 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
     from src.model.predictor import get_recommendations, load_payout_lookup
     from web.database import save_prediction, update_result as db_update_result
 
-    # Sheets は認証情報がある場合のみ有効
-    _sheets_ok = bool(
-        spreadsheet_id and
-        spreadsheet_id != "your_spreadsheet_id_here" and
-        credentials_path and
-        Path(credentials_path).exists()
-    )
+    # Sheets書き込みは無効化（DBとブラウザで管理するため不要）
+    _sheets_ok = False
     if _sheets_ok:
         from src.output.sheets import (
             append_prediction_row, update_result_row, update_summary_sheet,
