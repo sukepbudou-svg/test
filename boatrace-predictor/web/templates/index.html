@@ -95,18 +95,15 @@ nav a.active{
 
 /* ══════════════ VENUE COLUMNS CONTAINER ══════════════ */
 .venues-wrap{
-  display:flex;
+  display:grid;
+  grid-template-columns:repeat(4, 1fr);
   gap:14px;
   padding:20px 24px;
-  overflow-x:auto;
-  align-items:flex-start;
-  min-height:calc(100vh - 120px);
-  scrollbar-width:thin;
-  scrollbar-color:rgba(79,143,255,0.25) transparent;
+  align-items:start;
 }
-.venues-wrap::-webkit-scrollbar{height:6px}
-.venues-wrap::-webkit-scrollbar-track{background:transparent}
-.venues-wrap::-webkit-scrollbar-thumb{background:rgba(79,143,255,0.25);border-radius:3px}
+@media(max-width:1100px){.venues-wrap{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:760px){.venues-wrap{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:480px){.venues-wrap{grid-template-columns:1fr}}
 
 /* ══════════════ VENUE COLUMN ══════════════ */
 .venue-col{
@@ -119,22 +116,22 @@ nav a.active{
 }
 
 /* 会場カラーバリエーション (8色サイクル) */
-.vc-0 .venue-head{background:linear-gradient(135deg,rgba(79,143,255,0.18),rgba(20,28,52,0.95));border-bottom:1px solid rgba(79,143,255,0.25)}
-.vc-0{border-color:rgba(79,143,255,0.22)}
-.vc-1 .venue-head{background:linear-gradient(135deg,rgba(0,210,180,0.16),rgba(20,28,52,0.95));border-bottom:1px solid rgba(0,210,180,0.22)}
-.vc-1{border-color:rgba(0,210,180,0.20)}
-.vc-2 .venue-head{background:linear-gradient(135deg,rgba(160,80,255,0.17),rgba(20,28,52,0.95));border-bottom:1px solid rgba(160,80,255,0.24)}
-.vc-2{border-color:rgba(160,80,255,0.20)}
-.vc-3 .venue-head{background:linear-gradient(135deg,rgba(255,80,160,0.15),rgba(20,28,52,0.95));border-bottom:1px solid rgba(255,80,160,0.22)}
-.vc-3{border-color:rgba(255,80,160,0.18)}
-.vc-4 .venue-head{background:linear-gradient(135deg,rgba(0,200,255,0.15),rgba(20,28,52,0.95));border-bottom:1px solid rgba(0,200,255,0.22)}
-.vc-4{border-color:rgba(0,200,255,0.18)}
-.vc-5 .venue-head{background:linear-gradient(135deg,rgba(0,255,170,0.13),rgba(20,28,52,0.95));border-bottom:1px solid rgba(0,255,170,0.20)}
-.vc-5{border-color:rgba(0,255,170,0.16)}
-.vc-6 .venue-head{background:linear-gradient(135deg,rgba(255,200,0,0.14),rgba(20,28,52,0.95));border-bottom:1px solid rgba(255,200,0,0.20)}
-.vc-6{border-color:rgba(255,200,0,0.17)}
-.vc-7 .venue-head{background:linear-gradient(135deg,rgba(255,120,40,0.15),rgba(20,28,52,0.95));border-bottom:1px solid rgba(255,120,40,0.22)}
-.vc-7{border-color:rgba(255,120,40,0.18)}
+.vc-0 .venue-head{background:linear-gradient(135deg,rgba(79,143,255,0.38),rgba(20,28,52,0.95));border-bottom:1px solid rgba(79,143,255,0.45)}
+.vc-0{border-color:rgba(79,143,255,0.38)}
+.vc-1 .venue-head{background:linear-gradient(135deg,rgba(0,210,180,0.35),rgba(20,28,52,0.95));border-bottom:1px solid rgba(0,210,180,0.42)}
+.vc-1{border-color:rgba(0,210,180,0.35)}
+.vc-2 .venue-head{background:linear-gradient(135deg,rgba(160,80,255,0.36),rgba(20,28,52,0.95));border-bottom:1px solid rgba(160,80,255,0.44)}
+.vc-2{border-color:rgba(160,80,255,0.35)}
+.vc-3 .venue-head{background:linear-gradient(135deg,rgba(255,80,160,0.34),rgba(20,28,52,0.95));border-bottom:1px solid rgba(255,80,160,0.42)}
+.vc-3{border-color:rgba(255,80,160,0.33)}
+.vc-4 .venue-head{background:linear-gradient(135deg,rgba(0,200,255,0.34),rgba(20,28,52,0.95));border-bottom:1px solid rgba(0,200,255,0.42)}
+.vc-4{border-color:rgba(0,200,255,0.33)}
+.vc-5 .venue-head{background:linear-gradient(135deg,rgba(0,255,170,0.30),rgba(20,28,52,0.95));border-bottom:1px solid rgba(0,255,170,0.38)}
+.vc-5{border-color:rgba(0,255,170,0.30)}
+.vc-6 .venue-head{background:linear-gradient(135deg,rgba(255,200,0,0.32),rgba(20,28,52,0.95));border-bottom:1px solid rgba(255,200,0,0.40)}
+.vc-6{border-color:rgba(255,200,0,0.32)}
+.vc-7 .venue-head{background:linear-gradient(135deg,rgba(255,120,40,0.34),rgba(20,28,52,0.95));border-bottom:1px solid rgba(255,120,40,0.42)}
+.vc-7{border-color:rgba(255,120,40,0.33)}
 
 .venue-head{
   padding:12px 14px;

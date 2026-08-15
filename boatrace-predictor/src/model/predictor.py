@@ -1167,7 +1167,13 @@ def get_recommendations(
                     r["ev"] = float(r["prob"]) * float(r["odds_value"])
                     _add_rec(r, "大熊", label_override=_okuma_label)
 
-    return pd.DataFrame(all_recommendations)
+    result_df = pd.DataFrame(all_recommendations)
+    if not result_df.empty:
+        # 同一レース・同一買い目の重複除去（df_featuresが複数行の場合の保険）
+        result_df = result_df.drop_duplicates(
+            subset=["date", "venue_name", "race_no", "combination"], keep="first"
+        ).reset_index(drop=True)
+    return result_df
 
 
 def calculate_roi_history(df_result: pd.DataFrame, df_payout: pd.DataFrame, recommendations: pd.DataFrame) -> dict:

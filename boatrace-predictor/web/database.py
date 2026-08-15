@@ -129,17 +129,24 @@ def get_today_predictions(date: str = None):
 
 
 def get_pt_stats():
-    """PT帯別集計（全期間）"""
+    """PT帯別集計（全期間・レース単位）"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute("""
             SELECT
                 arare_score,
                 COUNT(*) as total,
-                SUM(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as result_count,
-                SUM(is_hit) as hits,
-                SUM(actual_payout) as total_payout
-            FROM predictions
+                SUM(has_result) as result_count,
+                SUM(is_hit_any) as hits,
+                SUM(race_payout) as total_payout
+            FROM (
+                SELECT date, venue_name, race_no, arare_score,
+                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
+                    MAX(is_hit) as is_hit_any,
+                    SUM(actual_payout) as race_payout
+                FROM predictions
+                GROUP BY date, venue_name, race_no
+            )
             GROUP BY arare_score
             ORDER BY arare_score
         """).fetchall()
@@ -147,17 +154,25 @@ def get_pt_stats():
 
 
 def get_label_stats():
-    """ラベル別集計（全期間）"""
+    """ラベル別集計（全期間・レース単位）"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute("""
             SELECT
                 bet_label,
                 COUNT(*) as total,
-                SUM(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as result_count,
-                SUM(is_hit) as hits,
-                SUM(actual_payout) as total_payout
-            FROM predictions
+                SUM(has_result) as result_count,
+                SUM(is_hit_any) as hits,
+                SUM(race_payout) as total_payout
+            FROM (
+                SELECT date, venue_name, race_no,
+                    MAX(bet_label) as bet_label,
+                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
+                    MAX(is_hit) as is_hit_any,
+                    SUM(actual_payout) as race_payout
+                FROM predictions
+                GROUP BY date, venue_name, race_no
+            )
             GROUP BY bet_label
             ORDER BY
                 CASE bet_label
@@ -171,18 +186,26 @@ def get_label_stats():
 
 
 def get_daily_summary():
-    """日付別集計（最新30日）"""
+    """日付別集計（最新30日・レース単位）"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute("""
             SELECT
                 date,
                 COUNT(*) as total,
-                SUM(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as result_count,
-                SUM(is_hit) as hits,
-                SUM(actual_payout) as total_payout,
+                SUM(has_result) as result_count,
+                SUM(is_hit_any) as hits,
+                SUM(race_payout) as total_payout,
                 SUM(CASE WHEN bet_label != '見送り' THEN 1 ELSE 0 END) as bet_count
-            FROM predictions
+            FROM (
+                SELECT date, venue_name, race_no,
+                    MAX(bet_label) as bet_label,
+                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
+                    MAX(is_hit) as is_hit_any,
+                    SUM(actual_payout) as race_payout
+                FROM predictions
+                GROUP BY date, venue_name, race_no
+            )
             GROUP BY date
             ORDER BY date DESC
             LIMIT 30
