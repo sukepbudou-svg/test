@@ -106,12 +106,11 @@ def update_result(date: str, venue_name: str, race_no: int,
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         for row in rows:
             is_hit = 1 if row["combination"] == actual_combination else 0
-            payout = actual_payout if is_hit else 0
             conn.execute("""
                 UPDATE predictions
                 SET actual_combination=?, actual_payout=?, is_hit=?, result_recorded_at=?
                 WHERE id=?
-            """, (actual_combination, payout, is_hit, now, row["id"]))
+            """, (actual_combination, actual_payout, is_hit, now, row["id"]))
 
 
 def get_today_predictions(date: str = None):
@@ -143,7 +142,7 @@ def get_pt_stats():
                 SELECT date, venue_name, race_no, arare_score,
                     MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
                     MAX(is_hit) as is_hit_any,
-                    SUM(actual_payout) as race_payout
+                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
                 FROM predictions
                 GROUP BY date, venue_name, race_no
             )
@@ -169,7 +168,7 @@ def get_label_stats():
                     MAX(bet_label) as bet_label,
                     MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
                     MAX(is_hit) as is_hit_any,
-                    SUM(actual_payout) as race_payout
+                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
                 FROM predictions
                 GROUP BY date, venue_name, race_no
             )
@@ -202,7 +201,7 @@ def get_daily_summary():
                     MAX(bet_label) as bet_label,
                     MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
                     MAX(is_hit) as is_hit_any,
-                    SUM(actual_payout) as race_payout
+                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
                 FROM predictions
                 GROUP BY date, venue_name, race_no
             )

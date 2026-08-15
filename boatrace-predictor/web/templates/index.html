@@ -301,6 +301,10 @@ nav a.active{
   text-shadow:0 0 10px #00ffcc,0 0 24px rgba(0,255,170,0.4);
   white-space:nowrap;
 }
+.actual-pay-miss{
+  color:var(--dim2);
+  text-shadow:none;
+}
 
 /* 荒れ条件 */
 .arare-info{
@@ -407,11 +411,9 @@ footer{
       <div class="race-actual">
         <span class="actual-label">実結果</span>
         <span class="actual-combo">{{ res.found.actual_combination }}</span>
-        {% if res.hit_pay %}
-          <span class="actual-pay">¥{{ "{:,}".format(res.hit_pay) }}</span>
-        {% else %}
-          <span style="font-family:var(--font-mono);font-size:10px;color:var(--dim2)">払戻なし</span>
-        {% endif %}
+        <span class="actual-pay {% if not res.hit_pay %}actual-pay-miss{% endif %}">
+          ¥{{ "{:,}".format(res.found.actual_payout) }}
+        </span>
       </div>
       {% endif %}
     </div>
