@@ -347,6 +347,7 @@ footer{
         <th>結果済</th>
         <th>的中</th>
         <th>的中率</th>
+        <th>X連に1回</th>
         <th>払戻合計</th>
         <th>収支</th>
         <th>回収率</th>
@@ -367,6 +368,7 @@ footer{
         <td>{{ rc }}</td>
         <td>{{ h }}</td>
         <td>{{ "%.1f" % hr }}%</td>
+        <td>{% if h > 0 %}{{ "%.1f" % (rc / h) }}回{% else %}—{% endif %}</td>
         <td>¥{{ "{:,}".format(pay) }}</td>
         <td class="{% if p >= 0 %}roi-good{% else %}roi-bad{% endif %}">
           {% if p >= 0 %}+{% endif %}¥{{ "{:,}".format(p) }}
