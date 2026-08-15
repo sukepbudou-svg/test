@@ -8,7 +8,7 @@ from flask import Flask, render_template, jsonify, request
 from web.database import (
     get_today_predictions, get_pt_stats, get_label_stats,
     get_daily_summary, get_consecutive_misses, init_db, update_result,
-    get_venue_stats, get_grade_stats,
+    get_venue_stats, get_grade_stats, get_venue_detail,
 )
 
 
@@ -82,6 +82,10 @@ def create_app():
     @app.route("/api/pt_stats")
     def api_pt_stats():
         return jsonify(get_pt_stats())
+
+    @app.route("/api/venue_detail/<venue_name>")
+    def api_venue_detail(venue_name):
+        return jsonify(get_venue_detail(venue_name))
 
     @app.route("/api/update_result", methods=["POST"])
     def api_update_result():

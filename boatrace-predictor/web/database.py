@@ -214,6 +214,65 @@ def get_daily_summary():
     return [dict(r) for r in rows]
 
 
+def get_venue_detail(venue_name: str):
+    """会場別ドリルダウン: PT帯別・等級別の内訳"""
+    init_db()
+    with get_conn() as conn:
+        pt_rows = conn.execute("""
+            SELECT
+                arare_score,
+                MAX(bet_label) as bet_label,
+                COUNT(*) as total,
+                SUM(has_result) as result_count,
+                SUM(is_hit_any) as hits,
+                SUM(race_payout) as total_payout
+            FROM (
+                SELECT date, venue_name, race_no, arare_score,
+                    MAX(bet_label) as bet_label,
+                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
+                    MAX(is_hit) as is_hit_any,
+                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
+                FROM predictions
+                WHERE venue_name = ?
+                GROUP BY date, venue_name, race_no
+            )
+            GROUP BY arare_score
+            ORDER BY arare_score
+        """, (venue_name,)).fetchall()
+
+        grade_rows = conn.execute("""
+            SELECT
+                COALESCE(NULLIF(race_grade,''), '不明') as race_grade,
+                COUNT(*) as total,
+                SUM(has_result) as result_count,
+                SUM(is_hit_any) as hits,
+                SUM(race_payout) as total_payout
+            FROM (
+                SELECT date, venue_name, race_no,
+                    MAX(bet_label) as bet_label,
+                    MAX(COALESCE(NULLIF(race_grade,''), '不明')) as race_grade,
+                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
+                    MAX(is_hit) as is_hit_any,
+                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
+                FROM predictions
+                WHERE venue_name = ?
+                GROUP BY date, venue_name, race_no
+            )
+            GROUP BY race_grade
+            ORDER BY
+                CASE race_grade
+                    WHEN 'SG' THEN 1 WHEN 'G1' THEN 2 WHEN 'G2' THEN 3
+                    WHEN 'G3' THEN 4 WHEN '一般' THEN 5 ELSE 6
+                END
+        """, (venue_name,)).fetchall()
+
+    return {
+        "venue_name": venue_name,
+        "pt_breakdown": [dict(r) for r in pt_rows],
+        "grade_breakdown": [dict(r) for r in grade_rows],
+    }
+
+
 def get_venue_stats():
     """会場別集計（全期間・レース単位・参戦レースのみ）"""
     init_db()

@@ -417,7 +417,7 @@ footer{
       {% set roi = (pay / c * 100) if c > 0 else 0 %}
       {% set hr = (h / rc * 100) if rc > 0 else 0 %}
       <tr>
-        <td>{{ s.venue_name }}</td>
+        <td><span class="venue-link" onclick="showVenueDetail('{{ s.venue_name }}')">{{ s.venue_name }}</span></td>
         <td>{{ s.total }}</td>
         <td>{{ rc }}</td>
         <td>{{ h }}</td>
@@ -603,6 +603,129 @@ footer{
   });
 })();
 {% endif %}
+</script>
+
+<!-- ── 会場詳細モーダル ── -->
+<div id="venue-modal" class="vmodal-overlay" onclick="if(event.target===this)closeVenueModal()">
+  <div class="vmodal-box">
+    <div class="vmodal-header">
+      <span id="vmodal-title" class="vmodal-title"></span>
+      <button class="vmodal-close" onclick="closeVenueModal()">✕</button>
+    </div>
+    <div id="vmodal-body" class="vmodal-body"></div>
+  </div>
+</div>
+
+<style>
+.venue-link{cursor:pointer;text-decoration:underline dotted;color:var(--cyan);transition:color .15s;}
+.venue-link:hover{color:#fff;text-shadow:0 0 8px var(--cyan);}
+.vmodal-overlay{
+  display:none;position:fixed;inset:0;z-index:500;
+  background:rgba(4,8,20,0.82);backdrop-filter:blur(6px);
+  align-items:center;justify-content:center;
+}
+.vmodal-overlay.open{display:flex;}
+.vmodal-box{
+  background:#0d1630;border:1px solid rgba(0,212,255,0.25);border-radius:12px;
+  box-shadow:0 0 40px rgba(0,212,255,0.15);
+  width:min(700px,95vw);max-height:85vh;overflow-y:auto;
+  padding:24px 28px;
+}
+.vmodal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;}
+.vmodal-title{font-family:var(--font-logo);font-size:18px;letter-spacing:3px;color:var(--cyan);
+  text-shadow:0 0 12px var(--cyan);}
+.vmodal-close{background:none;border:1px solid rgba(255,255,255,0.2);color:#aaa;
+  border-radius:6px;padding:4px 10px;cursor:pointer;font-size:14px;transition:all .15s;}
+.vmodal-close:hover{border-color:var(--red);color:var(--red);}
+.vmodal-body h3{font-size:12px;letter-spacing:2px;color:#8090b0;margin:16px 0 8px;text-transform:uppercase;}
+.vmodal-body h3:first-child{margin-top:0;}
+.vmodal-table{width:100%;border-collapse:collapse;font-size:13px;}
+.vmodal-table th{
+  padding:6px 10px;text-align:right;color:#8090b0;font-weight:400;
+  border-bottom:1px solid rgba(255,255,255,0.08);font-size:11px;
+}
+.vmodal-table th:first-child{text-align:left;}
+.vmodal-table td{padding:7px 10px;text-align:right;border-bottom:1px solid rgba(255,255,255,0.05);}
+.vmodal-table td:first-child{text-align:left;font-weight:600;}
+.vmodal-table tr:last-child td{border-bottom:none;}
+.vmodal-table .lbl-bet{color:var(--red);font-size:11px;}
+.vmodal-table .lbl-mid{color:#d97c28;font-size:11px;}
+.vmodal-table .lbl-skip{color:#556;font-size:11px;}
+.vmodal-loading{text-align:center;padding:40px;color:#556;font-size:13px;}
+</style>
+
+<script>
+function showVenueDetail(venueName){
+  const modal = document.getElementById('venue-modal');
+  const title = document.getElementById('vmodal-title');
+  const body  = document.getElementById('vmodal-body');
+  title.textContent = venueName;
+  body.innerHTML = '<p class="vmodal-loading">読み込み中...</p>';
+  modal.classList.add('open');
+  fetch('/api/venue_detail/' + encodeURIComponent(venueName))
+    .then(r=>r.json())
+    .then(data=>{
+      body.innerHTML = renderVenueDetail(data);
+    })
+    .catch(()=>{ body.innerHTML='<p class="vmodal-loading">取得失敗</p>'; });
+}
+function closeVenueModal(){
+  document.getElementById('venue-modal').classList.remove('open');
+}
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeVenueModal(); });
+
+function labelClass(lbl){
+  if(lbl==='プチュン') return 'lbl-bet';
+  if(lbl==='黒船熱')  return 'lbl-mid';
+  return 'lbl-skip';
+}
+function fmtHr(h,rc){ return rc>0 ? (h/rc*100).toFixed(1)+'%' : '—'; }
+function fmtFreq(h,rc){ return h>0 ? (rc/h).toFixed(1)+'回' : '—'; }
+function fmtPay(v){ return '¥'+Number(v||0).toLocaleString(); }
+
+function renderVenueDetail(data){
+  // PT帯別
+  let ptHtml = `<h3>荒れPT 帯別</h3>
+  <table class="vmodal-table">
+    <thead><tr>
+      <th>PT</th><th>ラベル</th><th>レース数</th><th>結果済</th>
+      <th>的中</th><th>的中率</th><th>X連に1回</th><th>払戻合計</th>
+    </tr></thead><tbody>`;
+  for(const r of data.pt_breakdown){
+    const hr = fmtHr(r.hits, r.result_count);
+    const freq = fmtFreq(r.hits, r.result_count);
+    const lc = labelClass(r.bet_label);
+    ptHtml += `<tr>
+      <td><b>${r.arare_score}PT</b></td>
+      <td><span class="${lc}">${r.bet_label||'—'}</span></td>
+      <td>${r.total}</td><td>${r.result_count||0}</td>
+      <td>${r.hits||0}</td><td>${hr}</td><td>${freq}</td>
+      <td>${fmtPay(r.total_payout)}</td>
+    </tr>`;
+  }
+  ptHtml += '</tbody></table>';
+
+  // 等級別
+  let grHtml = `<h3>等級別</h3>
+  <table class="vmodal-table">
+    <thead><tr>
+      <th>等級</th><th>レース数</th><th>結果済</th>
+      <th>的中</th><th>的中率</th><th>X連に1回</th><th>払戻合計</th>
+    </tr></thead><tbody>`;
+  for(const r of data.grade_breakdown){
+    const hr = fmtHr(r.hits, r.result_count);
+    const freq = fmtFreq(r.hits, r.result_count);
+    grHtml += `<tr>
+      <td><b>${r.race_grade}</b></td>
+      <td>${r.total}</td><td>${r.result_count||0}</td>
+      <td>${r.hits||0}</td><td>${hr}</td><td>${freq}</td>
+      <td>${fmtPay(r.total_payout)}</td>
+    </tr>`;
+  }
+  grHtml += '</tbody></table>';
+
+  return ptHtml + grHtml;
+}
 </script>
 
 </body>
