@@ -136,10 +136,22 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
     from src.features.builder import build_features
     from src.model.trainer import load_model
     from src.model.predictor import get_recommendations, load_payout_lookup
-    from src.output.sheets import (
-        append_prediction_row, update_result_row, update_summary_sheet,
-        apply_colors_to_results_sheet,
+    from web.database import save_prediction, update_result as db_update_result
+
+    # Sheets は認証情報がある場合のみ有効
+    _sheets_ok = bool(
+        spreadsheet_id and
+        spreadsheet_id != "your_spreadsheet_id_here" and
+        credentials_path and
+        Path(credentials_path).exists()
     )
+    if _sheets_ok:
+        from src.output.sheets import (
+            append_prediction_row, update_result_row, update_summary_sheet,
+            apply_colors_to_results_sheet,
+        )
+    else:
+        append_prediction_row = update_result_row = update_summary_sheet = apply_colors_to_results_sheet = None
 
     today = datetime.now()
     print(f"=== 自動予想モード開始: {today.strftime('%Y-%m-%d')} ===")
@@ -225,8 +237,9 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                 all_done = all(r["predicted"] and r["result_fetched"] for r in schedule)
                 if all_done:
                     print("\n=== 本日の全レース処理完了 ===")
-                    apply_colors_to_results_sheet(spreadsheet_id, credentials_path)
-                    update_summary_sheet(spreadsheet_id, credentials_path)
+                    if _sheets_ok:
+                        apply_colors_to_results_sheet(spreadsheet_id, credentials_path)
+                        update_summary_sheet(spreadsheet_id, credentials_path)
                     break
 
                 for race in schedule:
@@ -240,10 +253,12 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                             race, df_program, model, payout_lookup,
                             today, spreadsheet_id, credentials_path,
                             fetch_beforeinfo_for_races, fetch_odds_for_races,
-                            build_features, get_recommendations, append_prediction_row,
+                            build_features, get_recommendations,
+                            append_prediction_row if _sheets_ok else None,
                             daily_race_count=daily_race_count,
                             recent_form_lookup=recent_form_lookup,
                             border_lookup=border_lookup,
+                            db_save_fn=save_prediction,
                         )
                         race["pred_rows"] = pred_rows or []
                         race["daily_race_count"] = daily_race_count
@@ -257,7 +272,6 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                     attempts = race.get("result_fetch_attempts", 0)
                     if race["predicted"] and not race["result_fetched"] and now >= result_at and retry_ok:
                         if attempts >= MAX_RESULT_RETRIES:
-                            # 上限到達: 諦めてスキップ
                             print(f"\n  [SKIP] {race['venue_name']} {race['race_no']}R: "
                                   f"結果取得{MAX_RESULT_RETRIES}回失敗のためスキップ")
                             race["result_fetched"] = True
@@ -266,13 +280,16 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                             race["result_fetch_attempts"] = attempts + 1
                             success = _fetch_and_record_result(
                                 race, today, spreadsheet_id, credentials_path,
-                                fetch_race_result, update_result_row,
+                                fetch_race_result,
+                                update_result_row if _sheets_ok else None,
                                 pred_rows_override=race.get("pred_rows", []),
                                 race_count=race.get("daily_race_count"),
+                                db_update_fn=db_update_result,
                             )
                             if success:
                                 race["result_fetched"] = True
-                                update_summary_sheet(spreadsheet_id, credentials_path)
+                                if _sheets_ok:
+                                    update_summary_sheet(spreadsheet_id, credentials_path)
 
                 # 次の予想・結果取得までの待機時間を表示
                 next_action = _next_action_time(schedule, now)
@@ -291,8 +308,9 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
 
     except KeyboardInterrupt:
         print("\n\n自動予想を停止しました")
-        apply_colors_to_results_sheet(spreadsheet_id, credentials_path)
-        update_summary_sheet(spreadsheet_id, credentials_path)
+        if _sheets_ok:
+            apply_colors_to_results_sheet(spreadsheet_id, credentials_path)
+            update_summary_sheet(spreadsheet_id, credentials_path)
 
 
 def _predict_one_race(
@@ -303,8 +321,9 @@ def _predict_one_race(
     daily_race_count: int = None,
     recent_form_lookup: dict = None,
     border_lookup: dict = None,
+    db_save_fn=None,
 ) -> list:
-    """1レース分の予想を実行してスプレッドシートに書き込む。予想行リストを返す（メモリキャッシュ用）"""
+    """1レース分の予想を実行してDB(+オプションでSheets)に書き込む。予想行リストを返す"""
     import pandas as pd
 
     venue_code = race["venue_code"]
@@ -361,23 +380,30 @@ def _predict_one_race(
                                all_live_odds=all_live_odds, all_weather=all_weather,
                                all_absent=all_absent)
 
-    # スプレッドシートに書き込む＆メモリキャッシュ用にリストを作成
+    # DB + Sheetsに書き込む＆メモリキャッシュ用にリストを作成
     pred_rows = []
     date_str = today.strftime("%Y-%m-%d")
     has_bet = False
     for _, rec in recs.iterrows():
         row_dict = rec.to_dict()
-        # 全行（勝負・見送り問わず）スプレッドシートに記入
-        append_prediction_row(spreadsheet_id, row_dict, credentials_path=credentials_path,
-                              race_count=daily_race_count)
+        # DBに保存（常時）
+        if db_save_fn:
+            try:
+                db_save_fn(row_dict)
+            except Exception as _e:
+                print(f"  [WARN] DB保存失敗: {_e}")
+        # Sheetsに書き込み（認証情報ある場合のみ）
+        if append_prediction_row:
+            append_prediction_row(spreadsheet_id, row_dict, credentials_path=credentials_path,
+                                  race_count=daily_race_count)
         label = rec.get("bet_label", "")
         tier  = rec.get("tier", "")
         arare = rec.get("arare_reasons", "")
         if label not in ("見送り", ""):
             has_bet = True
-            print(f"  → [{label}/{tier}] {rec['combination']} オッズ:{rec['odds']} エッジ:{rec['edge']} 荒れ:{arare}")
+            print(f"  → [{label}/{tier}] {rec['combination']} オッズ:{rec['odds']} PT:{rec.get('arare_score','')} 荒れ:{arare}")
         else:
-            print(f"  → [見送り/{tier}] {rec['combination']} オッズ:{rec['odds']} エッジ:{rec['edge']}")
+            print(f"  → [見送り/{tier}] {rec['combination']} オッズ:{rec['odds']} PT:{rec.get('arare_score','')}")
         # 全行（見送り含む）を成績記録対象に追加
         pred_rows.append({
             "日付": date_str,
@@ -403,8 +429,9 @@ def _fetch_and_record_result(
     fetch_race_result, update_result_row,
     pred_rows_override: list = None,
     race_count: int = None,
+    db_update_fn=None,
 ) -> bool:
-    """レース結果を取得して成績2シートに記録する。成功したらTrueを返す。"""
+    """レース結果を取得してDB(+オプションでSheets)に記録する。成功したらTrueを返す。"""
     venue_code = race["venue_code"]
     race_no = race["race_no"]
     venue_name = race["venue_name"]
@@ -415,17 +442,31 @@ def _fetch_and_record_result(
         print(f"  [WARN] 結果未確定 → {LOOP_INTERVAL_SEC}秒後に再試行します")
         return False
 
-    update_result_row(
-        spreadsheet_id,
-        date=today.strftime("%Y-%m-%d"),
-        venue_name=venue_name,
-        race_no=race_no,
-        actual_combination=result["combination"],
-        actual_payout=result["payout"],
-        credentials_path=credentials_path,
-        pred_rows_override=pred_rows_override,
-        race_count=race_count,
-    )
+    date_str = today.strftime("%Y-%m-%d")
+    combo = result["combination"]
+    payout = result["payout"]
+    print(f"  結果: {combo} 払戻:¥{payout:,}")
+
+    # DB更新（常時）
+    if db_update_fn:
+        try:
+            db_update_fn(date_str, venue_name, race_no, combo, payout)
+        except Exception as _e:
+            print(f"  [WARN] DB結果更新失敗: {_e}")
+
+    # Sheets更新（認証情報ある場合のみ）
+    if update_result_row:
+        update_result_row(
+            spreadsheet_id,
+            date=date_str,
+            venue_name=venue_name,
+            race_no=race_no,
+            actual_combination=combo,
+            actual_payout=payout,
+            credentials_path=credentials_path,
+            pred_rows_override=pred_rows_override,
+            race_count=race_count,
+        )
     return True
 
 

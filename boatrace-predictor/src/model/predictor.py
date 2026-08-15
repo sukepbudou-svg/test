@@ -425,128 +425,103 @@ def _calc_boat1_weakness(race_row: pd.Series, weather: dict = None) -> tuple[int
 
 def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.DataFrame | None" = None) -> tuple[int, list[str]]:
     """
-    荒れ条件スコアを計算する。
-    2点条件: 1号艇の展示ST遅い / モーター不良 / B級 / 外艇展示タイム上位 / 前付け
-    1点条件: 1号艇の全国2連率低い / 今節不調 / 展示最遅 / 外艇A1選手 / 外艇ST速い(複数可) /
-             風速強 / 追い風 / 波高 / 荒れ会場 / 一般戦 /
-             外艇MLシェア高 / 1号艇-外艇ST相対差大
-    Returns: (score, [条件説明リスト])
+    荒れ条件スコアを計算する（新版）
+    ① 1号艇の弱さ（最大9点）: ST遅+3 / モーター低+3 / B級+2 / 展示最遅+1
+    ② 外艇の脅威（最大8点）: 前付け+3 / 外A1+2 / 外ST速+2 / 外タイム最速+1
+    ③ 環境・条件（最大6点）: 強風+2 / 波高+2 / 荒れ会場+1〜2 / 一般戦+1
     """
     score = 0
     reasons = []
 
-    # ── 1号艇の弱点（各2点） ──
+    # ── ① 1号艇の弱さ（最大9点） ──
     st1 = _safe_float(race_row.get("boat1_exhibition_st"))
     if st1 is not None and st1 >= 0.18:
-        score += 2
-        reasons.append(f"1号ST{st1:.2f}")
+        score += 3
+        reasons.append(f"1号ST遅({st1:.2f})")
 
     m1 = _safe_float(race_row.get("boat1_motor_2rate"))
-    if m1 is not None and m1 < 0.35:
-        score += 2
-        reasons.append(f"1号M{m1:.0%}")
+    if m1 is not None and m1 < 0.30:
+        score += 3
+        reasons.append(f"1号M低({m1:.0%})")
 
     g1 = _safe_float(race_row.get("boat1_grade_num"))
     if g1 is not None and g1 <= 2:
         score += 2
         reasons.append("1号B級")
 
-    # ── 外艇(4-6号)の最速タイムが全艇1位（2点） ──
-    # 「TOP3内」だと6艇中95%の確率で成立してしまうため、より厳格に判定
     et_vals = {}
     for bn in range(1, 7):
         v = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
         if v and v > 0:
             et_vals[bn] = v
-    if len(et_vals) >= 4:
-        fastest_boat = min(et_vals, key=lambda b: et_vals[b])
-        if fastest_boat in {4, 5, 6}:
-            score += 2
-            reasons.append(f"{fastest_boat}号艇展示最速({et_vals[fastest_boat]:.2f}s)")
-
-        # 1号艇の展示タイムが全艇中最遅（外艇最速とは独立したシグナル）
-        if 1 in et_vals:
-            slowest_boat = max(et_vals, key=lambda b: et_vals[b])
-            if slowest_boat == 1:
-                score += 1
-                reasons.append(f"1号展示最遅({et_vals[1]:.2f}s)")
-
-    # ── 補助条件（各1点） ──
-
-    # 外艇A1選手（1号艇B級 かつ 内側1〜3号にA1不在のとき）
-    inner_has_a1_arare = any(
-        (_safe_float(race_row.get(f"boat{bn}_grade_num")) or 0) >= 4
-        for bn in [1, 2, 3]
-    )
-    if g1 is not None and g1 <= 2 and not inner_has_a1_arare:
-        for bn in [4, 5, 6]:
-            g = _safe_float(race_row.get(f"boat{bn}_grade_num"))
-            if g is not None and g >= 4:
-                score += 1
-                reasons.append(f"{bn}号A1(内A1なし/1号B級)")
-                break
-
-    # 外艇ST速い（複数艇カウント・上限2点）
-    fast_st_count = 0
-    for bn in [4, 5, 6]:
-        st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-        if st is not None and st <= 0.12:
+    if len(et_vals) >= 4 and 1 in et_vals:
+        if max(et_vals, key=lambda b: et_vals[b]) == 1:
             score += 1
-            reasons.append(f"{bn}号ST速({st:.2f})")
-            fast_st_count += 1
-            if fast_st_count >= 2:
-                break
+            reasons.append(f"1号展示最遅({et_vals[1]:.2f}s)")
 
-    wind = _safe_float((weather or {}).get("wind_speed"))
-    wind_dir = (weather or {}).get("wind_direction", "")
-    if wind and wind >= 5:
-        score += 1
-        dir_suffix = {"tail": "追", "head": "向", "side": "横"}.get(wind_dir, "")
-        reasons.append(f"風速{int(wind)}m{dir_suffix}")
-        # 追い風は外艇のまくりが決まりやすく荒れが増大する
-        if wind_dir == "tail":
-            score += 1
-
-    vc = str(race_row.get("venue_code", "")).zfill(2)
-    venue_pts = ARARE_VENUES.get(vc, 0)
-    if venue_pts:
-        score += venue_pts
-        reasons.append("江戸川(最難関)" if venue_pts == 2 else "荒れ会場")
-
-    mg = _safe_float(race_row.get("meet_grade_num"))
-    if mg is not None and mg <= 1:
-        score += 1
-        reasons.append("一般戦")
-
-    # 前付け（高番号艇がインコース進入）検出 ─ 複数艇が同時に前付けする場合も全艇カウント
+    # ── ② 外艇の脅威（最大8点） ──
+    # 前付け（4-6号艇が1-2コース進入、1艇でOK）
     for bn in [4, 5, 6]:
         ac_raw = race_row.get(f"boat{bn}_actual_course")
         try:
             ac = int(ac_raw) if ac_raw is not None else bn
         except (TypeError, ValueError):
             ac = bn
-        if ac <= 2 and ac != bn:   # 4-6号艇が1-2コースに前付け
-            score += 2
-            reasons.append(f"{bn}号艇前付け(→{ac}コース)")
-        elif ac <= 3 and ac != bn: # 4-6号艇が3コースに進入
-            score += 1
-            reasons.append(f"{bn}号艇進入変更(→{ac}コース)")
+        if ac <= 2 and ac != bn:
+            score += 3
+            reasons.append(f"{bn}号前付け(→{ac}C)")
+            break
 
-    # ── 1号艇と外艇の展示ST相対差（インが相対的に遅い） ──
-    outer_st_vals = [
-        _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-        for bn in [4, 5, 6]
-    ]
-    outer_st_vals = [v for v in outer_st_vals if v is not None and v > 0]
-    if st1 is not None and st1 > 0 and outer_st_vals:
-        best_outer_st = min(outer_st_vals)  # 外艇最速ST（値が小さいほど速い）
-        st_gap = st1 - best_outer_st        # 正値 = インが遅い / 外が速い
-        if st_gap >= 0.08:
-            score += 2
-            reasons.append(f"ST差{st_gap:.2f}(1号遅/外速)")
-        elif st_gap >= 0.05:
+    # 外艇A1選手（1号艇がA1でない場合のみ）
+    g1_is_a1 = g1 is not None and g1 >= 4
+    if not g1_is_a1:
+        for bn in [4, 5, 6]:
+            g = _safe_float(race_row.get(f"boat{bn}_grade_num"))
+            if g is not None and g >= 4:
+                score += 2
+                reasons.append(f"{bn}号A1選手")
+                break
+
+    # 外艇展示ST ≤ 0.12（最速1艇のみ・3〜6号対象）
+    best_outer_st = 9.99
+    best_outer_st_bn = None
+    for bn in [3, 4, 5, 6]:
+        st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+        if st and st > 0 and st < best_outer_st:
+            best_outer_st = st
+            best_outer_st_bn = bn
+    if best_outer_st_bn is not None and best_outer_st <= 0.12:
+        score += 2
+        reasons.append(f"{best_outer_st_bn}号ST速({best_outer_st:.2f})")
+
+    # 外艇展示タイム最速（3〜6号）
+    if len(et_vals) >= 4:
+        fastest_boat = min(et_vals, key=lambda b: et_vals[b])
+        if fastest_boat in {3, 4, 5, 6}:
             score += 1
-            reasons.append(f"ST差{st_gap:.2f}(1号やや遅)")
+            reasons.append(f"{fastest_boat}号展示最速({et_vals[fastest_boat]:.2f}s)")
+
+    # ── ③ 環境・条件（最大6点） ──
+    wind = _safe_float((weather or {}).get("wind_speed"))
+    if wind and wind >= 7:
+        score += 2
+        reasons.append(f"強風{int(wind)}m")
+
+    wave = _safe_float((weather or {}).get("wave_height"))
+    if wave and wave >= 15:
+        score += 2
+        reasons.append(f"波高{int(wave)}cm")
+
+    vc = str(race_row.get("venue_code", "")).zfill(2)
+    venue_pts = ARARE_VENUES.get(vc, 0)
+    if venue_pts:
+        score += venue_pts
+        reasons.append("江戸川" if venue_pts == 2 else "荒れ会場")
+
+    mg = _safe_float(race_row.get("meet_grade_num"))
+    if mg is not None and mg <= 1:
+        score += 1
+        reasons.append("一般戦")
 
     return score, reasons
 
@@ -1080,91 +1055,117 @@ def get_recommendations(
             motor = _safe_float(race_row.get(f"boat{bn}_motor_2rate")) or 0.40
             return ml * 0.40 + et * 0.40 + motor * 0.20
 
-        # ── EV予想: 小熊(100-180倍)/大熊(200-350倍)/神熊(350-1000倍) 各ティアから個別選出 ──
+        # ── 新・大熊選出（主役艇1艇固定×展開2シナリオ=2点）──
         _valid = by_prob[
             (by_prob["odds_value"] > 0) &
             (by_prob["prob"] > 0)
         ].copy()
 
-        if not _valid.empty:
-            def _combo_ev(row):
-                """EVスコア = ML確率 × オッズ × 1着艇補正(ET・モーター)"""
-                ev_base = float(row["prob"]) * float(row["odds_value"])
-                f       = int(row["boat1"])
-                f_et    = et_ranks_k.get(f, 0.5)
-                f_motor = _safe_float(race_row.get(f"boat{f}_motor_2rate")) or 0.40
-                return ev_base * (0.80 + f_et * 0.12 + f_motor * 0.08)
+        # 大熊ラベル（荒れPTのみで判定）
+        if arare_score >= 8:
+            _okuma_label = "プチュン"
+        elif arare_score >= 6:
+            _okuma_label = "黒船熱"
+        else:
+            _okuma_label = "見送り"
+        print(f"  [大熊ラベル] 荒れPT={arare_score} → {_okuma_label}")
 
-            _valid["ev"] = _valid.apply(_combo_ev, axis=1)
+        def _add_rec(row, tier, label_override=None):
+            f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
+            combo    = f"{f}-{s}-{t}"
+            ev_val   = float(row.get("ev", float(row["prob"]) * float(row["odds_value"])))
+            odds_val = float(row["odds_value"])
+            src      = str(row.get("odds_source", ""))
+            odds_str = f"{odds_val:.0f}倍" if src == "live" else f"{odds_val:.0f}倍(履歴)"
+            bl       = label_override if label_override is not None else _okuma_label
+            print(f"  [{tier}] {venue_name_log} {race_no}R {combo} {odds_str} PT:{arare_score}")
+            all_recommendations.append({
+                "date":          race_row.get("date", ""),
+                "venue_name":    race_row.get("venue_name", ""),
+                "race_no":       race_row.get("race_no", ""),
+                "combination":   combo,
+                "prob":          f"{float(row['prob']):.4f}",
+                "odds":          odds_str,
+                "expected_roi":  f"{ev_val:.2f}",
+                "confidence":    tier,
+                "odds_source":   src,
+                "nigerate_str":  nigerate_str,
+                "tier":          tier,
+                "bet_label":     bl,
+                "edge":          f"{ev_val:.2f}",
+                "arare_score":   arare_score,
+                "arare_reasons": " / ".join(arare_reasons),
+                "boat1_risk":    _calc_boat1_risk(race_row),
+            })
 
-            _df_okuma_lo = _valid[(_valid["odds_value"] >= 100) & (_valid["odds_value"] <= 200)].copy()
-            _df_okuma_hi = _valid[(_valid["odds_value"] >  200) & (_valid["odds_value"] <= 300)].copy()
+        outer_h = [b for b in [3, 4, 5, 6] if b in available_kuma]
 
-            # 大熊ラベル: 荒れPTのみで判定
-            if arare_score >= 7:
-                _okuma_label = "大熊灼熱"
-            elif arare_score >= 6:
-                _okuma_label = "熊熱"
-            else:
-                _okuma_label = "見送り"
-            print(f"  [大熊ラベル] 荒れPT={arare_score} → {_okuma_label}")
+        if not _valid.empty and outer_h:
+            et_sorted_h = sorted(et_vals_k.values()) if et_vals_k else []
 
-            # コース展開パターンボーナス（荒れ展開の典型出目を優先）
-            def _course_bonus(row):
-                b1, b2 = int(row["boat1"]), int(row["boat2"])
-                if b1 == 5 and b2 == 1: return 1.35  # 5号艇まくり差し一択
-                if b1 == 4 and b2 == 1: return 1.25  # 4号艇まくり差し
-                if b1 == 4 and b2 == 5: return 1.20  # 4号艇まくり
-                if b1 == 3 and b2 == 4: return 1.20  # 3号艇まくり差し
-                if b1 == 6 and b2 == 1: return 1.20  # 6号艇まくり差し
-                if b1 == 3 and b2 == 5: return 1.15  # 3号艇まくり
-                if b1 == 3 and b2 == 1: return 1.10  # 3号艇差し残り
-                if b1 == 4 and b2 == 6: return 1.10  # 4号艇まくり
-                return 1.0
+            def _hero_score(bn):
+                s = 0.0
+                # ST速さ (40%)
+                st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                if st and st > 0:
+                    s += max(0.0, (0.20 - st) / 0.10) * 0.40
+                # ET速さ (30%)
+                et = et_vals_k.get(bn)
+                if et and et_sorted_h:
+                    try:
+                        rank = et_sorted_h.index(et)
+                    except ValueError:
+                        rank = len(et_sorted_h) - 1
+                    s += (1.0 - rank / max(len(et_sorted_h) - 1, 1)) * 0.30
+                # グレード (20%)
+                g = _safe_float(race_row.get(f"boat{bn}_grade_num")) or 2.0
+                s += min(1.0, (g - 1) / 3.0) * 0.20
+                # まくり実績 (10%)
+                s += min(1.0, _get_aggression(bn) / 2.0) * 0.10
+                return s
 
-            for _df_ok in [_df_okuma_lo, _df_okuma_hi]:
-                if not _df_ok.empty:
-                    _df_ok["okuma_score"] = _df_ok.apply(
-                        lambda r: float(r["ev"]) * _course_bonus(r), axis=1
-                    )
+            hero = max(outer_h, key=_hero_score)
 
-            def _add_rec(row, tier, label_override=None):
-                f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
-                combo    = f"{f}-{s}-{t}"
-                ev       = float(row["ev"])
-                odds_val = float(row["odds_value"])
-                src      = str(row.get("odds_source", ""))
-                odds_str = f"{odds_val:.0f}倍" if src == "live" else f"{odds_val:.0f}倍(履歴)"
-                bl       = label_override if label_override is not None else _bet_label
-                print(f"  [{tier}] {venue_name_log} {race_no}R {combo} {odds_str} EV:{ev:.2f}")
-                all_recommendations.append({
-                    "date":          race_row.get("date", ""),
-                    "venue_name":    race_row.get("venue_name", ""),
-                    "race_no":       race_row.get("race_no", ""),
-                    "combination":   combo,
-                    "prob":          f"{float(row['prob']):.4f}",
-                    "odds":          odds_str,
-                    "expected_roi":  f"{ev:.2f}",
-                    "confidence":    tier,
-                    "odds_source":   src,
-                    "nigerate_str":  nigerate_str,
-                    "tier":          tier,
-                    "bet_label":     bl,
-                    "edge":          f"{ev:.2f}",
-                    "arare_score":   arare_score,
-                    "arare_reasons": " / ".join(arare_reasons),
-                    "boat1_risk":    _calc_boat1_risk(race_row),
-                })
+            def _pick_third_h(used):
+                cands = [b for b in available_kuma if b not in used]
+                if not cands:
+                    return None
+                if et_vals_k:
+                    return min(cands, key=lambda b: et_vals_k.get(b, 9.99))
+                return cands[0]
 
-            # 大熊: 100〜200倍×2点 + 201〜300倍×1点（コース展開ボーナス込み）
-            if not _df_okuma_lo.empty:
-                for _, _r in _df_okuma_lo.nlargest(2, "okuma_score").iterrows():
-                    _add_rec(_r, "大熊", label_override=_okuma_label)
-            if not _df_okuma_hi.empty:
-                _add_rec(_df_okuma_hi.nlargest(1, "okuma_score").iloc[0], "大熊", label_override=_okuma_label)
-            elif not _df_okuma_lo.empty and len(_df_okuma_lo) >= 3:
-                # 201〜300倍が存在しない場合: 100〜200倍から3点目を追加
-                _add_rec(_df_okuma_lo.nlargest(3, "okuma_score").iloc[2], "大熊", label_override=_okuma_label)
+            # パターンA: まくり差し（主役-1号艇が残る）
+            second_a = 1 if 1 in available_kuma else (2 if 2 in available_kuma else None)
+
+            # パターンB: まくり（主役-直外艇）
+            outer_of_hero = [b for b in available_kuma if b > hero]
+            second_b = min(outer_of_hero) if outer_of_hero else None
+            if second_b is None and 2 in available_kuma and 2 != second_a:
+                second_b = 2
+
+            combos_to_add = []
+            if second_a is not None:
+                third_a = _pick_third_h({hero, second_a})
+                if third_a:
+                    combos_to_add.append((hero, second_a, third_a))
+
+            if second_b is not None:
+                third_b = _pick_third_h({hero, second_b})
+                if third_b:
+                    c = (hero, second_b, third_b)
+                    if c not in combos_to_add:
+                        combos_to_add.append(c)
+
+            for (b1, b2, b3) in combos_to_add:
+                mask = (
+                    (_valid["boat1"] == b1) &
+                    (_valid["boat2"] == b2) &
+                    (_valid["boat3"] == b3)
+                )
+                if mask.any():
+                    r = _valid[mask].iloc[0].copy()
+                    r["ev"] = float(r["prob"]) * float(r["odds_value"])
+                    _add_rec(r, "大熊", label_override=_okuma_label)
 
     return pd.DataFrame(all_recommendations)
 

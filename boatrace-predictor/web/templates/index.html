@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="60">
+<title>PERRY AI</title>
+<style>
+:root {
+  --bg: #06060c;
+  --card: #0e0e1a;
+  --card2: #13131f;
+  --red: #d93232;
+  --red-lo: rgba(217,50,50,0.18);
+  --orange: #d97c28;
+  --orange-lo: rgba(217,124,40,0.15);
+  --white: #ececec;
+  --dim: #666680;
+  --border: rgba(255,255,255,0.07);
+  --border-red: rgba(217,50,50,0.25);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--white);font-family:'Courier New',monospace;min-height:100vh}
+
+/* ── ヘッダー ── */
+header{
+  background:linear-gradient(180deg,#0b0b18 0%,#06060c 100%);
+  border-bottom:1px solid var(--border-red);
+  padding:14px 24px;
+  display:flex;align-items:center;gap:16px;
+}
+.logo{font-size:26px;font-weight:900;letter-spacing:5px;
+  text-shadow:0 0 18px rgba(255,255,255,.35),0 0 36px rgba(217,50,50,.25)}
+.logo .ai{color:var(--red);
+  text-shadow:0 0 18px rgba(217,50,50,.7),0 0 40px rgba(217,50,50,.4)}
+.logo-sub{font-size:11px;color:var(--dim);letter-spacing:2px;margin-top:2px}
+nav{margin-left:auto;display:flex;gap:16px}
+nav a{color:var(--dim);text-decoration:none;font-size:13px;letter-spacing:1px;
+  transition:color .2s}
+nav a:hover{color:var(--white)}
+nav a.active{color:var(--white);border-bottom:1px solid var(--red)}
+
+/* ── メタ情報 ── */
+.meta{padding:10px 24px;font-size:12px;color:var(--dim);
+  display:flex;align-items:center;gap:24px;
+  border-bottom:1px solid var(--border)}
+.meta .date-label{color:var(--white);font-size:14px;letter-spacing:1px}
+.meta .refresh-note{font-size:11px}
+
+/* ── コンテンツ ── */
+main{padding:20px 24px;max-width:1100px}
+
+/* ── レースカード ── */
+.race-card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:6px;
+  margin-bottom:16px;
+  overflow:hidden;
+}
+.race-header{
+  background:var(--card2);
+  padding:10px 16px;
+  display:flex;align-items:center;gap:12px;
+  border-bottom:1px solid var(--border);
+}
+.race-title{font-size:15px;font-weight:700;letter-spacing:1px}
+.race-pt{
+  font-size:13px;padding:2px 10px;border-radius:3px;
+  font-weight:700;letter-spacing:1px;
+}
+.pt-puchun{background:var(--red);color:#fff;
+  box-shadow:0 0 12px rgba(217,50,50,.5)}
+.pt-kokusen{background:var(--orange);color:#fff;
+  box-shadow:0 0 10px rgba(217,124,40,.4)}
+.pt-skip{background:#222234;color:var(--dim)}
+.race-sub{font-size:11px;color:var(--dim);margin-left:auto}
+
+.race-info{
+  padding:8px 16px;
+  font-size:11px;color:var(--dim);
+  border-bottom:1px solid var(--border);
+  display:flex;gap:20px;flex-wrap:wrap;
+}
+.race-info span b{color:var(--white)}
+
+/* ── 買い目テーブル ── */
+.bets-table{width:100%;border-collapse:collapse}
+.bets-table th{
+  padding:7px 14px;text-align:left;font-size:11px;
+  color:var(--dim);letter-spacing:1px;
+  border-bottom:1px solid var(--border);
+}
+.bets-table td{
+  padding:9px 14px;font-size:13px;
+  border-bottom:1px solid var(--border);
+}
+.bets-table tr:last-child td{border-bottom:none}
+
+/* コンボ表示 */
+.combo{font-size:16px;font-weight:700;letter-spacing:3px}
+.combo-puchun{color:var(--red);text-shadow:0 0 10px rgba(217,50,50,.5)}
+.combo-kokusen{color:var(--orange);text-shadow:0 0 8px rgba(217,124,40,.35)}
+.combo-skip{color:var(--dim)}
+
+/* オッズ */
+.odds-cell{font-size:13px;color:var(--white)}
+.odds-hi{color:var(--red);font-weight:700}
+
+/* 結果バッジ */
+.hit-badge{
+  display:inline-block;padding:2px 8px;border-radius:3px;
+  font-size:11px;font-weight:700;letter-spacing:1px;
+}
+.hit-yes{background:#1a4d1a;color:#4eff4e;
+  text-shadow:0 0 8px rgba(78,255,78,.4)}
+.hit-no{background:#2a1a1a;color:#884444}
+.hit-pending{color:var(--dim)}
+
+/* 的中払戻 */
+.payout-cell{font-size:13px}
+.payout-hi{color:#4eff4e;font-weight:700;
+  text-shadow:0 0 8px rgba(78,255,78,.4)}
+
+/* 空状態 */
+.empty{padding:40px 24px;text-align:center;color:var(--dim);font-size:14px}
+.empty span{font-size:32px;display:block;margin-bottom:8px}
+
+/* フッター */
+footer{padding:20px 24px;font-size:11px;color:var(--dim);
+  border-top:1px solid var(--border);margin-top:16px}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">PERRY <span class="ai">AI</span></div>
+    <div class="logo-sub">⛵ BLACK SHIP PREDICTION SYSTEM</div>
+  </div>
+  <nav>
+    <a href="/" class="active">TODAY</a>
+    <a href="/stats">STATS</a>
+  </nav>
+</header>
+
+<div class="meta">
+  <span class="date-label">📅 {{ date }}</span>
+  <span>全{{ race_list|length }}レース</span>
+  <span class="refresh-note">⟳ 60秒ごとに自動更新</span>
+</div>
+
+<main>
+{% if race_list %}
+  {% for race in race_list %}
+    {% set pt = race.arare_score %}
+    {% if pt >= 8 %}
+      {% set lbl = "プチュン" %}{% set pt_cls = "pt-puchun" %}{% set c_cls = "combo-puchun" %}
+    {% elif pt >= 6 %}
+      {% set lbl = "黒船熱" %}{% set pt_cls = "pt-kokusen" %}{% set c_cls = "combo-kokusen" %}
+    {% else %}
+      {% set lbl = "見送り" %}{% set pt_cls = "pt-skip" %}{% set c_cls = "combo-skip" %}
+    {% endif %}
+
+  <div class="race-card">
+    <div class="race-header">
+      <div class="race-title">{{ race.venue_name }} {{ race.race_no }}R</div>
+      <div class="race-pt {{ pt_cls }}">PT{{ pt }} {{ lbl }}</div>
+      <div class="race-sub">{{ race.nigerate_str }}</div>
+    </div>
+
+    {% if race.arare_reasons %}
+    <div class="race-info">
+      <span><b>荒れ条件:</b> {{ race.arare_reasons }}</span>
+      {% if race.boat1_risk and race.boat1_risk != '-' %}
+      <span><b>1号艇:</b> {{ race.boat1_risk }}</span>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <table class="bets-table">
+      <thead>
+        <tr>
+          <th>買い目</th>
+          <th>オッズ</th>
+          <th>結果</th>
+          <th>払戻</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for b in race.bets %}
+        <tr>
+          <td><span class="combo {{ c_cls }}">{{ b.combination }}</span></td>
+          <td class="odds-cell {% if b.odds_value >= 200 %}odds-hi{% endif %}">
+            {{ b.odds }}
+          </td>
+          <td>
+            {% if b.result_recorded_at %}
+              {% if b.is_hit %}
+                <span class="hit-badge hit-yes">◎ 的中</span>
+              {% else %}
+                <span class="hit-badge hit-no">✗ 外れ</span>
+              {% endif %}
+            {% else %}
+              <span class="hit-pending">- 待機中</span>
+            {% endif %}
+          </td>
+          <td class="payout-cell">
+            {% if b.is_hit and b.actual_payout %}
+              <span class="payout-hi">¥{{ "{:,}".format(b.actual_payout) }}</span>
+            {% elif b.result_recorded_at %}
+              <span style="color:var(--dim)">-</span>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+
+{% else %}
+  <div class="empty">
+    <span>⛵</span>
+    本日の予想データはまだありません。<br>
+    <code>python main.py --mode auto</code> を起動してください。
+  </div>
+{% endif %}
+</main>
+
+<footer>PERRY AI &copy; 2026 — 競艇万舟予想システム</footer>
+</body>
+</html>

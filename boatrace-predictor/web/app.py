@@ -1,0 +1,89 @@
+"""
+PERRY AI - Flask Webアプリ
+localhost:5001 でブラウザから予想を確認・集計を閲覧する
+"""
+
+from datetime import datetime
+from flask import Flask, render_template, jsonify, request
+from web.database import (
+    get_today_predictions, get_pt_stats, get_label_stats,
+    get_daily_summary, get_consecutive_misses, init_db, update_result,
+)
+
+
+def create_app():
+    app = Flask(__name__, template_folder="templates", static_folder="static")
+
+    init_db()
+
+    @app.route("/")
+    def index():
+        date = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
+        predictions = get_today_predictions(date)
+        # レース単位でまとめる
+        races = {}
+        for p in predictions:
+            key = (p["venue_name"], p["race_no"])
+            if key not in races:
+                races[key] = {
+                    "venue_name": p["venue_name"],
+                    "race_no": p["race_no"],
+                    "arare_score": p["arare_score"],
+                    "arare_reasons": p["arare_reasons"],
+                    "nigerate_str": p["nigerate_str"],
+                    "boat1_risk": p["boat1_risk"],
+                    "bets": [],
+                }
+            races[key]["bets"].append(p)
+        race_list = sorted(races.values(), key=lambda x: (x["venue_name"], x["race_no"]))
+        return render_template("index.html", date=date, race_list=race_list)
+
+    @app.route("/stats")
+    def stats():
+        pt_stats = get_pt_stats()
+        label_stats = get_label_stats()
+        daily = get_daily_summary()
+        streaks = get_consecutive_misses()
+
+        # 収支累計（日付別）
+        cumulative = []
+        running = 0
+        for d in reversed(daily):
+            bet_cost = d["bet_count"] * 200  # 2点×100円
+            running += d["total_payout"] - bet_cost
+            cumulative.append({"date": d["date"], "pnl": running})
+
+        return render_template("stats.html",
+                               pt_stats=pt_stats,
+                               label_stats=label_stats,
+                               daily=daily,
+                               streaks=streaks,
+                               cumulative=cumulative)
+
+    @app.route("/api/today")
+    def api_today():
+        date = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
+        return jsonify(get_today_predictions(date))
+
+    @app.route("/api/pt_stats")
+    def api_pt_stats():
+        return jsonify(get_pt_stats())
+
+    @app.route("/api/update_result", methods=["POST"])
+    def api_update_result():
+        data = request.json or {}
+        update_result(
+            data.get("date", ""),
+            data.get("venue_name", ""),
+            int(data.get("race_no", 0)),
+            data.get("actual_combination", ""),
+            int(data.get("actual_payout", 0)),
+        )
+        return jsonify({"ok": True})
+
+    return app
+
+
+if __name__ == "__main__":
+    app = create_app()
+    app.run(host="0.0.0.0", port=5001, debug=False)

@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PERRY AI - STATS</title>
+<style>
+:root{
+  --bg:#06060c;--card:#0e0e1a;--card2:#13131f;
+  --red:#d93232;--red-lo:rgba(217,50,50,.15);
+  --orange:#d97c28;--orange-lo:rgba(217,124,40,.12);
+  --green:#2ecc71;--green-lo:rgba(46,204,113,.12);
+  --white:#ececec;--dim:#666680;
+  --border:rgba(255,255,255,.07);--border-red:rgba(217,50,50,.22);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--white);font-family:'Courier New',monospace}
+
+header{
+  background:linear-gradient(180deg,#0b0b18 0%,#06060c 100%);
+  border-bottom:1px solid var(--border-red);
+  padding:14px 24px;display:flex;align-items:center;gap:16px;
+}
+.logo{font-size:26px;font-weight:900;letter-spacing:5px;
+  text-shadow:0 0 18px rgba(255,255,255,.35),0 0 36px rgba(217,50,50,.25)}
+.logo .ai{color:var(--red);
+  text-shadow:0 0 18px rgba(217,50,50,.7),0 0 40px rgba(217,50,50,.4)}
+.logo-sub{font-size:11px;color:var(--dim);letter-spacing:2px;margin-top:2px}
+nav{margin-left:auto;display:flex;gap:16px}
+nav a{color:var(--dim);text-decoration:none;font-size:13px;letter-spacing:1px;transition:color .2s}
+nav a:hover{color:var(--white)}
+nav a.active{color:var(--white);border-bottom:1px solid var(--red)}
+
+main{padding:20px 24px;max-width:1100px}
+
+h2{font-size:14px;letter-spacing:2px;color:var(--dim);
+  border-left:3px solid var(--red);padding-left:10px;margin-bottom:14px}
+
+/* ── KPIカード行 ── */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:28px}
+.kpi{
+  background:var(--card);border:1px solid var(--border);border-radius:6px;
+  padding:16px 18px;
+}
+.kpi-label{font-size:11px;color:var(--dim);letter-spacing:1px;margin-bottom:6px}
+.kpi-value{font-size:26px;font-weight:900}
+.kpi-value.red{color:var(--red);text-shadow:0 0 12px rgba(217,50,50,.4)}
+.kpi-value.orange{color:var(--orange);text-shadow:0 0 10px rgba(217,124,40,.35)}
+.kpi-value.green{color:var(--green);text-shadow:0 0 10px rgba(46,204,113,.35)}
+.kpi-value.white{color:var(--white)}
+.kpi-sub{font-size:11px;color:var(--dim);margin-top:4px}
+
+/* ── 連続外れアラート ── */
+.streak-box{
+  background:var(--card);border:1px solid var(--border-red);border-radius:6px;
+  padding:14px 20px;margin-bottom:28px;display:flex;gap:40px;
+}
+.streak-item{text-align:center}
+.streak-lbl{font-size:11px;color:var(--dim);letter-spacing:1px;margin-bottom:6px}
+.streak-num{font-size:36px;font-weight:900}
+.streak-num.danger{color:var(--red);text-shadow:0 0 16px rgba(217,50,50,.5)}
+.streak-num.warn{color:var(--orange);text-shadow:0 0 12px rgba(217,124,40,.4)}
+.streak-num.ok{color:var(--dim)}
+.streak-unit{font-size:13px;color:var(--dim);margin-left:4px}
+
+/* ── テーブル ── */
+.section{margin-bottom:32px}
+table.data-table{width:100%;border-collapse:collapse}
+table.data-table th{
+  padding:8px 12px;text-align:right;font-size:11px;color:var(--dim);
+  letter-spacing:1px;border-bottom:1px solid var(--border);
+}
+table.data-table th:first-child{text-align:left}
+table.data-table td{
+  padding:9px 12px;font-size:13px;text-align:right;
+  border-bottom:1px solid var(--border);
+}
+table.data-table td:first-child{text-align:left;font-weight:700}
+table.data-table tr:last-child td{border-bottom:none}
+table.data-table tr:hover td{background:rgba(255,255,255,.03)}
+
+.label-puchun{color:var(--red);text-shadow:0 0 8px rgba(217,50,50,.4)}
+.label-kokusen{color:var(--orange);text-shadow:0 0 6px rgba(217,124,40,.35)}
+.label-skip{color:var(--dim)}
+
+.roi-good{color:var(--green)}
+.roi-bad{color:var(--red)}
+.roi-neutral{color:var(--white)}
+
+/* ── 収支グラフ ── */
+.chart-wrap{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:6px;padding:16px 20px;margin-bottom:32px;
+}
+.chart-title{font-size:12px;color:var(--dim);letter-spacing:1px;margin-bottom:12px}
+canvas{width:100%!important}
+
+/* ── 日別テーブル ── */
+.daily-table-wrap{overflow-x:auto}
+
+footer{padding:20px 24px;font-size:11px;color:var(--dim);
+  border-top:1px solid var(--border);margin-top:16px}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">PERRY <span class="ai">AI</span></div>
+    <div class="logo-sub">⛵ BLACK SHIP PREDICTION SYSTEM</div>
+  </div>
+  <nav>
+    <a href="/">TODAY</a>
+    <a href="/stats" class="active">STATS</a>
+  </nav>
+</header>
+
+<main>
+
+<!-- ── 連続外れアラート ── -->
+{% set ps = streaks.get('プチュン', 0) %}
+{% set ks = streaks.get('黒船熱', 0) %}
+<div class="streak-box">
+  <div class="streak-item">
+    <div class="streak-lbl">プチュン 連続外れ</div>
+    <div class="streak-num {% if ps >= 20 %}danger{% elif ps >= 10 %}warn{% else %}ok{% endif %}">
+      {{ ps }}<span class="streak-unit">連</span>
+    </div>
+  </div>
+  <div class="streak-item">
+    <div class="streak-lbl">黒船熱 連続外れ</div>
+    <div class="streak-num {% if ks >= 20 %}danger{% elif ks >= 10 %}warn{% else %}ok{% endif %}">
+      {{ ks }}<span class="streak-unit">連</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── KPI ── -->
+{% set total_bet = namespace(v=0) %}
+{% set total_hit = namespace(v=0) %}
+{% set total_pay = namespace(v=0) %}
+{% set total_rc = namespace(v=0) %}
+{% for s in label_stats %}
+  {% if s.bet_label != '見送り' %}
+    {% set total_bet.v = total_bet.v + s.result_count %}
+    {% set total_hit.v = total_hit.v + s.hits %}
+    {% set total_pay.v = total_pay.v + s.total_payout %}
+  {% endif %}
+  {% set total_rc.v = total_rc.v + s.result_count %}
+{% endfor %}
+{% set cost = total_bet.v * 200 %}
+{% set pnl = total_pay.v - cost %}
+{% set roi_pct = (total_pay.v / cost * 100) if cost > 0 else 0 %}
+
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="kpi-label">総予想回数</div>
+    <div class="kpi-value white">{{ total_rc.v }}</div>
+    <div class="kpi-sub">内 参戦: {{ total_bet.v }}回</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">的中数</div>
+    <div class="kpi-value {% if total_hit.v > 0 %}green{% else %}white{% endif %}">{{ total_hit.v }}</div>
+    <div class="kpi-sub">
+      {% if total_bet.v > 0 %}
+        {{ "%.1f" % (total_bet.v / total_hit.v) }}回に1回
+      {% else %}-{% endif %}
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">総収支</div>
+    <div class="kpi-value {% if pnl >= 0 %}green{% else %}red{% endif %}">
+      {% if pnl >= 0 %}+{% endif %}¥{{ "{:,}".format(pnl) }}
+    </div>
+    <div class="kpi-sub">回収率 {{ "%.1f" % roi_pct }}%</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">総払戻</div>
+    <div class="kpi-value white">¥{{ "{:,}".format(total_pay.v) }}</div>
+    <div class="kpi-sub">コスト ¥{{ "{:,}".format(cost) }}</div>
+  </div>
+</div>
+
+<!-- ── 収支グラフ ── -->
+{% if cumulative %}
+<div class="chart-wrap">
+  <div class="chart-title">📈 累計収支推移</div>
+  <canvas id="pnlChart" height="180"></canvas>
+</div>
+{% endif %}
+
+<!-- ── ラベル別集計 ── -->
+<div class="section">
+  <h2>ラベル別集計</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ラベル</th>
+        <th>予想数</th>
+        <th>結果済</th>
+        <th>的中</th>
+        <th>的中率</th>
+        <th>X連に1回</th>
+        <th>払戻合計</th>
+        <th>コスト</th>
+        <th>収支</th>
+        <th>回収率</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for s in label_stats %}
+      {% set lbl = s.bet_label %}
+      {% set rc = s.result_count %}
+      {% set h = s.hits %}
+      {% set pay = s.total_payout %}
+      {% set c = rc * 200 %}
+      {% set p = pay - c %}
+      {% set roi = (pay / c * 100) if c > 0 else 0 %}
+      {% set hr = (h / rc * 100) if rc > 0 else 0 %}
+      <tr>
+        <td class="{% if lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% else %}label-skip{% endif %}">
+          {{ lbl }}
+        </td>
+        <td>{{ s.total }}</td>
+        <td>{{ rc }}</td>
+        <td>{{ h }}</td>
+        <td>{{ "%.1f" % hr }}%</td>
+        <td>{% if h > 0 %}{{ "%.1f" % (rc / h) }}回{% else %}-{% endif %}</td>
+        <td>¥{{ "{:,}".format(pay) }}</td>
+        <td>¥{{ "{:,}".format(c) }}</td>
+        <td class="{% if p >= 0 %}roi-good{% else %}roi-bad{% endif %}">
+          {% if p >= 0 %}+{% endif %}¥{{ "{:,}".format(p) }}
+        </td>
+        <td class="{% if roi >= 100 %}roi-good{% elif roi >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
+          {{ "%.1f" % roi }}%
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- ── PT帯別集計 ── -->
+<div class="section">
+  <h2>荒れPT帯別集計（大熊全出力）</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>荒れPT</th>
+        <th>予想数</th>
+        <th>結果済</th>
+        <th>的中</th>
+        <th>的中率</th>
+        <th>払戻合計</th>
+        <th>収支</th>
+        <th>回収率</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for s in pt_stats %}
+      {% set rc = s.result_count %}
+      {% set h = s.hits %}
+      {% set pay = s.total_payout %}
+      {% set c = rc * 200 %}
+      {% set p = pay - c %}
+      {% set roi = (pay / c * 100) if c > 0 else 0 %}
+      {% set hr = (h / rc * 100) if rc > 0 else 0 %}
+      <tr>
+        <td>PT{{ s.arare_score }}</td>
+        <td>{{ s.total }}</td>
+        <td>{{ rc }}</td>
+        <td>{{ h }}</td>
+        <td>{{ "%.1f" % hr }}%</td>
+        <td>¥{{ "{:,}".format(pay) }}</td>
+        <td class="{% if p >= 0 %}roi-good{% else %}roi-bad{% endif %}">
+          {% if p >= 0 %}+{% endif %}¥{{ "{:,}".format(p) }}
+        </td>
+        <td class="{% if roi >= 100 %}roi-good{% elif roi >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
+          {{ "%.1f" % roi }}%
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- ── 日別サマリー ── -->
+<div class="section">
+  <h2>日別サマリー（直近30日）</h2>
+  <div class="daily-table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>日付</th>
+        <th>予想数</th>
+        <th>参戦数</th>
+        <th>結果済</th>
+        <th>的中</th>
+        <th>払戻</th>
+        <th>収支</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for d in daily %}
+      {% set c = d.bet_count * 200 %}
+      {% set p = d.total_payout - c %}
+      <tr>
+        <td>{{ d.date }}</td>
+        <td>{{ d.total }}</td>
+        <td>{{ d.bet_count }}</td>
+        <td>{{ d.result_count }}</td>
+        <td>{{ d.hits }}</td>
+        <td>¥{{ "{:,}".format(d.total_payout) }}</td>
+        <td class="{% if p >= 0 %}roi-good{% else %}roi-bad{% endif %}">
+          {% if p >= 0 %}+{% endif %}¥{{ "{:,}".format(p) }}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+</main>
+
+<footer>PERRY AI &copy; 2026 — 競艇万舟予想システム</footer>
+
+<script>
+// ── 収支グラフ ──
+{% if cumulative %}
+(function(){
+  const data = {{ cumulative | tojson }};
+  const canvas = document.getElementById('pnlChart');
+  if(!canvas || !data.length) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || 800;
+  const H = 180;
+  canvas.width = W;
+  canvas.height = H;
+
+  const vals = data.map(d => d.pnl);
+  const minV = Math.min(...vals, 0);
+  const maxV = Math.max(...vals, 1);
+  const range = maxV - minV || 1;
+  const pad = {l:50, r:20, t:16, b:30};
+
+  function xOf(i){ return pad.l + (i/(data.length-1||1))*(W-pad.l-pad.r); }
+  function yOf(v){ return pad.t + (1-(v-minV)/range)*(H-pad.t-pad.b); }
+
+  // グリッド
+  ctx.strokeStyle = 'rgba(255,255,255,.06)';
+  ctx.lineWidth = 1;
+  for(let n=0;n<=4;n++){
+    const y = pad.t + n*(H-pad.t-pad.b)/4;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
+  }
+
+  // ゼロライン
+  const y0 = yOf(0);
+  ctx.strokeStyle = 'rgba(255,255,255,.2)';
+  ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(pad.l, y0); ctx.lineTo(W-pad.r, y0); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // ライン
+  const lastV = vals[vals.length-1] || 0;
+  ctx.strokeStyle = lastV >= 0 ? '#2ecc71' : '#d93232';
+  ctx.lineWidth = 2;
+  ctx.shadowColor = lastV >= 0 ? 'rgba(46,204,113,.4)' : 'rgba(217,50,50,.4)';
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  data.forEach((d,i)=>{
+    const x=xOf(i), y=yOf(d.pnl);
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // Y軸ラベル
+  ctx.fillStyle = '#666680';
+  ctx.font = '10px Courier New';
+  ctx.textAlign = 'right';
+  [0,1,2,3,4].forEach(n=>{
+    const v = minV + (1-n/4)*range;
+    const y = pad.t + n*(H-pad.t-pad.b)/4;
+    ctx.fillText('¥'+(v>=0?'+':'')+Math.round(v).toLocaleString(), pad.l-4, y+4);
+  });
+})();
+{% endif %}
+</script>
+
+</body>
+</html>

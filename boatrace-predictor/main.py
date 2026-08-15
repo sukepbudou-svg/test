@@ -292,19 +292,33 @@ def cmd_predict(venue: str = None, race_no: int = None):
 
 
 def cmd_auto():
-    """自動予想モード（発走10分前に自動予想・結果記録）"""
+    """自動予想モード（発走10分前に自動予想・結果記録）+ PERRY AI Web起動"""
+    import threading
     from src.scheduler.auto_runner import run_auto
 
     spreadsheet_id = os.environ.get("SPREADSHEET_ID", "")
     credentials_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "")
 
-    if not spreadsheet_id or spreadsheet_id == "your_spreadsheet_id_here":
-        print("[ERROR] SPREADSHEET_ID が設定されていません（.env ファイルを確認してください）")
-        return
-    if not Path(credentials_path).exists():
-        print("[ERROR] Google認証ファイルが見つかりません（GOOGLE_CREDENTIALS_PATH を確認してください）")
-        return
+    # PERRY AI Webサーバーをバックグラウンドで起動
+    try:
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent))
+        from web.app import create_app
+        flask_app = create_app()
+        flask_thread = threading.Thread(
+            target=lambda: flask_app.run(host="0.0.0.0", port=5001, debug=False, use_reloader=False),
+            daemon=True,
+            name="perry-ai-web",
+        )
+        flask_thread.start()
+        print("=" * 50)
+        print("  ⛵ PERRY AI 起動完了")
+        print("  ブラウザで開いてください: http://localhost:5001")
+        print("=" * 50)
+    except Exception as _e:
+        print(f"[WARN] PERRY AI Web起動失敗: {_e}")
 
+    # Google Sheetsはオプション（なくてもautoモードは動く）
     run_auto(spreadsheet_id, credentials_path)
 
 
