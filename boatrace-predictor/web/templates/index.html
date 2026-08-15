@@ -118,9 +118,26 @@ nav a.active{
   display:flex;flex-direction:column;
 }
 
+/* 会場カラーバリエーション (8色サイクル) */
+.vc-0 .venue-head{background:linear-gradient(135deg,rgba(79,143,255,0.18),rgba(20,28,52,0.95));border-bottom:1px solid rgba(79,143,255,0.25)}
+.vc-0{border-color:rgba(79,143,255,0.22)}
+.vc-1 .venue-head{background:linear-gradient(135deg,rgba(0,210,180,0.16),rgba(20,28,52,0.95));border-bottom:1px solid rgba(0,210,180,0.22)}
+.vc-1{border-color:rgba(0,210,180,0.20)}
+.vc-2 .venue-head{background:linear-gradient(135deg,rgba(160,80,255,0.17),rgba(20,28,52,0.95));border-bottom:1px solid rgba(160,80,255,0.24)}
+.vc-2{border-color:rgba(160,80,255,0.20)}
+.vc-3 .venue-head{background:linear-gradient(135deg,rgba(255,80,160,0.15),rgba(20,28,52,0.95));border-bottom:1px solid rgba(255,80,160,0.22)}
+.vc-3{border-color:rgba(255,80,160,0.18)}
+.vc-4 .venue-head{background:linear-gradient(135deg,rgba(0,200,255,0.15),rgba(20,28,52,0.95));border-bottom:1px solid rgba(0,200,255,0.22)}
+.vc-4{border-color:rgba(0,200,255,0.18)}
+.vc-5 .venue-head{background:linear-gradient(135deg,rgba(0,255,170,0.13),rgba(20,28,52,0.95));border-bottom:1px solid rgba(0,255,170,0.20)}
+.vc-5{border-color:rgba(0,255,170,0.16)}
+.vc-6 .venue-head{background:linear-gradient(135deg,rgba(255,200,0,0.14),rgba(20,28,52,0.95));border-bottom:1px solid rgba(255,200,0,0.20)}
+.vc-6{border-color:rgba(255,200,0,0.17)}
+.vc-7 .venue-head{background:linear-gradient(135deg,rgba(255,120,40,0.15),rgba(20,28,52,0.95));border-bottom:1px solid rgba(255,120,40,0.22)}
+.vc-7{border-color:rgba(255,120,40,0.18)}
+
 .venue-head{
   padding:12px 14px;
-  background:linear-gradient(135deg,rgba(20,28,52,0.95),rgba(15,21,40,0.95));
   border-bottom:1px solid var(--cb);
   display:flex;align-items:center;justify-content:space-between;
   position:sticky;top:0;z-index:10;
@@ -309,7 +326,7 @@ footer{
 {% if venue_list %}
 <div class="venues-wrap">
   {% for venue in venue_list %}
-  <div class="venue-col">
+  <div class="venue-col vc-{{ loop.index0 % 8 }}">
 
     <div class="venue-head">
       <span class="venue-name">{{ venue.venue_name }}</span>
