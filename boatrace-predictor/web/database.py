@@ -232,7 +232,6 @@ def get_venue_stats():
                     MAX(is_hit) as is_hit_any,
                     SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
                 FROM predictions
-                WHERE bet_label != '見送り'
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY venue_name
@@ -260,7 +259,6 @@ def get_grade_stats():
                     MAX(is_hit) as is_hit_any,
                     SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
                 FROM predictions
-                WHERE bet_label != '見送り'
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY race_grade
