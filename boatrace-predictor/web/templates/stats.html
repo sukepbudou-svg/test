@@ -305,6 +305,7 @@ footer{
         <th>コスト</th>
         <th>収支</th>
         <th>回収率</th>
+        <th>現在の連外</th>
       </tr>
     </thead>
     <tbody>
@@ -319,9 +320,7 @@ footer{
       {% set hr = (h / rc * 100) if rc > 0 else 0 %}
       {% set sk = all_streaks.label.get(lbl, 0) %}
       <tr>
-        <td class="{% if lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% else %}label-skip{% endif %}">
-          {{ lbl }}{% if lbl != '見送り' %}<span class="{{ 'streak-hot' if sk >= 6 else ('streak-warn' if sk >= 3 else ('streak-low' if sk >= 1 else 'streak-ok')) }}">{{ '🔴 ' ~ sk ~ '連外' if sk >= 1 else '✓' }}</span>{% endif %}
-        </td>
+        <td class="{% if lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% else %}label-skip{% endif %}">{{ lbl }}</td>
         <td>{{ s.total }}</td>
         <td>{{ rc }}</td>
         <td>{{ h }}</td>
@@ -334,6 +333,9 @@ footer{
         </td>
         <td class="{% if roi >= 100 %}roi-good{% elif roi >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
           {{ "%.1f" % roi }}%
+        </td>
+        <td class="{% if sk >= 6 %}streak-col-hot{% elif sk >= 3 %}streak-col-warn{% elif sk >= 1 %}streak-col-low{% else %}streak-col-none{% endif %}">
+          {% if lbl == '見送り' %}—{% elif sk == 0 %}0連{% else %}{{ sk }}連外{% endif %}
         </td>
       </tr>
     {% endfor %}
@@ -358,6 +360,7 @@ footer{
         <th>払戻合計</th>
         <th>収支</th>
         <th>回収率</th>
+        <th>現在の連外</th>
       </tr>
     </thead>
     <tbody>
@@ -371,7 +374,7 @@ footer{
       {% set hr = (h / rc * 100) if rc > 0 else 0 %}
       {% set sk = all_streaks.pt.get(s.arare_score, 0) %}
       <tr>
-        <td>PT{{ s.arare_score }}<span class="{{ 'streak-hot' if sk >= 6 else ('streak-warn' if sk >= 3 else ('streak-low' if sk >= 1 else 'streak-ok')) }}">{{ '🔴 ' ~ sk ~ '連外' if sk >= 1 else '✓' }}</span></td>
+        <td>PT{{ s.arare_score }}</td>
         <td>{{ s.total }}</td>
         <td>{{ rc }}</td>
         <td>{{ h }}</td>
@@ -383,6 +386,9 @@ footer{
         </td>
         <td class="{% if roi >= 100 %}roi-good{% elif roi >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
           {{ "%.1f" % roi }}%
+        </td>
+        <td class="{% if sk >= 6 %}streak-col-hot{% elif sk >= 3 %}streak-col-warn{% elif sk >= 1 %}streak-col-low{% else %}streak-col-none{% endif %}">
+          {% if sk == 0 %}0連{% else %}{{ sk }}連外{% endif %}
         </td>
       </tr>
     {% endfor %}
@@ -407,6 +413,7 @@ footer{
         <th>払戻合計</th>
         <th>収支</th>
         <th>回収率</th>
+        <th>現在の連外</th>
       </tr>
     </thead>
     <tbody>
@@ -420,7 +427,7 @@ footer{
       {% set hr = (h / rc * 100) if rc > 0 else 0 %}
       {% set sk = all_streaks.venue.get(s.venue_name, 0) %}
       <tr>
-        <td><span class="venue-link" onclick="showVenueDetail('{{ s.venue_name }}')">{{ s.venue_name }}</span><span class="{{ 'streak-hot' if sk >= 6 else ('streak-warn' if sk >= 3 else ('streak-low' if sk >= 1 else 'streak-ok')) }}">{{ '🔴 ' ~ sk ~ '連外' if sk >= 1 else '✓' }}</span></td>
+        <td><span class="venue-link" onclick="showVenueDetail('{{ s.venue_name }}')">{{ s.venue_name }}</span></td>
         <td>{{ s.total }}</td>
         <td>{{ rc }}</td>
         <td>{{ h }}</td>
@@ -432,6 +439,9 @@ footer{
         </td>
         <td class="{% if roi >= 100 %}roi-good{% elif roi >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
           {{ "%.1f" % roi }}%
+        </td>
+        <td class="{% if sk >= 6 %}streak-col-hot{% elif sk >= 3 %}streak-col-warn{% elif sk >= 1 %}streak-col-low{% else %}streak-col-none{% endif %}">
+          {% if sk == 0 %}0連{% else %}{{ sk }}連外{% endif %}
         </td>
       </tr>
     {% endfor %}
@@ -456,6 +466,7 @@ footer{
         <th>払戻合計</th>
         <th>収支</th>
         <th>回収率</th>
+        <th>現在の連外</th>
       </tr>
     </thead>
     <tbody>
@@ -469,7 +480,7 @@ footer{
       {% set hr = (h / rc * 100) if rc > 0 else 0 %}
       {% set sk = all_streaks.grade.get(s.race_grade, 0) %}
       <tr>
-        <td>{{ s.race_grade }}<span class="{{ 'streak-hot' if sk >= 6 else ('streak-warn' if sk >= 3 else ('streak-low' if sk >= 1 else 'streak-ok')) }}">{{ '🔴 ' ~ sk ~ '連外' if sk >= 1 else '✓' }}</span></td>
+        <td>{{ s.race_grade }}</td>
         <td>{{ s.total }}</td>
         <td>{{ rc }}</td>
         <td>{{ h }}</td>
@@ -481,6 +492,9 @@ footer{
         </td>
         <td class="{% if roi >= 100 %}roi-good{% elif roi >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
           {{ "%.1f" % roi }}%
+        </td>
+        <td class="{% if sk >= 6 %}streak-col-hot{% elif sk >= 3 %}streak-col-warn{% elif sk >= 1 %}streak-col-low{% else %}streak-col-none{% endif %}">
+          {% if sk == 0 %}0連{% else %}{{ sk }}連外{% endif %}
         </td>
       </tr>
     {% endfor %}
@@ -623,12 +637,11 @@ footer{
 <style>
 .venue-link{cursor:pointer;text-decoration:underline dotted;color:var(--cyan);transition:color .15s;}
 .venue-link:hover{color:#fff;text-shadow:0 0 8px var(--cyan);}
-/* 連続外れバッジ */
-.streak-ok  {margin-left:6px;font-size:11px;color:#00cc88;}
-.streak-low {margin-left:6px;font-size:11px;color:#e8c43a;}
-.streak-warn{margin-left:6px;font-size:11px;color:#e88a2a;}
-.streak-hot {margin-left:6px;font-size:11px;color:var(--red);font-weight:700;animation:streakPulse 1.5s ease-in-out infinite;}
-@keyframes streakPulse{0%,100%{opacity:1;}50%{opacity:.5;}}
+/* 現在の連外列 */
+.streak-col-none{color:#445;text-align:right;}
+.streak-col-low {color:#e8c43a;text-align:right;font-weight:600;}
+.streak-col-warn{color:#e88a2a;text-align:right;font-weight:600;}
+.streak-col-hot {color:var(--red);text-align:right;font-weight:700;}
 .vmodal-overlay{
   display:none;position:fixed;inset:0;z-index:500;
   background:rgba(4,8,20,0.82);backdrop-filter:blur(6px);
