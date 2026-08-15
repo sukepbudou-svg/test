@@ -249,28 +249,57 @@ nav a.active{
 
 .bet-result{text-align:right}
 .hit-badge{
-  display:inline-block;padding:2px 7px;border-radius:3px;
-  font-family:var(--font-mono);font-size:9px;font-weight:700;letter-spacing:1px;
+  display:inline-block;padding:3px 9px;border-radius:4px;
+  font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:1px;
 }
 .hit-yes{
-  background:rgba(0,255,170,0.1);color:var(--green);
-  border:1px solid rgba(0,255,170,0.3);
-  text-shadow:0 0 6px var(--gg);
-  box-shadow:0 0 8px rgba(0,255,170,0.12);
+  background:rgba(0,255,170,0.15);
+  color:#00ffcc;
+  border:1px solid rgba(0,255,170,0.55);
+  text-shadow:0 0 8px #00ffcc,0 0 18px rgba(0,255,170,0.7);
+  box-shadow:0 0 12px rgba(0,255,170,0.25),inset 0 0 6px rgba(0,255,170,0.08);
 }
 .hit-no{
-  background:rgba(90,100,128,0.1);color:var(--dim);
-  border:1px solid rgba(90,100,128,0.15);
+  background:rgba(255,50,80,0.12);
+  color:#ff4466;
+  border:1px solid rgba(255,50,80,0.45);
+  text-shadow:0 0 6px rgba(255,50,80,0.7);
+  box-shadow:0 0 10px rgba(255,50,80,0.18);
 }
 .hit-pending{
   font-family:var(--font-mono);font-size:9px;color:var(--dim);
 }
 
-/* 払戻 */
+/* 払戻（的中時） */
 .payout-hi{
   font-family:var(--font-logo);font-size:12px;
-  color:var(--green);
-  text-shadow:0 0 8px var(--gg),0 0 20px rgba(0,255,170,0.25);
+  color:#00ffcc;
+  text-shadow:0 0 10px #00ffcc,0 0 24px rgba(0,255,170,0.4);
+}
+
+/* レース実結果行 */
+.race-actual{
+  margin-top:8px;
+  padding:7px 10px;
+  border-radius:5px;
+  background:rgba(79,143,255,0.06);
+  border:1px solid rgba(79,143,255,0.15);
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+.actual-label{
+  font-family:var(--font-mono);font-size:9px;color:var(--dim2);
+  letter-spacing:1px;white-space:nowrap;
+}
+.actual-combo{
+  font-family:var(--font-logo);font-size:14px;font-weight:700;
+  color:var(--white);letter-spacing:3px;
+  text-shadow:0 0 8px var(--wg);
+}
+.actual-pay{
+  font-family:var(--font-logo);font-size:13px;
+  color:#00ffcc;
+  text-shadow:0 0 10px #00ffcc,0 0 24px rgba(0,255,170,0.4);
+  white-space:nowrap;
 }
 
 /* 荒れ条件 */
@@ -353,19 +382,17 @@ footer{
       <div class="arare-info"><b>荒れ:</b> {{ race.arare_reasons }}</div>
       {% endif %}
 
+      {% set res = namespace(found=none, hit_pay=0) %}
       {% for b in race.bets %}
       <div class="bet-row">
         <span class="combo {{ c_cls }}">{{ b.combination }}</span>
         <span class="odds-val {% if b.odds_value >= 200 %}odds-hi{% endif %}">{{ b.odds }}</span>
         <span class="bet-result">
           {% if b.result_recorded_at %}
+            {% if res.found is none %}{% set res.found = b %}{% endif %}
+            {% if b.is_hit and b.actual_payout %}{% set res.hit_pay = b.actual_payout %}{% endif %}
             {% if b.is_hit %}
               <span class="hit-badge hit-yes">◎ 的中</span>
-              {% if b.actual_payout %}
-              <div style="margin-top:3px;text-align:right">
-                <span class="payout-hi">¥{{ "{:,}".format(b.actual_payout) }}</span>
-              </div>
-              {% endif %}
             {% else %}
               <span class="hit-badge hit-no">✗ 外れ</span>
             {% endif %}
@@ -375,6 +402,18 @@ footer{
         </span>
       </div>
       {% endfor %}
+
+      {% if res.found %}
+      <div class="race-actual">
+        <span class="actual-label">実結果</span>
+        <span class="actual-combo">{{ res.found.actual_combination }}</span>
+        {% if res.hit_pay %}
+          <span class="actual-pay">¥{{ "{:,}".format(res.hit_pay) }}</span>
+        {% else %}
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--dim2)">払戻なし</span>
+        {% endif %}
+      </div>
+      {% endif %}
     </div>
     {% endfor %}
 
