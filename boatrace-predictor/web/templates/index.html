@@ -200,25 +200,43 @@ nav a.active{
   color:var(--green);
   text-shadow:0 0 8px rgba(0,255,170,0.5);
 }
-.tc-venues{
-  display:flex;flex-wrap:wrap;gap:4px;align-items:center;
-  padding-left:4px;
+/* ══════════════ VENUE JUMP LIST ══════════════ */
+.venue-jump-list{
+  display:flex;flex-direction:column;gap:5px;
+  font-family:var(--font-mono);
+  min-width:80px;
 }
-.tc-venue-tag{
-  font-family:var(--font-mono);font-size:10px;
-  padding:2px 7px;border-radius:3px;
-  background:rgba(79,143,255,0.08);
-  border:1px solid rgba(79,143,255,0.18);
-  color:var(--dim2);
+.vjl-title{
+  font-size:9px;color:var(--dim);letter-spacing:2px;
+  padding:0 4px 2px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  margin-bottom:2px;
+}
+.vjl-tag{
+  font-size:11px;
+  padding:4px 10px;border-radius:4px;
   cursor:pointer;white-space:nowrap;
+  border:1px solid transparent;
   transition:all .15s;
 }
-.tc-venue-tag:hover{
-  background:rgba(79,143,255,0.22);
-  color:var(--white);
-  border-color:rgba(79,143,255,0.5);
-  text-shadow:0 0 6px var(--bg-glow);
+.vjl-puchun{
+  color:#ff6b6b;
+  background:rgba(255,26,60,0.08);
+  border-color:rgba(255,26,60,0.2);
 }
+.vjl-puchun:hover{background:rgba(255,26,60,0.2);border-color:rgba(255,26,60,0.5);}
+.vjl-kokusen{
+  color:#ffaa55;
+  background:rgba(255,140,0,0.08);
+  border-color:rgba(255,140,0,0.2);
+}
+.vjl-kokusen:hover{background:rgba(255,140,0,0.2);border-color:rgba(255,140,0,0.5);}
+.vjl-skip{
+  color:var(--dim2);
+  background:rgba(255,255,255,0.03);
+  border-color:rgba(255,255,255,0.07);
+}
+.vjl-skip:hover{background:rgba(255,255,255,0.07);color:var(--white);border-color:rgba(255,255,255,0.18);}
 
 /* ══════════════ VENUE COLUMNS CONTAINER ══════════════ */
 .venues-wrap{
@@ -521,29 +539,36 @@ footer{
       <span class="tc-num lbl-puchun">{{ ns.puchu }}</span>
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if ns.hit_puchu > 0 %}has-hit{% endif %}">◎ {{ ns.hit_puchu }}</span>
-      <span class="tc-venues">
-        {% for venue in venue_list %}{% set chk = namespace(ok=false) %}{% for race in venue.races %}{% if (race.bets[0].bet_label if race.bets else '見送り') == 'プチュン' %}{% set chk.ok = true %}{% endif %}{% endfor %}{% if chk.ok %}<span class="tc-venue-tag" onclick="scrollToVenue('{{ venue.venue_name }}')">{{ venue.venue_name }}</span>{% endif %}{% endfor %}
-      </span>
     </div>
     <div class="tc-row">
       <span class="tc-label lbl-kokusen">黒船熱</span>
       <span class="tc-num lbl-kokusen">{{ ns.koku }}</span>
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if ns.hit_koku > 0 %}has-hit{% endif %}">◎ {{ ns.hit_koku }}</span>
-      <span class="tc-venues">
-        {% for venue in venue_list %}{% set chk = namespace(ok=false) %}{% for race in venue.races %}{% if (race.bets[0].bet_label if race.bets else '見送り') == '黒船熱' %}{% set chk.ok = true %}{% endif %}{% endfor %}{% if chk.ok %}<span class="tc-venue-tag" onclick="scrollToVenue('{{ venue.venue_name }}')">{{ venue.venue_name }}</span>{% endif %}{% endfor %}
-      </span>
     </div>
     <div class="tc-row">
       <span class="tc-label lbl-skip">見送り</span>
       <span class="tc-num lbl-skip">{{ ns.skip }}</span>
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if ns.hit_skip > 0 %}has-hit{% endif %}">◎ {{ ns.hit_skip }}</span>
-      <span class="tc-venues">
-        {% for venue in venue_list %}{% set chk = namespace(ok=false) %}{% for race in venue.races %}{% if (race.bets[0].bet_label if race.bets else '見送り') == '見送り' %}{% set chk.ok = true %}{% endif %}{% endfor %}{% if chk.ok %}<span class="tc-venue-tag" onclick="scrollToVenue('{{ venue.venue_name }}')">{{ venue.venue_name }}</span>{% endif %}{% endfor %}
-      </span>
     </div>
   </div>
+
+  {% if venue_list %}
+  <div class="venue-jump-list">
+    <div class="vjl-title">本日の会場</div>
+    {% for venue in venue_list %}
+      {% set vlbl = namespace(top='見送り') %}
+      {% for race in venue.races %}
+        {% set rl = race.bets[0].bet_label if race.bets else '見送り' %}
+        {% if rl == 'プチュン' %}{% set vlbl.top = 'プチュン' %}
+        {% elif rl == '黒船熱' and vlbl.top != 'プチュン' %}{% set vlbl.top = '黒船熱' %}{% endif %}
+      {% endfor %}
+      <span class="vjl-tag vjl-{{ 'puchun' if vlbl.top == 'プチュン' else ('kokusen' if vlbl.top == '黒船熱' else 'skip') }}"
+            onclick="scrollToVenue('{{ venue.venue_name }}')">{{ venue.venue_name }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
 </div>
 
 {% if venue_list %}
