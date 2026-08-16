@@ -1135,18 +1135,65 @@ def get_recommendations(
             _min_odds = {"プチュン": 40.0, "黒船熱": 20.0, "見送り": 0.0}
             min_odds = _min_odds.get(_okuma_label, 0.0)
 
-            # hero が1着の組み合わせを抽出し期待値（確率×倍率）順で上位2点を選出
+            # hero が1着の組み合わせを抽出・最低倍率フィルター
             hero_first = _valid[_valid["boat1"] == hero].copy()
-            hero_first["ev"] = hero_first["prob"] * hero_first["odds_value"]
             if min_odds > 0:
                 hero_first = hero_first[hero_first["odds_value"] >= min_odds]
-            hero_first = hero_first.sort_values("ev", ascending=False).reset_index(drop=True)
 
             if hero_first.empty:
                 print(f"  [スキップ] {hero}号艇1着で倍率{min_odds:.0f}倍以上の組み合わせなし")
-            for _, row in hero_first.head(3).iterrows():
-                r = row.copy()
-                _add_rec(r, "大熊", label_override=_okuma_label)
+            else:
+                # ── 動態スコアリング：2着・3着をレース動態ロジックで選出 ──
+                # ① STタイミングの近さ（40%）: 第1ターンで競り合う艇を重視
+                # ② ET順位（35%）: ヒーロー除く艇の中で純粋に速い艇
+                # ③ コース位置ロジック（25%）: まくり型/差し型で生き残る艇
+                _hero_st = _safe_float(race_row.get(f"boat{hero}_exhibition_st"))
+                _non_hero_et = {b: v for b, v in et_vals_k.items() if b != hero}
+                _et_ranked = sorted(_non_hero_et.keys(), key=lambda b: _non_hero_et[b]) \
+                             if _non_hero_et else []
+                _n_et = len(_et_ranked)
+
+                def _dynamics_score(b2, b3):
+                    sc = 0.0
+                    # ① STタイミングの近さ（2着28% / 3着12%）
+                    for wt, bn in [(0.28, b2), (0.12, b3)]:
+                        bn_st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                        if _hero_st and _hero_st > 0 and bn_st and bn_st > 0:
+                            diff = abs(bn_st - _hero_st)
+                            prox = (1.0 if diff <= 0.02 else
+                                    0.6 if diff <= 0.05 else
+                                    0.3 if diff <= 0.09 else 0.0)
+                            sc += prox * wt
+                    # ② ET順位（2着23% / 3着12%）
+                    for wt, bn in [(0.23, b2), (0.12, b3)]:
+                        if bn in _et_ranked and _n_et > 1:
+                            rank = _et_ranked.index(bn)
+                            sc += (1.0 - rank / (_n_et - 1)) * wt
+                    # ③ コース位置ロジック（2着17% / 3着8%）
+                    for wt, bn in [(0.17, b2), (0.08, b3)]:
+                        if hero >= 4:
+                            # まくり型: 内艇（1〜3号）が進路確保しやすい
+                            if bn <= 3:
+                                sc += wt
+                            elif bn == hero - 1:
+                                sc += wt * 0.4
+                        elif hero in [2, 3]:
+                            # 差し型: 隣接艇が続きやすい
+                            dist = abs(bn - hero)
+                            sc += (wt if dist == 1 else
+                                   wt * 0.5 if dist == 2 else 0.0)
+                    return sc
+
+                hero_first["dynamics"] = hero_first.apply(
+                    lambda row: _dynamics_score(int(row["boat2"]), int(row["boat3"])), axis=1
+                )
+                hero_first = hero_first.sort_values("dynamics", ascending=False).reset_index(drop=True)
+                print(f"  [動態スコア上位] {list(zip(hero_first['boat2'].astype(int), hero_first['boat3'].astype(int), hero_first['dynamics'].round(3)))[:3]}")
+
+                for _, row in hero_first.head(3).iterrows():
+                    r = row.copy()
+                    r["ev"] = float(r["prob"]) * float(r["odds_value"])
+                    _add_rec(r, "大熊", label_override=_okuma_label)
 
     result_df = pd.DataFrame(all_recommendations)
     if not result_df.empty:
