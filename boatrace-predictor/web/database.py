@@ -349,6 +349,40 @@ def get_grade_stats():
     return [dict(r) for r in rows]
 
 
+def get_hero_stats():
+    """ヒーロー（1着）的中率分析：ラベル別にヒーロー的中と組み合わせ的中を集計"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT
+                bet_label,
+                COUNT(*) as total_races,
+                SUM(has_result) as result_count,
+                SUM(hero_correct) as hero_hits,
+                SUM(is_hit_any) as combo_hits
+            FROM (
+                SELECT date, venue_name, race_no,
+                    MAX(bet_label) as bet_label,
+                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
+                    MAX(CASE WHEN result_recorded_at IS NOT NULL
+                              AND SUBSTR(combination, 1, 1) = SUBSTR(actual_combination, 1, 1)
+                              THEN 1 ELSE 0 END) as hero_correct,
+                    MAX(is_hit) as is_hit_any
+                FROM predictions
+                WHERE bet_label != '見送り'
+                GROUP BY date, venue_name, race_no
+            )
+            GROUP BY bet_label
+            ORDER BY
+                CASE bet_label
+                    WHEN 'プチュン' THEN 1
+                    WHEN '黒船熱' THEN 2
+                    ELSE 3
+                END
+        """).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_consecutive_misses():
     """ラベル別の直近連続外れ数（後方互換）"""
     return get_all_streaks()["label"]

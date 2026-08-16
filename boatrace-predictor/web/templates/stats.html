@@ -344,6 +344,57 @@ footer{
   </div>
 </div>
 
+<!-- ── ヒーロー的中分析 ── -->
+<div class="section">
+  <h2>ヒーロー（1着）的中分析</h2>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ラベル</th>
+        <th>結果済</th>
+        <th>1着的中</th>
+        <th>1着的中率</th>
+        <th>組み合わせ的中</th>
+        <th>組み合わせ的中率</th>
+        <th>診断</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for s in hero_stats %}
+      {% set lbl = s.bet_label %}
+      {% set rc = s.result_count or 0 %}
+      {% set hh = s.hero_hits or 0 %}
+      {% set ch = s.combo_hits or 0 %}
+      {% set hhr = (hh / rc * 100) if rc > 0 else 0 %}
+      {% set chr = (ch / rc * 100) if rc > 0 else 0 %}
+      <tr>
+        <td class="{% if lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% else %}label-skip{% endif %}">{{ lbl }}</td>
+        <td>{{ rc }}</td>
+        <td class="{% if hh > 0 %}roi-good{% endif %}">{{ hh }}</td>
+        <td class="{% if hhr >= 30 %}roi-good{% elif hhr >= 15 %}roi-neutral{% else %}roi-bad{% endif %}">
+          {{ "%.1f" % hhr }}%
+        </td>
+        <td class="{% if ch > 0 %}roi-good{% endif %}">{{ ch }}</td>
+        <td class="{% if chr >= 10 %}roi-good{% elif chr >= 5 %}roi-neutral{% else %}roi-bad{% endif %}">
+          {{ "%.1f" % chr }}%
+        </td>
+        <td style="font-size:11px;color:var(--dim2);">
+          {% if rc == 0 %}データ待ち
+          {% elif hh == 0 %}1着が外れ続き→hero選出を見直す
+          {% elif hh > 0 and ch == 0 %}1着は当たり→2・3着を改善中
+          {% elif ch > 0 %}的中あり
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" style="text-align:center;color:var(--dim);padding:20px;">データなし</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
 <!-- ── PT帯別集計 ── -->
 <div class="section">
   <h2>荒れPT帯別集計</h2>
