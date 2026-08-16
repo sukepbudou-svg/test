@@ -97,9 +97,18 @@ nav a.active{
 }
 .date-label{color:var(--white);font-size:13px;letter-spacing:1px}
 
+/* ══════════════ LOG AREA (log + today counts) ══════════════ */
+.log-area{
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:12px;
+  padding:8px 24px 4px;
+  align-items:start;
+}
+@media(max-width:600px){.log-area{grid-template-columns:1fr;}}
+
 /* ══════════════ ACTIVITY LOG ══════════════ */
 .activity-log{
-  padding:8px 24px 4px;
   display:flex;flex-direction:column;gap:4px;
 }
 .act-row{
@@ -140,6 +149,30 @@ nav a.active{
 .act-row.confirmed.act-new .act-check{animation:none;}
 @keyframes actSlideIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
 @keyframes checkPulse{0%,100%{box-shadow:0 0 6px rgba(0,212,255,0.5);}50%{box-shadow:0 0 12px rgba(0,212,255,0.9);}}
+
+/* ══════════════ TODAY COUNTS ══════════════ */
+.today-counts{
+  display:flex;flex-direction:column;gap:6px;
+  min-width:130px;
+  font-family:var(--font-mono);
+}
+.tc-row{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:6px 12px;border-radius:6px;
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.06);
+}
+.tc-label{font-size:11px;}
+.tc-label.lbl-puchun{color:#ff6b6b;}
+.tc-label.lbl-kokusen{color:#ffaa55;}
+.tc-label.lbl-skip{color:#556;}
+.tc-num{
+  font-size:20px;font-weight:700;
+  font-family:var(--font-logo);letter-spacing:1px;
+}
+.tc-num.lbl-puchun{color:#ff6b6b;text-shadow:0 0 10px rgba(255,107,107,0.5);}
+.tc-num.lbl-kokusen{color:#ffaa55;text-shadow:0 0 10px rgba(255,170,85,0.5);}
+.tc-num.lbl-skip{color:#334;}
 
 /* ══════════════ VENUE COLUMNS CONTAINER ══════════════ */
 .venues-wrap{
@@ -417,7 +450,31 @@ footer{
   <span>⟳ 予想追加時に自動更新</span>
 </div>
 
-<div class="activity-log" id="activity-log"></div>
+{% set ns = namespace(skip=0, koku=0, puchu=0) %}
+{% for race in race_list %}
+  {% set lbl = race.bets[0].bet_label if race.bets else '見送り' %}
+  {% if lbl == 'プチュン' %}{% set ns.puchu = ns.puchu + 1 %}
+  {% elif lbl == '黒船熱' %}{% set ns.koku = ns.koku + 1 %}
+  {% else %}{% set ns.skip = ns.skip + 1 %}{% endif %}
+{% endfor %}
+
+<div class="log-area">
+  <div class="activity-log" id="activity-log"></div>
+  <div class="today-counts">
+    <div class="tc-row">
+      <span class="tc-label lbl-puchun">プチュン</span>
+      <span class="tc-num lbl-puchun">{{ ns.puchu }}</span>
+    </div>
+    <div class="tc-row">
+      <span class="tc-label lbl-kokusen">黒船熱</span>
+      <span class="tc-num lbl-kokusen">{{ ns.koku }}</span>
+    </div>
+    <div class="tc-row">
+      <span class="tc-label lbl-skip">見送り</span>
+      <span class="tc-num lbl-skip">{{ ns.skip }}</span>
+    </div>
+  </div>
+</div>
 
 {% if venue_list %}
 <div class="venues-wrap">
