@@ -1055,7 +1055,7 @@ def get_recommendations(
             motor = _safe_float(race_row.get(f"boat{bn}_motor_2rate")) or 0.40
             return ml * 0.40 + et * 0.40 + motor * 0.20
 
-        # ── 新・大熊選出（主役艇1艇固定×展開2シナリオ=2点）──
+        # ── 大熊選出（hero1着固定 × MLモデル確率上位2点）──
         _valid = by_prob[
             (by_prob["odds_value"] > 0) &
             (by_prob["prob"] > 0)
@@ -1123,54 +1123,23 @@ def get_recommendations(
                 s += min(1.0, (g - 1) / 3.0) * 0.20
                 # まくり実績 (10%)
                 s += min(1.0, _get_aggression(bn) / 2.0) * 0.10
-                # 外枠ペナルティ: 6号艇は特別な根拠がない限り選ばれにくくする
-                # (よほどST・ETが突出していれば上回れる程度の減点)
+                # 外枠ペナルティ（6号艇が安易に選ばれないよう抑制）
                 _outer_penalty = {4: 0.05, 5: 0.10, 6: 0.18}
                 s -= _outer_penalty.get(bn, 0.0)
                 return s
 
             hero = max(outer_h, key=_hero_score)
+            print(f"  [hero] {hero}号艇 (score={_hero_score(hero):.3f})")
 
-            def _pick_third_h(used):
-                cands = [b for b in available_kuma if b not in used]
-                if not cands:
-                    return None
-                if et_vals_k:
-                    return min(cands, key=lambda b: et_vals_k.get(b, 9.99))
-                return cands[0]
+            # hero が1着の組み合わせをMLモデル確率順に並べ、上位2点を選出
+            hero_first = _valid[_valid["boat1"] == hero].sort_values(
+                "prob", ascending=False
+            ).reset_index(drop=True)
 
-            # パターンA: まくり差し（主役-1号艇が残る）
-            second_a = 1 if 1 in available_kuma else (2 if 2 in available_kuma else None)
-
-            # パターンB: まくり（主役-直外艇）
-            outer_of_hero = [b for b in available_kuma if b > hero]
-            second_b = min(outer_of_hero) if outer_of_hero else None
-            if second_b is None and 2 in available_kuma and 2 != second_a:
-                second_b = 2
-
-            combos_to_add = []
-            if second_a is not None:
-                third_a = _pick_third_h({hero, second_a})
-                if third_a:
-                    combos_to_add.append((hero, second_a, third_a))
-
-            if second_b is not None:
-                third_b = _pick_third_h({hero, second_b})
-                if third_b:
-                    c = (hero, second_b, third_b)
-                    if c not in combos_to_add:
-                        combos_to_add.append(c)
-
-            for (b1, b2, b3) in combos_to_add:
-                mask = (
-                    (_valid["boat1"] == b1) &
-                    (_valid["boat2"] == b2) &
-                    (_valid["boat3"] == b3)
-                )
-                if mask.any():
-                    r = _valid[mask].iloc[0].copy()
-                    r["ev"] = float(r["prob"]) * float(r["odds_value"])
-                    _add_rec(r, "大熊", label_override=_okuma_label)
+            for _, row in hero_first.head(2).iterrows():
+                r = row.copy()
+                r["ev"] = float(r["prob"]) * float(r["odds_value"])
+                _add_rec(r, "大熊", label_override=_okuma_label)
 
     result_df = pd.DataFrame(all_recommendations)
     if not result_df.empty:
