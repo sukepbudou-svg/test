@@ -1131,14 +1131,21 @@ def get_recommendations(
             hero = max(outer_h, key=_hero_score)
             print(f"  [hero] {hero}号艇 (score={_hero_score(hero):.3f})")
 
-            # hero が1着の組み合わせをMLモデル確率順に並べ、上位2点を選出
-            hero_first = _valid[_valid["boat1"] == hero].sort_values(
-                "prob", ascending=False
-            ).reset_index(drop=True)
+            # ラベル別最低倍率フィルター（コンセプト：荒れ狙い＝高倍率帯に絞る）
+            _min_odds = {"プチュン": 40.0, "黒船熱": 20.0, "見送り": 0.0}
+            min_odds = _min_odds.get(_okuma_label, 0.0)
 
+            # hero が1着の組み合わせを抽出し期待値（確率×倍率）順で上位2点を選出
+            hero_first = _valid[_valid["boat1"] == hero].copy()
+            hero_first["ev"] = hero_first["prob"] * hero_first["odds_value"]
+            if min_odds > 0:
+                hero_first = hero_first[hero_first["odds_value"] >= min_odds]
+            hero_first = hero_first.sort_values("ev", ascending=False).reset_index(drop=True)
+
+            if hero_first.empty:
+                print(f"  [スキップ] {hero}号艇1着で倍率{min_odds:.0f}倍以上の組み合わせなし")
             for _, row in hero_first.head(2).iterrows():
                 r = row.copy()
-                r["ev"] = float(r["prob"]) * float(r["odds_value"])
                 _add_rec(r, "大熊", label_override=_okuma_label)
 
     result_df = pd.DataFrame(all_recommendations)
