@@ -200,6 +200,25 @@ nav a.active{
   color:var(--green);
   text-shadow:0 0 8px rgba(0,255,170,0.5);
 }
+.tc-venues{
+  display:flex;flex-wrap:wrap;gap:4px;align-items:center;
+  padding-left:4px;
+}
+.tc-venue-tag{
+  font-family:var(--font-mono);font-size:10px;
+  padding:2px 7px;border-radius:3px;
+  background:rgba(79,143,255,0.08);
+  border:1px solid rgba(79,143,255,0.18);
+  color:var(--dim2);
+  cursor:pointer;white-space:nowrap;
+  transition:all .15s;
+}
+.tc-venue-tag:hover{
+  background:rgba(79,143,255,0.22);
+  color:var(--white);
+  border-color:rgba(79,143,255,0.5);
+  text-shadow:0 0 6px var(--bg-glow);
+}
 
 /* ══════════════ VENUE COLUMNS CONTAINER ══════════════ */
 .venues-wrap{
@@ -502,18 +521,27 @@ footer{
       <span class="tc-num lbl-puchun">{{ ns.puchu }}</span>
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if ns.hit_puchu > 0 %}has-hit{% endif %}">◎ {{ ns.hit_puchu }}</span>
+      <span class="tc-venues">
+        {% for venue in venue_list %}{% set chk = namespace(ok=false) %}{% for race in venue.races %}{% if (race.bets[0].bet_label if race.bets else '見送り') == 'プチュン' %}{% set chk.ok = true %}{% endif %}{% endfor %}{% if chk.ok %}<span class="tc-venue-tag" onclick="scrollToVenue('{{ venue.venue_name }}')">{{ venue.venue_name }}</span>{% endif %}{% endfor %}
+      </span>
     </div>
     <div class="tc-row">
       <span class="tc-label lbl-kokusen">黒船熱</span>
       <span class="tc-num lbl-kokusen">{{ ns.koku }}</span>
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if ns.hit_koku > 0 %}has-hit{% endif %}">◎ {{ ns.hit_koku }}</span>
+      <span class="tc-venues">
+        {% for venue in venue_list %}{% set chk = namespace(ok=false) %}{% for race in venue.races %}{% if (race.bets[0].bet_label if race.bets else '見送り') == '黒船熱' %}{% set chk.ok = true %}{% endif %}{% endfor %}{% if chk.ok %}<span class="tc-venue-tag" onclick="scrollToVenue('{{ venue.venue_name }}')">{{ venue.venue_name }}</span>{% endif %}{% endfor %}
+      </span>
     </div>
     <div class="tc-row">
       <span class="tc-label lbl-skip">見送り</span>
       <span class="tc-num lbl-skip">{{ ns.skip }}</span>
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if ns.hit_skip > 0 %}has-hit{% endif %}">◎ {{ ns.hit_skip }}</span>
+      <span class="tc-venues">
+        {% for venue in venue_list %}{% set chk = namespace(ok=false) %}{% for race in venue.races %}{% if (race.bets[0].bet_label if race.bets else '見送り') == '見送り' %}{% set chk.ok = true %}{% endif %}{% endfor %}{% if chk.ok %}<span class="tc-venue-tag" onclick="scrollToVenue('{{ venue.venue_name }}')">{{ venue.venue_name }}</span>{% endif %}{% endfor %}
+      </span>
     </div>
   </div>
 </div>
@@ -521,7 +549,7 @@ footer{
 {% if venue_list %}
 <div class="venues-wrap">
   {% for venue in venue_list %}
-  <div class="venue-col vc-{{ loop.index0 % 8 }}">
+  <div class="venue-col vc-{{ loop.index0 % 8 }}" id="venue-{{ venue.venue_name }}">
 
     <div class="venue-head">
       <span class="venue-name">{{ venue.venue_name }}</span>
@@ -639,6 +667,24 @@ footer{
       </div>`;
     }).join('');
   }
+
+  window.scrollToVenue = function(venue){
+    const el = document.getElementById('venue-' + venue);
+    if(!el) return;
+    el.classList.remove('race-highlight');
+    const observer = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if(entry.isIntersecting){
+          observer.disconnect();
+          void el.offsetWidth;
+          el.classList.add('race-highlight');
+          setTimeout(()=>el.classList.remove('race-highlight'), 2800);
+        }
+      });
+    }, {threshold: 0.2});
+    observer.observe(el);
+    el.scrollIntoView({behavior:'smooth', block:'start'});
+  };
 
   window.scrollToRace = function(venue, raceNo){
     const el = document.getElementById('race-' + venue + '-' + raceNo);
