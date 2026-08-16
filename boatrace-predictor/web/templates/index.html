@@ -98,6 +98,32 @@ nav a.active{
 }
 .date-label{color:var(--white);font-size:13px;letter-spacing:1px}
 
+/* ══════════════ ACTIVITY LOG ══════════════ */
+.activity-log{
+  padding:8px 24px 4px;
+  display:flex;flex-direction:column;gap:4px;
+}
+.act-row{
+  display:flex;align-items:center;gap:10px;
+  font-family:var(--font-mono);font-size:11px;
+  padding:5px 12px;border-radius:5px;
+  background:rgba(255,255,255,0.03);
+  border-left:3px solid rgba(79,143,255,0.3);
+  animation:actSlideIn .35s ease;
+}
+.act-row.act-new{border-left-color:var(--cyan);}
+.act-time{color:#445;min-width:42px;}
+.act-venue{color:var(--white);font-weight:700;min-width:52px;}
+.act-race{color:#8090b0;min-width:24px;}
+.act-pt{
+  padding:1px 6px;border-radius:3px;
+  font-size:10px;font-weight:700;
+}
+.act-pt.lbl-puchun{background:rgba(217,50,50,0.2);color:#ff6b6b;}
+.act-pt.lbl-kokusen{background:rgba(217,124,40,0.2);color:#ffaa55;}
+.act-pt.lbl-skip{background:rgba(80,90,120,0.2);color:#667;}
+@keyframes actSlideIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
+
 /* ══════════════ VENUE COLUMNS CONTAINER ══════════════ */
 .venues-wrap{
   display:grid;
@@ -374,6 +400,8 @@ footer{
   <span>⟳ 60秒ごとに自動更新</span>
 </div>
 
+<div class="activity-log" id="activity-log"></div>
+
 {% if venue_list %}
 <div class="venues-wrap">
   {% for venue in venue_list %}
@@ -455,6 +483,37 @@ footer{
 <footer>PERRY AI &copy; 2026 — 競艇万舟予想システム</footer>
 
 <script>
+(function(){
+  const DATE_PARAM = new URLSearchParams(location.search).get('date') || '';
+
+  function labelClass(lbl){
+    if(lbl==='プチュン') return 'lbl-puchun';
+    if(lbl==='黒船熱')  return 'lbl-kokusen';
+    return 'lbl-skip';
+  }
+
+  function fetchActivity(){
+    const url = '/api/recent_activity' + (DATE_PARAM ? '?date='+encodeURIComponent(DATE_PARAM) : '');
+    fetch(url).then(r=>r.json()).then(rows=>{
+      const log = document.getElementById('activity-log');
+      if(!log || !rows.length) return;
+      log.innerHTML = rows.map((r, i)=>{
+        const t = r.created_at ? r.created_at.slice(11,16) : '';
+        const lc = labelClass(r.bet_label);
+        return `<div class="act-row${i===0?' act-new':''}">
+          <span class="act-time">${t}</span>
+          <span class="act-venue">${r.venue_name}</span>
+          <span class="act-race">${r.race_no}R</span>
+          <span class="act-pt ${lc}">PT${r.arare_score} ${r.bet_label}</span>
+        </div>`;
+      }).join('');
+    }).catch(()=>{});
+  }
+
+  fetchActivity();
+  setInterval(fetchActivity, 30000);
+})();
+
 (function(){
   function updateRaceTimeColors(){
     document.querySelectorAll('.race-time[data-rt]').forEach(el=>{

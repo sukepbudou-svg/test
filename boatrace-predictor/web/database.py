@@ -115,6 +115,25 @@ def update_result(date: str, venue_name: str, race_no: int,
             """, (actual_combination, actual_payout, is_hit, now, row["id"]))
 
 
+def get_recent_activity(date: str = None, limit: int = 5):
+    """当日の最新更新レース一覧（会場・レース単位、更新が新しい順）"""
+    init_db()
+    if date is None:
+        date = datetime.now().strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT venue_name, race_no, arare_score,
+                   MAX(bet_label) as bet_label,
+                   MAX(created_at) as created_at
+            FROM predictions
+            WHERE date = ?
+            GROUP BY venue_name, race_no
+            ORDER BY MAX(created_at) DESC
+            LIMIT ?
+        """, (date, limit)).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_today_predictions(date: str = None):
     """当日の予想一覧を取得（レース番号・会場順）"""
     init_db()

@@ -9,6 +9,7 @@ from web.database import (
     get_today_predictions, get_pt_stats, get_label_stats,
     get_daily_summary, get_consecutive_misses, init_db, update_result,
     get_venue_stats, get_grade_stats, get_venue_detail, get_all_streaks,
+    get_recent_activity,
 )
 
 
@@ -84,6 +85,11 @@ def create_app():
     @app.route("/api/pt_stats")
     def api_pt_stats():
         return jsonify(get_pt_stats())
+
+    @app.route("/api/recent_activity")
+    def api_recent_activity():
+        date = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
+        return jsonify(get_recent_activity(date))
 
     @app.route("/api/venue_detail/<venue_name>")
     def api_venue_detail(venue_name):
