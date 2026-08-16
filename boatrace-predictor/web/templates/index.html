@@ -171,16 +171,16 @@ nav a.active{
 /* ══════════════ TODAY COUNTS ══════════════ */
 .today-counts{
   display:flex;flex-direction:column;gap:6px;
-  min-width:130px;
+  min-width:180px;
   font-family:var(--font-mono);
 }
 .tc-row{
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  display:flex;align-items:center;gap:8px;
   padding:6px 12px;border-radius:6px;
   background:rgba(255,255,255,0.03);
   border:1px solid rgba(255,255,255,0.06);
 }
-.tc-label{font-size:11px;}
+.tc-label{font-size:11px;flex:1;}
 .tc-label.lbl-puchun{color:#ff6b6b;}
 .tc-label.lbl-kokusen{color:#ffaa55;}
 .tc-label.lbl-skip{color:#556;}
@@ -191,6 +191,15 @@ nav a.active{
 .tc-num.lbl-puchun{color:#ff6b6b;text-shadow:0 0 10px rgba(255,107,107,0.5);}
 .tc-num.lbl-kokusen{color:#ffaa55;text-shadow:0 0 10px rgba(255,170,85,0.5);}
 .tc-num.lbl-skip{color:#334;}
+.tc-sep{color:rgba(255,255,255,0.12);font-size:13px;flex-shrink:0;}
+.tc-hit{
+  font-family:var(--font-mono);font-size:12px;
+  color:var(--dim);min-width:38px;text-align:right;flex-shrink:0;
+}
+.tc-hit.has-hit{
+  color:var(--green);
+  text-shadow:0 0 8px rgba(0,255,170,0.5);
+}
 
 /* ══════════════ VENUE COLUMNS CONTAINER ══════════════ */
 .venues-wrap{
@@ -468,12 +477,21 @@ footer{
   <span>⟳ 予想追加時に自動更新</span>
 </div>
 
-{% set ns = namespace(skip=0, koku=0, puchu=0) %}
+{% set ns = namespace(skip=0, koku=0, puchu=0, hit_puchu=0, hit_koku=0, hit_skip=0) %}
 {% for race in race_list %}
   {% set lbl = race.bets[0].bet_label if race.bets else '見送り' %}
-  {% if lbl == 'プチュン' %}{% set ns.puchu = ns.puchu + 1 %}
-  {% elif lbl == '黒船熱' %}{% set ns.koku = ns.koku + 1 %}
-  {% else %}{% set ns.skip = ns.skip + 1 %}{% endif %}
+  {% set hit = namespace(found=false) %}
+  {% for b in race.bets %}{% if b.is_hit %}{% set hit.found = true %}{% endif %}{% endfor %}
+  {% if lbl == 'プチュン' %}
+    {% set ns.puchu = ns.puchu + 1 %}
+    {% if hit.found %}{% set ns.hit_puchu = ns.hit_puchu + 1 %}{% endif %}
+  {% elif lbl == '黒船熱' %}
+    {% set ns.koku = ns.koku + 1 %}
+    {% if hit.found %}{% set ns.hit_koku = ns.hit_koku + 1 %}{% endif %}
+  {% else %}
+    {% set ns.skip = ns.skip + 1 %}
+    {% if hit.found %}{% set ns.hit_skip = ns.hit_skip + 1 %}{% endif %}
+  {% endif %}
 {% endfor %}
 
 <div class="log-area">
@@ -482,14 +500,20 @@ footer{
     <div class="tc-row">
       <span class="tc-label lbl-puchun">プチュン</span>
       <span class="tc-num lbl-puchun">{{ ns.puchu }}</span>
+      <span class="tc-sep">|</span>
+      <span class="tc-hit {% if ns.hit_puchu > 0 %}has-hit{% endif %}">◎ {{ ns.hit_puchu }}</span>
     </div>
     <div class="tc-row">
       <span class="tc-label lbl-kokusen">黒船熱</span>
       <span class="tc-num lbl-kokusen">{{ ns.koku }}</span>
+      <span class="tc-sep">|</span>
+      <span class="tc-hit {% if ns.hit_koku > 0 %}has-hit{% endif %}">◎ {{ ns.hit_koku }}</span>
     </div>
     <div class="tc-row">
       <span class="tc-label lbl-skip">見送り</span>
       <span class="tc-num lbl-skip">{{ ns.skip }}</span>
+      <span class="tc-sep">|</span>
+      <span class="tc-hit {% if ns.hit_skip > 0 %}has-hit{% endif %}">◎ {{ ns.hit_skip }}</span>
     </div>
   </div>
 </div>
