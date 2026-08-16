@@ -1144,7 +1144,7 @@ def get_recommendations(
 
             if hero_first.empty:
                 print(f"  [スキップ] {hero}号艇1着で倍率{min_odds:.0f}倍以上の組み合わせなし")
-            for _, row in hero_first.head(2).iterrows():
+            for _, row in hero_first.head(3).iterrows():
                 r = row.copy()
                 _add_rec(r, "大熊", label_override=_okuma_label)
 
