@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="60">
 <title>PERRY AI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -415,7 +414,7 @@ footer{
 <div class="meta">
   <span class="date-label">📅 {{ date }}</span>
   <span>全{{ race_list|length }}レース · {{ venue_list|length }}会場</span>
-  <span>⟳ 60秒ごとに自動更新</span>
+  <span>⟳ 予想追加時に自動更新</span>
 </div>
 
 <div class="activity-log" id="activity-log"></div>
@@ -561,8 +560,19 @@ footer{
   // SSEで予想追加を即座に受信
   const streamUrl = '/api/activity_stream' + (DATE_PARAM ? '?date='+encodeURIComponent(DATE_PARAM) : '');
   const es = new EventSource(streamUrl);
+  let isFirst = true;
   es.onmessage = function(e){
-    try{ renderLog(JSON.parse(e.data)); }catch(_){}
+    try{
+      const rows = JSON.parse(e.data);
+      if(isFirst){
+        // 初回はログ表示のみ（現在の状態を表示するだけ）
+        isFirst = false;
+        renderLog(rows);
+      } else {
+        // 新しい予想が追加されたのでページ全体を更新
+        location.reload();
+      }
+    }catch(_){}
   };
   es.onerror = function(){
     // SSE切断時は30秒ポーリングにフォールバック
