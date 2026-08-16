@@ -151,13 +151,18 @@ nav a.active{
 .act-row.confirmed.act-new .act-check{animation:none;}
 @keyframes actSlideIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
 @keyframes raceHighlight{
-  0%  {box-shadow:0 0 0 0 rgba(79,143,255,0), inset 0 0 0 rgba(79,143,255,0);}
-  25% {box-shadow:0 0 0 3px rgba(79,143,255,0.7), inset 0 0 20px rgba(79,143,255,0.12);}
-  100%{box-shadow:0 0 0 0 rgba(79,143,255,0), inset 0 0 0 rgba(79,143,255,0);}
+  0%   {box-shadow:none; background-color:transparent; outline:2px solid transparent;}
+  12%  {box-shadow:0 0 0 3px rgba(100,180,255,1), 0 0 40px 12px rgba(79,143,255,0.65);
+        background-color:rgba(79,143,255,0.26); outline:2px solid rgba(100,180,255,0.9);}
+  38%  {box-shadow:0 0 0 1px rgba(79,143,255,0.3), 0 0 12px 2px rgba(79,143,255,0.15);
+        background-color:rgba(79,143,255,0.05); outline:2px solid transparent;}
+  60%  {box-shadow:0 0 0 3px rgba(100,180,255,0.9), 0 0 35px 10px rgba(79,143,255,0.55);
+        background-color:rgba(79,143,255,0.20); outline:2px solid rgba(100,180,255,0.8);}
+  100% {box-shadow:none; background-color:transparent; outline:2px solid transparent;}
 }
 .race-highlight{
   border-radius:6px;
-  animation:raceHighlight 1.6s ease forwards;
+  animation:raceHighlight 2.4s ease forwards;
 }
 @keyframes checkPulse{0%,100%{box-shadow:0 0 6px rgba(0,212,255,0.5);}50%{box-shadow:0 0 12px rgba(0,212,255,0.9);}}
 
@@ -616,7 +621,7 @@ footer{
     el.classList.remove('race-highlight');
     void el.offsetWidth; // reflow to restart animation
     el.classList.add('race-highlight');
-    setTimeout(()=>el.classList.remove('race-highlight'), 1700);
+    setTimeout(()=>el.classList.remove('race-highlight'), 2500);
   };
 
   window.toggleConfirm = function(key, el){
