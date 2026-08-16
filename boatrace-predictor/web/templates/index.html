@@ -202,15 +202,21 @@ nav a.active{
 }
 /* ══════════════ VENUE JUMP LIST ══════════════ */
 .venue-jump-list{
-  display:flex;flex-direction:column;gap:5px;
   font-family:var(--font-mono);
-  min-width:80px;
 }
 .vjl-title{
   font-size:9px;color:var(--dim);letter-spacing:2px;
-  padding:0 4px 2px;
+  padding:0 4px 4px;
   border-bottom:1px solid rgba(255,255,255,0.06);
-  margin-bottom:2px;
+  margin-bottom:5px;
+}
+.vjl-grid{
+  display:grid;
+  grid-template-rows:repeat(4, auto);
+  grid-auto-flow:column;
+  grid-auto-columns:min-content;
+  gap:5px;
+  align-items:start;
 }
 .vjl-tag{
   font-size:11px;
@@ -557,16 +563,18 @@ footer{
   {% if venue_list %}
   <div class="venue-jump-list">
     <div class="vjl-title">本日の会場</div>
-    {% for venue in venue_list %}
-      {% set vlbl = namespace(top='見送り') %}
-      {% for race in venue.races %}
-        {% set rl = race.bets[0].bet_label if race.bets else '見送り' %}
-        {% if rl == 'プチュン' %}{% set vlbl.top = 'プチュン' %}
-        {% elif rl == '黒船熱' and vlbl.top != 'プチュン' %}{% set vlbl.top = '黒船熱' %}{% endif %}
+    <div class="vjl-grid">
+      {% for venue in venue_list %}
+        {% set vlbl = namespace(top='見送り') %}
+        {% for race in venue.races %}
+          {% set rl = race.bets[0].bet_label if race.bets else '見送り' %}
+          {% if rl == 'プチュン' %}{% set vlbl.top = 'プチュン' %}
+          {% elif rl == '黒船熱' and vlbl.top != 'プチュン' %}{% set vlbl.top = '黒船熱' %}{% endif %}
+        {% endfor %}
+        <span class="vjl-tag vjl-{{ 'puchun' if vlbl.top == 'プチュン' else ('kokusen' if vlbl.top == '黒船熱' else 'skip') }}"
+              onclick="scrollToVenue('{{ venue.venue_name }}')">{{ venue.venue_name }}</span>
       {% endfor %}
-      <span class="vjl-tag vjl-{{ 'puchun' if vlbl.top == 'プチュン' else ('kokusen' if vlbl.top == '黒船熱' else 'skip') }}"
-            onclick="scrollToVenue('{{ venue.venue_name }}')">{{ venue.venue_name }}</span>
-    {% endfor %}
+    </div>
   </div>
   {% endif %}
 </div>
