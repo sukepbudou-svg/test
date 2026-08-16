@@ -97,19 +97,20 @@ nav a.active{
 }
 .date-label{color:var(--white);font-size:13px;letter-spacing:1px}
 
-/* ══════════════ LOG AREA (log + today counts) ══════════════ */
+/* ══════════════ LOG AREA (counts left + log right) ══════════════ */
 .log-area{
-  display:grid;
-  grid-template-columns:1fr auto;
-  gap:12px;
+  display:flex;
+  flex-direction:row;
+  gap:16px;
   padding:8px 24px 4px;
   align-items:start;
+  flex-wrap:wrap;
 }
-@media(max-width:600px){.log-area{grid-template-columns:1fr;}}
 
 /* ══════════════ ACTIVITY LOG ══════════════ */
 .activity-log{
   display:flex;flex-direction:column;gap:4px;
+  width:fit-content;
 }
 .act-row{
   display:flex;align-items:center;gap:10px;
@@ -459,7 +460,6 @@ footer{
 {% endfor %}
 
 <div class="log-area">
-  <div class="activity-log" id="activity-log"></div>
   <div class="today-counts">
     <div class="tc-row">
       <span class="tc-label lbl-puchun">プチュン</span>
@@ -474,6 +474,7 @@ footer{
       <span class="tc-num lbl-skip">{{ ns.skip }}</span>
     </div>
   </div>
+  <div class="activity-log" id="activity-log"></div>
 </div>
 
 {% if venue_list %}
