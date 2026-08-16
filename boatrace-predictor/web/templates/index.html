@@ -122,7 +122,8 @@ nav a.active{
 }
 .act-row.act-new{border-left-color:var(--cyan);}
 .act-time{color:#445;min-width:42px;}
-.act-venue{color:var(--white);font-weight:700;min-width:52px;}
+.act-venue{color:var(--white);font-weight:700;min-width:52px;cursor:pointer;}
+.act-venue:hover{color:var(--blue);text-decoration:underline;text-underline-offset:3px;}
 .act-race{color:#8090b0;min-width:24px;}
 .act-pt{
   padding:1px 6px;border-radius:3px;
@@ -149,6 +150,15 @@ nav a.active{
 }
 .act-row.confirmed.act-new .act-check{animation:none;}
 @keyframes actSlideIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
+@keyframes raceHighlight{
+  0%  {box-shadow:0 0 0 0 rgba(79,143,255,0), inset 0 0 0 rgba(79,143,255,0);}
+  25% {box-shadow:0 0 0 3px rgba(79,143,255,0.7), inset 0 0 20px rgba(79,143,255,0.12);}
+  100%{box-shadow:0 0 0 0 rgba(79,143,255,0), inset 0 0 0 rgba(79,143,255,0);}
+}
+.race-highlight{
+  border-radius:6px;
+  animation:raceHighlight 1.6s ease forwards;
+}
 @keyframes checkPulse{0%,100%{box-shadow:0 0 6px rgba(0,212,255,0.5);}50%{box-shadow:0 0 12px rgba(0,212,255,0.9);}}
 
 /* ══════════════ TODAY COUNTS ══════════════ */
@@ -497,7 +507,7 @@ footer{
         {% set lbl = "見送り" %}{% set pt_cls = "pt-skip" %}{% set c_cls = "combo-skip" %}{% set rank_cls = "rank-skip" %}
       {% endif %}
 
-    <div class="race-mini {{ rank_cls }}">
+    <div class="race-mini {{ rank_cls }}" id="race-{{ venue.venue_name }}-{{ race.race_no }}">
       <div class="race-mini-head">
         <span class="race-no">{{ race.race_no }}R</span>
         {% if race.race_time %}
@@ -591,13 +601,23 @@ footer{
       const doneCls = isDone ? ' confirmed' : '';
       return `<div class="act-row${newCls}${doneCls}" data-key="${key}">
         <span class="act-time">${t}</span>
-        <span class="act-venue">${r.venue_name}</span>
+        <span class="act-venue" onclick="scrollToRace('${r.venue_name}',${r.race_no})">${r.venue_name}</span>
         <span class="act-race">${r.race_no}R</span>
         <span class="act-pt ${lc}">PT${r.arare_score} ${r.bet_label}</span>
         <span class="act-check" onclick="toggleConfirm('${key}',this)">${isDone?'✓':''}</span>
       </div>`;
     }).join('');
   }
+
+  window.scrollToRace = function(venue, raceNo){
+    const el = document.getElementById('race-' + venue + '-' + raceNo);
+    if(!el) return;
+    el.scrollIntoView({behavior:'smooth', block:'center'});
+    el.classList.remove('race-highlight');
+    void el.offsetWidth; // reflow to restart animation
+    el.classList.add('race-highlight');
+    setTimeout(()=>el.classList.remove('race-highlight'), 1700);
+  };
 
   window.toggleConfirm = function(key, el){
     const arr = getConfirmed();
