@@ -1123,6 +1123,10 @@ def get_recommendations(
                 s += min(1.0, (g - 1) / 3.0) * 0.20
                 # まくり実績 (10%)
                 s += min(1.0, _get_aggression(bn) / 2.0) * 0.10
+                # 外枠ペナルティ: 6号艇は特別な根拠がない限り選ばれにくくする
+                # (よほどST・ETが突出していれば上回れる程度の減点)
+                _outer_penalty = {4: 0.05, 5: 0.10, 6: 0.18}
+                s -= _outer_penalty.get(bn, 0.0)
                 return s
 
             hero = max(outer_h, key=_hero_score)
