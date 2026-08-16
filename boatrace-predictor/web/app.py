@@ -3,8 +3,10 @@ PERRY AI - Flask Webアプリ
 localhost:5001 でブラウザから予想を確認・集計を閲覧する
 """
 
+import json
+import time
 from datetime import datetime
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, Response, stream_with_context
 from web.database import (
     get_today_predictions, get_pt_stats, get_label_stats,
     get_daily_summary, get_consecutive_misses, init_db, update_result,
@@ -90,6 +92,24 @@ def create_app():
     def api_recent_activity():
         date = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
         return jsonify(get_recent_activity(date))
+
+    @app.route("/api/activity_stream")
+    def api_activity_stream():
+        date = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
+        def generate():
+            last_ts = None
+            while True:
+                rows = get_recent_activity(date)
+                new_ts = rows[0]["created_at"] if rows else None
+                if new_ts != last_ts:
+                    last_ts = new_ts
+                    yield f"data: {json.dumps(rows, ensure_ascii=False)}\n\n"
+                time.sleep(3)
+        return Response(
+            stream_with_context(generate()),
+            mimetype="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @app.route("/api/venue_detail/<venue_name>")
     def api_venue_detail(venue_name):

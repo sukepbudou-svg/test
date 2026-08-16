@@ -122,7 +122,25 @@ nav a.active{
 .act-pt.lbl-puchun{background:rgba(217,50,50,0.2);color:#ff6b6b;}
 .act-pt.lbl-kokusen{background:rgba(217,124,40,0.2);color:#ffaa55;}
 .act-pt.lbl-skip{background:rgba(80,90,120,0.2);color:#667;}
+.act-check{
+  margin-left:auto;width:20px;height:20px;border-radius:50%;
+  border:1.5px solid rgba(255,255,255,0.2);
+  cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  font-size:11px;transition:all .2s;color:transparent;
+}
+.act-check:hover{border-color:var(--cyan);}
+.act-row.confirmed{opacity:0.38;}
+.act-row.confirmed .act-check{
+  background:#00cc88;border-color:#00cc88;color:#fff;
+}
+.act-row.act-new .act-check{
+  border-color:var(--cyan);
+  box-shadow:0 0 6px rgba(0,212,255,0.5);
+  animation:checkPulse 1.5s ease-in-out infinite;
+}
+.act-row.confirmed.act-new .act-check{animation:none;}
 @keyframes actSlideIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
+@keyframes checkPulse{0%,100%{box-shadow:0 0 6px rgba(0,212,255,0.5);}50%{box-shadow:0 0 12px rgba(0,212,255,0.9);}}
 
 /* ══════════════ VENUE COLUMNS CONTAINER ══════════════ */
 .venues-wrap{
@@ -485,6 +503,17 @@ footer{
 <script>
 (function(){
   const DATE_PARAM = new URLSearchParams(location.search).get('date') || '';
+  const TODAY = DATE_PARAM || new Date().toISOString().slice(0,10);
+  const STORE_KEY = 'perry_confirmed_' + TODAY;
+
+  function getConfirmed(){
+    try{ return JSON.parse(localStorage.getItem(STORE_KEY) || '[]'); }
+    catch(e){ return []; }
+  }
+  function setConfirmed(arr){
+    localStorage.setItem(STORE_KEY, JSON.stringify(arr));
+  }
+  function rowKey(r){ return r.venue_name + '_' + r.race_no; }
 
   function labelClass(lbl){
     if(lbl==='プチュン') return 'lbl-puchun';
@@ -492,26 +521,59 @@ footer{
     return 'lbl-skip';
   }
 
-  function fetchActivity(){
-    const url = '/api/recent_activity' + (DATE_PARAM ? '?date='+encodeURIComponent(DATE_PARAM) : '');
-    fetch(url).then(r=>r.json()).then(rows=>{
-      const log = document.getElementById('activity-log');
-      if(!log || !rows.length) return;
-      log.innerHTML = rows.map((r, i)=>{
-        const t = r.created_at ? r.created_at.slice(11,16) : '';
-        const lc = labelClass(r.bet_label);
-        return `<div class="act-row${i===0?' act-new':''}">
-          <span class="act-time">${t}</span>
-          <span class="act-venue">${r.venue_name}</span>
-          <span class="act-race">${r.race_no}R</span>
-          <span class="act-pt ${lc}">PT${r.arare_score} ${r.bet_label}</span>
-        </div>`;
-      }).join('');
-    }).catch(()=>{});
+  function renderLog(rows){
+    const log = document.getElementById('activity-log');
+    if(!log) return;
+    const confirmed = getConfirmed();
+    log.innerHTML = rows.map((r, i)=>{
+      const key = rowKey(r);
+      const isDone = confirmed.includes(key);
+      const t = r.created_at ? r.created_at.slice(11,16) : '';
+      const lc = labelClass(r.bet_label);
+      const newCls = i===0 ? ' act-new' : '';
+      const doneCls = isDone ? ' confirmed' : '';
+      return `<div class="act-row${newCls}${doneCls}" data-key="${key}">
+        <span class="act-time">${t}</span>
+        <span class="act-venue">${r.venue_name}</span>
+        <span class="act-race">${r.race_no}R</span>
+        <span class="act-pt ${lc}">PT${r.arare_score} ${r.bet_label}</span>
+        <span class="act-check" onclick="toggleConfirm('${key}',this)">${isDone?'✓':''}</span>
+      </div>`;
+    }).join('');
   }
 
-  fetchActivity();
-  setInterval(fetchActivity, 30000);
+  window.toggleConfirm = function(key, el){
+    const arr = getConfirmed();
+    const row = el.closest('.act-row');
+    if(arr.includes(key)){
+      const next = arr.filter(k=>k!==key);
+      setConfirmed(next);
+      row.classList.remove('confirmed');
+      el.textContent = '';
+    } else {
+      arr.push(key);
+      setConfirmed(arr);
+      row.classList.add('confirmed');
+      el.textContent = '✓';
+    }
+  };
+
+  // SSEで予想追加を即座に受信
+  const streamUrl = '/api/activity_stream' + (DATE_PARAM ? '?date='+encodeURIComponent(DATE_PARAM) : '');
+  const es = new EventSource(streamUrl);
+  es.onmessage = function(e){
+    try{ renderLog(JSON.parse(e.data)); }catch(_){}
+  };
+  es.onerror = function(){
+    // SSE切断時は30秒ポーリングにフォールバック
+    es.close();
+    function fallback(){
+      const url = '/api/recent_activity' + (DATE_PARAM ? '?date='+encodeURIComponent(DATE_PARAM) : '');
+      fetch(url).then(r=>r.json()).then(renderLog).catch(()=>{});
+    }
+    fallback();
+    setInterval(fallback, 30000);
+  };
 })();
 
 (function(){
