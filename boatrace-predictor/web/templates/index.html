@@ -110,7 +110,7 @@ nav a.active{
 /* ══════════════ ACTIVITY LOG ══════════════ */
 .activity-log{
   display:flex;flex-direction:column;gap:4px;
-  width:fit-content;
+  width:300px;flex-shrink:0;
 }
 .act-row{
   display:flex;align-items:center;gap:10px;
@@ -460,6 +460,7 @@ footer{
 {% endfor %}
 
 <div class="log-area">
+  <div class="activity-log" id="activity-log"></div>
   <div class="today-counts">
     <div class="tc-row">
       <span class="tc-label lbl-puchun">プチュン</span>
@@ -474,7 +475,6 @@ footer{
       <span class="tc-num lbl-skip">{{ ns.skip }}</span>
     </div>
   </div>
-  <div class="activity-log" id="activity-log"></div>
 </div>
 
 {% if venue_list %}
