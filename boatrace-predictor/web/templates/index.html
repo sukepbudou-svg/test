@@ -86,6 +86,22 @@ nav a.active{
   color:var(--white);border-color:rgba(255,26,60,0.4);
   background:rgba(255,26,60,0.08);text-shadow:0 0 8px var(--rg);
 }
+.top-btn{
+  font-family:var(--font-mono);
+  font-size:11px;letter-spacing:2px;
+  color:var(--dim2);
+  background:transparent;
+  border:1px solid rgba(255,255,255,0.12);
+  border-radius:4px;
+  padding:5px 14px;
+  cursor:pointer;
+  transition:all .2s;
+}
+.top-btn:hover{
+  color:var(--white);
+  border-color:rgba(255,255,255,0.35);
+  background:rgba(255,255,255,0.06);
+}
 
 /* ══════════════ META BAR ══════════════ */
 .meta{
@@ -205,9 +221,11 @@ nav a.active{
   font-family:var(--font-mono);
 }
 .vjl-title{
-  font-size:9px;color:var(--dim);letter-spacing:2px;
+  font-size:9px;letter-spacing:2px;
+  color:#ff80c0;
+  text-shadow:0 0 8px rgba(255,80,160,0.5);
   padding:0 4px 4px;
-  border-bottom:1px solid rgba(255,255,255,0.06);
+  border-bottom:1px solid rgba(255,80,160,0.2);
   margin-bottom:5px;
 }
 .vjl-grid{
@@ -511,6 +529,7 @@ footer{
   <nav>
     <a href="/" class="active">TODAY</a>
     <a href="/stats">STATS</a>
+    <button class="top-btn" onclick="window.scrollTo({top:0,behavior:'smooth'})">▲ TOP</button>
   </nav>
 </header>
 
