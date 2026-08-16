@@ -152,14 +152,14 @@ nav a.active{
 @keyframes actSlideIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
 @keyframes raceHighlight{
   0%   {box-shadow:none; background-color:transparent; outline:2px solid transparent;}
-  10%  {box-shadow:0 0 0 3px rgba(100,180,255,1), 0 0 40px 12px rgba(79,143,255,0.7);
-        background-color:rgba(79,143,255,0.28); outline:2px solid rgba(100,180,255,0.95);}
+  10%  {box-shadow:0 0 0 3px rgba(255,210,0,1), 0 0 40px 14px rgba(255,180,0,0.75);
+        background-color:rgba(255,200,0,0.22); outline:2px solid rgba(255,210,0,1);}
   25%  {box-shadow:none; background-color:transparent; outline:2px solid transparent;}
-  40%  {box-shadow:0 0 0 3px rgba(100,180,255,1), 0 0 40px 12px rgba(79,143,255,0.7);
-        background-color:rgba(79,143,255,0.28); outline:2px solid rgba(100,180,255,0.95);}
+  40%  {box-shadow:0 0 0 3px rgba(255,210,0,1), 0 0 40px 14px rgba(255,180,0,0.75);
+        background-color:rgba(255,200,0,0.22); outline:2px solid rgba(255,210,0,1);}
   55%  {box-shadow:none; background-color:transparent; outline:2px solid transparent;}
-  70%  {box-shadow:0 0 0 3px rgba(100,180,255,1), 0 0 40px 12px rgba(79,143,255,0.7);
-        background-color:rgba(79,143,255,0.28); outline:2px solid rgba(100,180,255,0.95);}
+  70%  {box-shadow:0 0 0 3px rgba(255,210,0,1), 0 0 40px 14px rgba(255,180,0,0.75);
+        background-color:rgba(255,200,0,0.22); outline:2px solid rgba(255,210,0,1);}
   100% {box-shadow:none; background-color:transparent; outline:2px solid transparent;}
 }
 .race-highlight{
@@ -619,11 +619,22 @@ footer{
   window.scrollToRace = function(venue, raceNo){
     const el = document.getElementById('race-' + venue + '-' + raceNo);
     if(!el) return;
-    el.scrollIntoView({behavior:'smooth', block:'center'});
     el.classList.remove('race-highlight');
-    void el.offsetWidth; // reflow to restart animation
-    el.classList.add('race-highlight');
-    setTimeout(()=>el.classList.remove('race-highlight'), 2700);
+
+    // カードが画面内に入ったのを検知してから点滅開始
+    const observer = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if(entry.isIntersecting){
+          observer.disconnect();
+          void el.offsetWidth; // reflow
+          el.classList.add('race-highlight');
+          setTimeout(()=>el.classList.remove('race-highlight'), 2800);
+        }
+      });
+    }, {threshold: 0.6});
+
+    observer.observe(el);
+    el.scrollIntoView({behavior:'smooth', block:'center'});
   };
 
   window.toggleConfirm = function(key, el){
