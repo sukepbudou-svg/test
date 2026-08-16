@@ -383,6 +383,33 @@ def get_hero_stats():
     return [dict(r) for r in rows]
 
 
+def get_pt_payout_stats():
+    """荒れPT帯別の実際の配当分布（荒れPTの有効性検証用）"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT
+                arare_score,
+                COUNT(*) as race_count,
+                SUM(has_result) as result_count,
+                ROUND(AVG(CASE WHEN has_result = 1 THEN actual_payout END)) as avg_payout,
+                MAX(actual_payout) as max_payout,
+                SUM(CASE WHEN has_result = 1 AND actual_payout >= 10000 THEN 1 ELSE 0 END) as over_10k,
+                SUM(CASE WHEN has_result = 1 AND actual_payout >= 30000 THEN 1 ELSE 0 END) as over_30k,
+                SUM(CASE WHEN has_result = 1 AND actual_payout >= 100000 THEN 1 ELSE 0 END) as over_100k
+            FROM (
+                SELECT date, venue_name, race_no, arare_score,
+                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
+                    MAX(actual_payout) as actual_payout
+                FROM predictions
+                GROUP BY date, venue_name, race_no
+            )
+            GROUP BY arare_score
+            ORDER BY arare_score
+        """).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_consecutive_misses():
     """ラベル別の直近連続外れ数（後方互換）"""
     return get_all_streaks()["label"]

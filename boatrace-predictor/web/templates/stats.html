@@ -395,6 +395,66 @@ footer{
   </div>
 </div>
 
+<!-- ── 荒れPT有効性検証 ── -->
+<div class="section">
+  <h2>荒れPT有効性検証（PTが高いほど配当は高いか）</h2>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>荒れPT</th>
+        <th>予想数</th>
+        <th>結果済</th>
+        <th>平均配当</th>
+        <th>最高配当</th>
+        <th>1万円超</th>
+        <th>3万円超</th>
+        <th>10万円超</th>
+        <th>傾向</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for s in pt_payout_stats %}
+      {% set rc = s.result_count or 0 %}
+      {% set avg = s.avg_payout or 0 %}
+      {% set over10k_rate = (s.over_10k / rc * 100) if rc > 0 else 0 %}
+      <tr>
+        <td>
+          PT{{ s.arare_score }}
+          {% if s.arare_score >= 8 %}<span class="label-puchun" style="font-size:10px;margin-left:4px;">プチュン</span>
+          {% elif s.arare_score >= 7 %}<span class="label-kokusen" style="font-size:10px;margin-left:4px;">黒船熱</span>
+          {% endif %}
+        </td>
+        <td>{{ s.race_count }}</td>
+        <td>{{ rc }}</td>
+        <td class="{% if avg >= 30000 %}roi-good{% elif avg >= 10000 %}roi-neutral{% elif avg > 0 %}roi-bad{% endif %}">
+          {% if avg > 0 %}¥{{ "{:,}".format(avg|int) }}{% else %}—{% endif %}
+        </td>
+        <td class="{% if s.max_payout >= 100000 %}roi-good{% elif s.max_payout >= 30000 %}roi-neutral{% endif %}">
+          {% if s.max_payout %}¥{{ "{:,}".format(s.max_payout) }}{% else %}—{% endif %}
+        </td>
+        <td>{% if rc > 0 %}{{ s.over_10k }}回 ({{ "%.0f" % over10k_rate }}%){% else %}—{% endif %}</td>
+        <td>{% if rc > 0 %}{{ s.over_30k }}回{% else %}—{% endif %}</td>
+        <td>{% if rc > 0 %}{{ s.over_100k }}回{% else %}—{% endif %}</td>
+        <td style="font-size:11px;color:var(--dim2);">
+          {% if rc == 0 %}データ待ち
+          {% elif avg >= 30000 %}高配当帯
+          {% elif avg >= 10000 %}中配当帯
+          {% else %}低配当帯
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="9" style="text-align:center;color:var(--dim);padding:20px;">データなし</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div style="font-size:11px;color:var(--dim2);margin-top:10px;padding:0 4px;">
+    ※ 平均配当はそのPT帯の全結果済みレースの実際の3連単配当の平均値。PTが高いほど数値が上がっていれば荒れPTは有効。
+  </div>
+</div>
+
 <!-- ── PT帯別集計 ── -->
 <div class="section">
   <h2>荒れPT帯別集計</h2>
