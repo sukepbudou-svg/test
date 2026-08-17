@@ -612,7 +612,7 @@ footer{
       {% set pt = race.arare_score %}
       {% if pt >= 8 %}
         {% set lbl = "プチュン" %}{% set pt_cls = "pt-puchun" %}{% set c_cls = "combo-puchun" %}{% set rank_cls = "rank-puchun" %}
-      {% elif pt >= 6 %}
+      {% elif pt >= 7 %}
         {% set lbl = "黒船熱" %}{% set pt_cls = "pt-kokusen" %}{% set c_cls = "combo-kokusen" %}{% set rank_cls = "rank-kokusen" %}
       {% else %}
         {% set lbl = "見送り" %}{% set pt_cls = "pt-skip" %}{% set c_cls = "combo-skip" %}{% set rank_cls = "rank-skip" %}
@@ -627,7 +627,7 @@ footer{
         <span class="pt-badge {{ pt_cls }}">PT{{ pt }} {{ lbl }}</span>
       </div>
 
-      {% if race.arare_reasons and pt >= 6 %}
+      {% if race.arare_reasons and pt >= 7 %}
       <div class="arare-info"><b>荒れ:</b> {{ race.arare_reasons }}</div>
       {% endif %}
 
