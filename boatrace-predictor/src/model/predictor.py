@@ -1180,7 +1180,9 @@ def get_recommendations(
             if min_odds > 0:
                 hero_first = hero_first[hero_first["odds_value"] >= min_odds]
             if max_odds < 9999.0:
-                hero_first = hero_first[hero_first["odds_value"] <= max_odds]
+                # 上限はライブオッズ確定分のみ適用（履歴推定値は実際より低い傾向があるため除外しない）
+                live_mask = hero_first["odds_source"] == "live"
+                hero_first = hero_first[~live_mask | (hero_first["odds_value"] <= max_odds)]
 
             if hero_first.empty:
                 print(f"  [スキップ] {hero}号艇1着で{min_odds:.0f}〜{max_odds:.0f}倍の組み合わせなし")
