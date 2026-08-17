@@ -430,6 +430,7 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.Da
     ①' 2号艇の弱さ（最大4点）: ST遅(≥0.17)+2 / モーター低(<0.35)+2
     ② 外艇の脅威（最大10点）: 前付け+3 / 外A1+2 / 外ST速+2 / 外タイム最速+1 / 複数外艇ST速(2艇以上)+2
     ③ 環境・条件（最大4点）: 強風+1 / 波高+1 / 荒れ会場+1〜2 / 一般戦+1
+    ④ 市場集中度（最大3点・ライブオッズ時のみ）: 1号艇1着最安≤4倍+3 / ≤7倍+2 / ≤12倍+1
     """
     score = 0
     reasons = []
@@ -543,6 +544,22 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.Da
     if mg is not None and mg <= 1:
         score += 1
         reasons.append("一般戦")
+
+    # ── ④ 市場集中度（ライブオッズがある場合のみ・最大3点） ──
+    # 1号艇が1着の3連単オッズが低い = 公衆が1号艇に集中 = 他の組み合わせが膨らむ
+    if by_prob is not None and not by_prob.empty and "odds_source" in by_prob.columns:
+        b1_live = by_prob[(by_prob["odds_source"] == "live") & (by_prob["boat1"] == 1)]
+        if not b1_live.empty:
+            min_b1_odds = float(b1_live["odds_value"].min())
+            if min_b1_odds <= 4.0:
+                score += 3
+                reasons.append(f"超人気集中(1号最安{min_b1_odds:.1f}倍)")
+            elif min_b1_odds <= 7.0:
+                score += 2
+                reasons.append(f"人気集中(1号最安{min_b1_odds:.1f}倍)")
+            elif min_b1_odds <= 12.0:
+                score += 1
+                reasons.append(f"1号人気(1号最安{min_b1_odds:.1f}倍)")
 
     return score, reasons
 
