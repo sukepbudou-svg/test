@@ -198,8 +198,9 @@ def get_label_stats():
                 CASE bet_label
                     WHEN 'プチュン' THEN 1
                     WHEN '黒船熱' THEN 2
-                    WHEN '見送り' THEN 3
-                    ELSE 4
+                    WHEN '中穴' THEN 3
+                    WHEN '見送り' THEN 4
+                    ELSE 5
                 END
         """).fetchall()
     return [dict(r) for r in rows]
@@ -376,8 +377,9 @@ def get_hero_stats():
                 CASE bet_label
                     WHEN 'プチュン' THEN 1
                     WHEN '黒船熱' THEN 2
-                    WHEN '見送り' THEN 3
-                    ELSE 4
+                    WHEN '中穴' THEN 3
+                    WHEN '見送り' THEN 4
+                    ELSE 5
                 END
         """).fetchall()
     return [dict(r) for r in rows]

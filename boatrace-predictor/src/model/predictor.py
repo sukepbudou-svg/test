@@ -25,8 +25,8 @@ WEIGHT_MOTOR  = 0.15  # モーター状態エージェント
 MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
 PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
 
-# 荒れ条件: 対象レースとして選出するための最低スコア
-ARARE_MIN_SCORE = 7
+# 荒れ条件: 参戦ベースラインスコア（PT5〜9 AND 1号艇ライブ5〜9倍で参戦）
+ARARE_MIN_SCORE = 5
 
 # 荒れやすい会場の加点（江戸川のみ2点、他は1点）
 ARARE_VENUES = {
@@ -47,6 +47,14 @@ def _safe_float(v) -> float | None:
         return None if f != f else f  # NaN → None
     except (TypeError, ValueError):
         return None
+
+
+# ANSI カラーコード（コンソール出力用）
+_C_RED    = "\033[1;31m"   # プチュン
+_C_YELLOW = "\033[1;33m"   # 黒船熱
+_C_CYAN   = "\033[1;36m"   # 中穴
+_C_GREEN  = "\033[1;32m"   # 参戦確定
+_C_RESET  = "\033[0m"
 
 
 def _pick_condition_based_ana(
@@ -940,19 +948,11 @@ def get_recommendations(
         predictions = predict_race(model, race_row, payout_lookup, live_odds, weather, absent_boats)
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
 
-        # 荒れ条件チェック: スコア不足でも予想は生成するが見送りになる
+        # 荒れ条件スコアリング
         arare_score, arare_reasons = _calc_arare_score(race_row, weather, by_prob)
-        # 神熱条件: 荒れPT7以上 かつ 追い風5m以上
-        _wind_spd = _safe_float((weather or {}).get("wind_speed"))
-        _wind_dir = (weather or {}).get("wind_direction", "")
-        _tail_ok  = (_wind_spd is not None and _wind_spd >= 5 and _wind_dir == "tail")
-        arare_ok  = arare_score >= ARARE_MIN_SCORE and _tail_ok
         venue_name_log = race_row.get("venue_name", "")
-        if arare_ok:
-            print(f"  [荒れ対象] {venue_name_log} {race_no}R スコア{arare_score} 条件:[{', '.join(arare_reasons)}]")
-        else:
-            print(f"  [荒れ対象外] {venue_name_log} {race_no}R スコア{arare_score}/{ARARE_MIN_SCORE}"
-                  + (f" 条件:[{', '.join(arare_reasons)}]" if arare_reasons else ""))
+        print(f"  [スコア] {venue_name_log} {race_no}R PT={arare_score}"
+              + (f" [{', '.join(arare_reasons)}]" if arare_reasons else ""))
 
         # 1号艇弱体チェック（荒れPTと独立した弱イン判定）
         boat1_weak_count, boat1_weak_flags = _calc_boat1_weakness(race_row, weather)
@@ -1099,14 +1099,20 @@ def get_recommendations(
             (by_prob["prob"] > 0)
         ].copy()
 
-        # 大熊ラベル（荒れPTのみで判定）
+        # ラベル判定（荒れPT基準）
         if arare_score >= 8:
             _okuma_label = "プチュン"
+            _label_color = _C_RED
         elif arare_score >= 7:
             _okuma_label = "黒船熱"
+            _label_color = _C_YELLOW
+        elif arare_score >= 5:
+            _okuma_label = "中穴"
+            _label_color = _C_CYAN
         else:
             _okuma_label = "見送り"
-        print(f"  [大熊ラベル] 荒れPT={arare_score} → {_okuma_label}")
+            _label_color = ""
+        print(f"  {_label_color}[{_okuma_label}]{_C_RESET} 荒れPT={arare_score}")
 
         def _add_rec(row, tier, label_override=None):
             f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
@@ -1116,7 +1122,8 @@ def get_recommendations(
             src      = str(row.get("odds_source", ""))
             odds_str = f"{odds_val:.0f}倍" if src == "live" else f"{odds_val:.0f}倍(履歴)"
             bl       = label_override if label_override is not None else _okuma_label
-            print(f"  [{tier}] {venue_name_log} {race_no}R {combo} {odds_str} PT:{arare_score}")
+            _clr = _label_color if bl != "見送り" else ""
+            print(f"  [{tier}] {venue_name_log} {race_no}R {combo} {odds_str} {_clr}PT:{arare_score}={bl}{_C_RESET}")
             all_recommendations.append({
                 "date":          race_row.get("date", ""),
                 "venue_name":    race_row.get("venue_name", ""),
@@ -1169,75 +1176,134 @@ def get_recommendations(
             hero = max(outer_h, key=_hero_score)
             print(f"  [hero] {hero}号艇 (score={_hero_score(hero):.3f})")
 
-            # ラベル別倍率フィルター（中穴帯狙い: 25〜80倍）
-            _min_odds = {"プチュン": 25.0, "黒船熱": 25.0, "見送り": 0.0}
-            _max_odds = {"プチュン": 80.0, "黒船熱": 80.0, "見送り": 80.0}
-            min_odds = _min_odds.get(_okuma_label, 0.0)
-            max_odds = _max_odds.get(_okuma_label, 9999.0)
-
-            # hero が1着の組み合わせを抽出・倍率フィルター
+            # hero が1着の全組み合わせ（倍率フィルターなし）
             hero_first = _valid[_valid["boat1"] == hero].copy()
-            if min_odds > 0:
-                hero_first = hero_first[hero_first["odds_value"] >= min_odds]
-            if max_odds < 9999.0:
-                # 上限はライブオッズ確定分のみ適用（履歴推定値は実際より低い傾向があるため除外しない）
-                live_mask = hero_first["odds_source"] == "live"
-                hero_first = hero_first[~live_mask | (hero_first["odds_value"] <= max_odds)]
 
-            if hero_first.empty:
-                print(f"  [スキップ] {hero}号艇1着で{min_odds:.0f}〜{max_odds:.0f}倍の組み合わせなし")
+            # 動態スコア・波乱スコア用データ準備
+            _hero_st = _safe_float(race_row.get(f"boat{hero}_exhibition_st"))
+            _non_hero_et = {b: v for b, v in et_vals_k.items() if b != hero}
+            _et_ranked = sorted(_non_hero_et.keys(), key=lambda b: _non_hero_et[b]) \
+                         if _non_hero_et else []
+            _n_et = len(_et_ranked)
+
+            def _dynamics_score(b2, b3):
+                """中穴選出: STタイミング近さ(40%) + ET順位(35%) + コース位置ロジック(25%)"""
+                sc = 0.0
+                for wt, bn in [(0.28, b2), (0.12, b3)]:
+                    bn_st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                    if _hero_st and _hero_st > 0 and bn_st and bn_st > 0:
+                        diff = abs(bn_st - _hero_st)
+                        prox = (1.0 if diff <= 0.02 else
+                                0.6 if diff <= 0.05 else
+                                0.3 if diff <= 0.09 else 0.0)
+                        sc += prox * wt
+                for wt, bn in [(0.23, b2), (0.12, b3)]:
+                    if bn in _et_ranked and _n_et > 1:
+                        rank = _et_ranked.index(bn)
+                        sc += (1.0 - rank / (_n_et - 1)) * wt
+                for wt, bn in [(0.17, b2), (0.08, b3)]:
+                    if hero >= 4:
+                        if bn <= 3:
+                            sc += wt
+                        elif bn == hero - 1:
+                            sc += wt * 0.4
+                    elif hero in [2, 3]:
+                        dist = abs(bn - hero)
+                        sc += (wt if dist == 1 else
+                               wt * 0.5 if dist == 2 else 0.0)
+                return sc
+
+            def _hairan_score(b2, b3):
+                """大穴選出: 攻撃性(2着55%/3着25%) + ST奇襲力(30%/15%) + ET速さ(15%/10%)"""
+                sc = 0.0
+                for wt, bn in [(0.55, b2), (0.25, b3)]:
+                    sc += min(1.0, _get_aggression(bn) / 2.0) * wt
+                for wt, bn in [(0.30, b2), (0.15, b3)]:
+                    bn_st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                    if bn_st and bn_st > 0:
+                        sc += min(1.0, max(0.0, (0.20 - bn_st) / 0.10)) * wt
+                for wt, bn in [(0.15, b2), (0.10, b3)]:
+                    if bn in _et_ranked and _n_et > 1:
+                        rank = _et_ranked.index(bn)
+                        sc += (1.0 - rank / (_n_et - 1)) * wt
+                return sc
+
+            # ── 参戦条件チェック: ① PT5〜9  ② 1号艇ライブオッズ最安 5〜9倍 ──
+            _pt_ok = 5 <= arare_score <= 9
+            _b1_live_cand = by_prob[
+                (by_prob["odds_source"] == "live") & (by_prob["boat1"] == 1)
+            ] if "odds_source" in by_prob.columns else pd.DataFrame()
+            _b1_min_live = float(_b1_live_cand["odds_value"].min()) if not _b1_live_cand.empty else None
+            _b1_odds_ok = _b1_min_live is not None and 5.0 <= _b1_min_live <= 9.0
+
+            if not _pt_ok or not _b1_odds_ok:
+                _skip_rsn = (f"PT={arare_score}（5〜9外）" if not _pt_ok
+                             else f"1号艇live={_b1_min_live:.1f}倍（5〜9倍外）" if _b1_min_live is not None
+                             else "1号艇ライブ未取得")
+                print(f"  [見送り] {venue_name_log} {race_no}R {_skip_rsn}")
+                if not hero_first.empty:
+                    _hf_dc = hero_first.copy()
+                    _hf_dc["dynamics"] = _hf_dc.apply(
+                        lambda row: _dynamics_score(int(row["boat2"]), int(row["boat3"])), axis=1
+                    )
+                    _hf_dc = _hf_dc.sort_values("dynamics", ascending=False).reset_index(drop=True)
+                    for _, row in _hf_dc.head(3).iterrows():
+                        r = row.copy()
+                        r["ev"] = float(r["prob"]) * float(r["odds_value"])
+                        _add_rec(r, "大熊", label_override="見送り")
             else:
-                # ── 動態スコアリング：2着・3着をレース動態ロジックで選出 ──
-                # ① STタイミングの近さ（40%）: 第1ターンで競り合う艇を重視
-                # ② ET順位（35%）: ヒーロー除く艇の中で純粋に速い艇
-                # ③ コース位置ロジック（25%）: まくり型/差し型で生き残る艇
-                _hero_st = _safe_float(race_row.get(f"boat{hero}_exhibition_st"))
-                _non_hero_et = {b: v for b, v in et_vals_k.items() if b != hero}
-                _et_ranked = sorted(_non_hero_et.keys(), key=lambda b: _non_hero_et[b]) \
-                             if _non_hero_et else []
-                _n_et = len(_et_ranked)
+                _b1_str = f"{_b1_min_live:.1f}倍"
+                print(f"  {_C_GREEN}[参戦確定]{_C_RESET} {_label_color}{_okuma_label}{_C_RESET} "
+                      f"PT={arare_score} 1号艇live={_b1_str}")
+                _total_bets = 0
 
-                def _dynamics_score(b2, b3):
-                    sc = 0.0
-                    # ① STタイミングの近さ（2着28% / 3着12%）
-                    for wt, bn in [(0.28, b2), (0.12, b3)]:
-                        bn_st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-                        if _hero_st and _hero_st > 0 and bn_st and bn_st > 0:
-                            diff = abs(bn_st - _hero_st)
-                            prox = (1.0 if diff <= 0.02 else
-                                    0.6 if diff <= 0.05 else
-                                    0.3 if diff <= 0.09 else 0.0)
-                            sc += prox * wt
-                    # ② ET順位（2着23% / 3着12%）
-                    for wt, bn in [(0.23, b2), (0.12, b3)]:
-                        if bn in _et_ranked and _n_et > 1:
-                            rank = _et_ranked.index(bn)
-                            sc += (1.0 - rank / (_n_et - 1)) * wt
-                    # ③ コース位置ロジック（2着17% / 3着8%）
-                    for wt, bn in [(0.17, b2), (0.08, b3)]:
-                        if hero >= 4:
-                            # まくり型: 内艇（1〜3号）が進路確保しやすい
-                            if bn <= 3:
-                                sc += wt
-                            elif bn == hero - 1:
-                                sc += wt * 0.4
-                        elif hero in [2, 3]:
-                            # 差し型: 隣接艇が続きやすい
-                            dist = abs(bn - hero)
-                            sc += (wt if dist == 1 else
-                                   wt * 0.5 if dist == 2 else 0.0)
-                    return sc
+                # ── 中穴2点: 20〜50倍、動態スコア上位2点 ──
+                _chuana = hero_first[hero_first["odds_value"].between(20.0, 50.0)].copy()
+                if "odds_source" in _chuana.columns:
+                    live_mask = _chuana["odds_source"] == "live"
+                    _chuana = _chuana[~live_mask | (_chuana["odds_value"] <= 50.0)]
+                if not _chuana.empty:
+                    _chuana["dynamics"] = _chuana.apply(
+                        lambda row: _dynamics_score(int(row["boat2"]), int(row["boat3"])), axis=1
+                    )
+                    _chuana = _chuana.sort_values("dynamics", ascending=False).reset_index(drop=True)
+                    print(f"  [中穴候補] 動態上位: "
+                          f"{list(zip(_chuana['boat2'].astype(int), _chuana['boat3'].astype(int), _chuana['dynamics'].round(3)))[:2]}")
+                    for _, row in _chuana.head(2).iterrows():
+                        r = row.copy()
+                        r["ev"] = float(r["prob"]) * float(r["odds_value"])
+                        _add_rec(r, "中穴", label_override=_okuma_label)
+                        _total_bets += 1
+                else:
+                    print(f"  [中穴候補なし] {hero}号艇1着で20〜50倍なし")
 
-                hero_first["dynamics"] = hero_first.apply(
-                    lambda row: _dynamics_score(int(row["boat2"]), int(row["boat3"])), axis=1
-                )
-                hero_first = hero_first.sort_values("dynamics", ascending=False).reset_index(drop=True)
-                print(f"  [動態スコア上位] {list(zip(hero_first['boat2'].astype(int), hero_first['boat3'].astype(int), hero_first['dynamics'].round(3)))[:3]}")
+                # ── 大穴1点: 80倍超、波乱スコア上位1点 ──
+                _duana = hero_first[hero_first["odds_value"] > 80.0].copy()
+                if not _duana.empty:
+                    _duana["hairan"] = _duana.apply(
+                        lambda row: _hairan_score(int(row["boat2"]), int(row["boat3"])), axis=1
+                    )
+                    _duana = _duana.sort_values("hairan", ascending=False).reset_index(drop=True)
+                    print(f"  [大穴候補] 波乱上位: "
+                          f"{list(zip(_duana['boat2'].astype(int), _duana['boat3'].astype(int), _duana['hairan'].round(3)))[:1]}")
+                    _drow = _duana.iloc[0].copy()
+                    _drow["ev"] = float(_drow["prob"]) * float(_drow["odds_value"])
+                    _add_rec(_drow, "大穴", label_override=_okuma_label)
+                    _total_bets += 1
+                else:
+                    print(f"  [大穴候補なし] {hero}号艇1着で80倍超なし")
 
-                for _, row in hero_first.head(3).iterrows():
-                    r = row.copy()
-                    r["ev"] = float(r["prob"]) * float(r["odds_value"])
-                    _add_rec(r, "大熊", label_override=_okuma_label)
+                if _total_bets == 0:
+                    print(f"  [結果見送り] {venue_name_log} {race_no}R 対象倍率帯なし")
+                    _hf_dc = hero_first.copy()
+                    _hf_dc["dynamics"] = _hf_dc.apply(
+                        lambda row: _dynamics_score(int(row["boat2"]), int(row["boat3"])), axis=1
+                    )
+                    _hf_dc = _hf_dc.sort_values("dynamics", ascending=False).reset_index(drop=True)
+                    for _, row in _hf_dc.head(3).iterrows():
+                        r = row.copy()
+                        r["ev"] = float(r["prob"]) * float(r["odds_value"])
+                        _add_rec(r, "大熊", label_override="見送り")
 
     result_df = pd.DataFrame(all_recommendations)
     if not result_df.empty:

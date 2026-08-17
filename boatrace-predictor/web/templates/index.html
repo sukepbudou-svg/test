@@ -147,6 +147,7 @@ nav a.active{
 }
 .act-pt.lbl-puchun{background:rgba(217,50,50,0.2);color:#ff6b6b;}
 .act-pt.lbl-kokusen{background:rgba(217,124,40,0.2);color:#ffaa55;}
+.act-pt.lbl-chuana{background:rgba(64,200,224,0.15);color:#40c8e0;}
 .act-pt.lbl-skip{background:rgba(80,90,120,0.2);color:#667;}
 .act-check{
   width:20px;height:20px;border-radius:50%;
@@ -199,6 +200,7 @@ nav a.active{
 .tc-label{font-size:11px;flex:1;}
 .tc-label.lbl-puchun{color:#ff6b6b;}
 .tc-label.lbl-kokusen{color:#ffaa55;}
+.tc-label.lbl-chuana{color:#40c8e0;}
 .tc-label.lbl-skip{color:#556;}
 .tc-num{
   font-size:20px;font-weight:700;
@@ -206,6 +208,7 @@ nav a.active{
 }
 .tc-num.lbl-puchun{color:#ff6b6b;text-shadow:0 0 10px rgba(255,107,107,0.5);}
 .tc-num.lbl-kokusen{color:#ffaa55;text-shadow:0 0 10px rgba(255,170,85,0.5);}
+.tc-num.lbl-chuana{color:#40c8e0;text-shadow:0 0 10px rgba(64,200,224,0.5);}
 .tc-num.lbl-skip{color:#334;}
 .tc-sep{color:rgba(255,255,255,0.12);font-size:13px;flex-shrink:0;}
 .tc-hit{
@@ -255,6 +258,12 @@ nav a.active{
   border-color:rgba(255,140,0,0.2);
 }
 .vjl-kokusen:hover{background:rgba(255,140,0,0.2);border-color:rgba(255,140,0,0.5);}
+.vjl-chuana{
+  color:#40c8e0;
+  background:rgba(64,200,224,0.08);
+  border-color:rgba(64,200,224,0.2);
+}
+.vjl-chuana:hover{background:rgba(64,200,224,0.2);border-color:rgba(64,200,224,0.5);}
 .vjl-skip{
   color:var(--dim2);
   background:rgba(255,255,255,0.03);
@@ -390,6 +399,11 @@ nav a.active{
   border:1px solid rgba(255,140,0,0.3);
   text-shadow:0 0 6px var(--og);
 }
+.pt-chuana{
+  background:rgba(64,200,224,0.1);color:#40c8e0;
+  border:1px solid rgba(64,200,224,0.3);
+  text-shadow:0 0 6px rgba(64,200,224,0.5);
+}
 .pt-skip{
   background:rgba(90,100,128,0.1);color:var(--dim2);
   border:1px solid rgba(90,100,128,0.18);
@@ -418,6 +432,10 @@ nav a.active{
 .combo-kokusen{
   color:var(--orange);
   text-shadow:0 0 8px var(--orange),0 0 16px var(--og);
+}
+.combo-chuana{
+  color:#40c8e0;
+  text-shadow:0 0 8px #40c8e0,0 0 16px rgba(64,200,224,0.4);
 }
 .combo-skip{color:var(--dim2)}
 
@@ -539,7 +557,7 @@ footer{
   <span>⟳ 予想追加時に自動更新</span>
 </div>
 
-{% set ns = namespace(skip=0, koku=0, puchu=0, hit_puchu=0, hit_koku=0, hit_skip=0) %}
+{% set ns = namespace(skip=0, koku=0, puchu=0, chuana=0, hit_puchu=0, hit_koku=0, hit_chuana=0, hit_skip=0) %}
 {% for race in race_list %}
   {% set lbl = race.bets[0].bet_label if race.bets else '見送り' %}
   {% set hit = namespace(found=false) %}
@@ -550,6 +568,9 @@ footer{
   {% elif lbl == '黒船熱' %}
     {% set ns.koku = ns.koku + 1 %}
     {% if hit.found %}{% set ns.hit_koku = ns.hit_koku + 1 %}{% endif %}
+  {% elif lbl == '中穴' %}
+    {% set ns.chuana = ns.chuana + 1 %}
+    {% if hit.found %}{% set ns.hit_chuana = ns.hit_chuana + 1 %}{% endif %}
   {% else %}
     {% set ns.skip = ns.skip + 1 %}
     {% if hit.found %}{% set ns.hit_skip = ns.hit_skip + 1 %}{% endif %}
@@ -572,6 +593,12 @@ footer{
       <span class="tc-hit {% if ns.hit_koku > 0 %}has-hit{% endif %}">◎ {{ ns.hit_koku }}</span>
     </div>
     <div class="tc-row">
+      <span class="tc-label lbl-chuana">中穴</span>
+      <span class="tc-num lbl-chuana">{{ ns.chuana }}</span>
+      <span class="tc-sep">|</span>
+      <span class="tc-hit {% if ns.hit_chuana > 0 %}has-hit{% endif %}">◎ {{ ns.hit_chuana }}</span>
+    </div>
+    <div class="tc-row">
       <span class="tc-label lbl-skip">見送り</span>
       <span class="tc-num lbl-skip">{{ ns.skip }}</span>
       <span class="tc-sep">|</span>
@@ -588,9 +615,10 @@ footer{
         {% for race in venue.races %}
           {% set rl = race.bets[0].bet_label if race.bets else '見送り' %}
           {% if rl == 'プチュン' %}{% set vlbl.top = 'プチュン' %}
-          {% elif rl == '黒船熱' and vlbl.top != 'プチュン' %}{% set vlbl.top = '黒船熱' %}{% endif %}
+          {% elif rl == '黒船熱' and vlbl.top != 'プチュン' %}{% set vlbl.top = '黒船熱' %}
+          {% elif rl == '中穴' and vlbl.top not in ('プチュン','黒船熱') %}{% set vlbl.top = '中穴' %}{% endif %}
         {% endfor %}
-        <span class="vjl-tag vjl-{{ 'puchun' if vlbl.top == 'プチュン' else ('kokusen' if vlbl.top == '黒船熱' else 'skip') }}"
+        <span class="vjl-tag vjl-{{ 'puchun' if vlbl.top == 'プチュン' else ('kokusen' if vlbl.top == '黒船熱' else ('chuana' if vlbl.top == '中穴' else 'skip')) }}"
               onclick="scrollToVenue('{{ venue.venue_name }}')">{{ venue.venue_name }}</span>
       {% endfor %}
     </div>
@@ -609,13 +637,15 @@ footer{
     </div>
 
     {% for race in venue.races %}
-      {% set pt = race.arare_score %}
-      {% if pt >= 8 %}
-        {% set lbl = "プチュン" %}{% set pt_cls = "pt-puchun" %}{% set c_cls = "combo-puchun" %}{% set rank_cls = "rank-puchun" %}
-      {% elif pt >= 7 %}
-        {% set lbl = "黒船熱" %}{% set pt_cls = "pt-kokusen" %}{% set c_cls = "combo-kokusen" %}{% set rank_cls = "rank-kokusen" %}
+      {% set lbl = race.bets[0].bet_label if race.bets else '見送り' %}
+      {% if lbl == 'プチュン' %}
+        {% set pt_cls = "pt-puchun" %}{% set c_cls = "combo-puchun" %}{% set rank_cls = "rank-puchun" %}
+      {% elif lbl == '黒船熱' %}
+        {% set pt_cls = "pt-kokusen" %}{% set c_cls = "combo-kokusen" %}{% set rank_cls = "rank-kokusen" %}
+      {% elif lbl == '中穴' %}
+        {% set pt_cls = "pt-chuana" %}{% set c_cls = "combo-chuana" %}{% set rank_cls = "rank-chuana" %}
       {% else %}
-        {% set lbl = "見送り" %}{% set pt_cls = "pt-skip" %}{% set c_cls = "combo-skip" %}{% set rank_cls = "rank-skip" %}
+        {% set pt_cls = "pt-skip" %}{% set c_cls = "combo-skip" %}{% set rank_cls = "rank-skip" %}
       {% endif %}
 
     <div class="race-mini {{ rank_cls }}" id="race-{{ venue.venue_name }}-{{ race.race_no }}">
@@ -696,6 +726,7 @@ footer{
   function labelClass(lbl){
     if(lbl==='プチュン') return 'lbl-puchun';
     if(lbl==='黒船熱')  return 'lbl-kokusen';
+    if(lbl==='中穴')    return 'lbl-chuana';
     return 'lbl-skip';
   }
 

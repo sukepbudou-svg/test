@@ -166,6 +166,10 @@ table.data-table tbody tr:hover td{background:rgba(79,143,255,0.04)}
   color:var(--orange);
   text-shadow:0 0 8px var(--orange-glow),0 0 18px rgba(255,140,0,0.2);
 }
+.label-chuana{
+  color:#40c8e0;
+  text-shadow:0 0 8px rgba(64,200,224,0.5),0 0 18px rgba(64,200,224,0.2);
+}
 .label-skip{color:var(--dim2)}
 
 .roi-good{
@@ -219,6 +223,7 @@ footer{
 <!-- ── 連続外れアラート ── -->
 {% set ps = streaks.get('プチュン', 0) %}
 {% set ks = streaks.get('黒船熱', 0) %}
+{% set cs = streaks.get('中穴', 0) %}
 <div class="streak-box">
   <div class="streak-item">
     <div class="streak-lbl">プチュン 連続外れ</div>
@@ -230,6 +235,12 @@ footer{
     <div class="streak-lbl">黒船熱 連続外れ</div>
     <div class="streak-num {% if ks >= 20 %}danger{% elif ks >= 10 %}warn{% else %}ok{% endif %}">
       {{ ks }}<span class="streak-unit">連</span>
+    </div>
+  </div>
+  <div class="streak-item">
+    <div class="streak-lbl">中穴 連続外れ</div>
+    <div class="streak-num {% if cs >= 20 %}danger{% elif cs >= 10 %}warn{% else %}ok{% endif %}">
+      {{ cs }}<span class="streak-unit">連</span>
     </div>
   </div>
 </div>
@@ -320,7 +331,7 @@ footer{
       {% set hr = (h / rc * 100) if rc > 0 else 0 %}
       {% set sk = all_streaks.label.get(lbl, 0) %}
       <tr>
-        <td class="{% if lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% else %}label-skip{% endif %}">{{ lbl }}</td>
+        <td class="{% if lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% elif lbl == '中穴' %}label-chuana{% else %}label-skip{% endif %}">{{ lbl }}</td>
         <td>{{ s.total }}</td>
         <td>{{ rc }}</td>
         <td>{{ h }}</td>
@@ -369,7 +380,7 @@ footer{
       {% set hhr = (hh / rc * 100) if rc > 0 else 0 %}
       {% set chr = (ch / rc * 100) if rc > 0 else 0 %}
       <tr>
-        <td class="{% if lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% else %}label-skip{% endif %}">{{ lbl }}</td>
+        <td class="{% if lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% elif lbl == '中穴' %}label-chuana{% else %}label-skip{% endif %}">{{ lbl }}</td>
         <td>{{ rc }}</td>
         <td class="{% if hh > 0 %}roi-good{% endif %}">{{ hh }}</td>
         <td class="{% if hhr >= 30 %}roi-good{% elif hhr >= 15 %}roi-neutral{% else %}roi-bad{% endif %}">
@@ -423,6 +434,7 @@ footer{
           PT{{ s.arare_score }}
           {% if s.arare_score >= 8 %}<span class="label-puchun" style="font-size:10px;margin-left:4px;">プチュン</span>
           {% elif s.arare_score >= 7 %}<span class="label-kokusen" style="font-size:10px;margin-left:4px;">黒船熱</span>
+          {% elif s.arare_score >= 5 %}<span class="label-chuana" style="font-size:10px;margin-left:4px;">中穴</span>
           {% endif %}
         </td>
         <td>{{ s.race_count }}</td>
@@ -784,6 +796,7 @@ footer{
 .vmodal-table tr:last-child td{border-bottom:none;}
 .vmodal-table .lbl-bet{color:var(--red);font-size:11px;}
 .vmodal-table .lbl-mid{color:#d97c28;font-size:11px;}
+.vmodal-table .lbl-chuana{color:#40c8e0;font-size:11px;}
 .vmodal-table .lbl-skip{color:#556;font-size:11px;}
 .vmodal-loading{text-align:center;padding:40px;color:#556;font-size:13px;}
 </style>
@@ -811,6 +824,7 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeVenueModal();
 function labelClass(lbl){
   if(lbl==='プチュン') return 'lbl-bet';
   if(lbl==='黒船熱')  return 'lbl-mid';
+  if(lbl==='中穴')    return 'lbl-chuana';
   return 'lbl-skip';
 }
 function fmtHr(h,rc){ return rc>0 ? (h/rc*100).toFixed(1)+'%' : '—'; }
