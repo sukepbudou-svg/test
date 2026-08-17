@@ -1171,7 +1171,7 @@ def get_recommendations(
 
             # ラベル別倍率フィルター（中穴帯狙い: 25〜80倍）
             _min_odds = {"プチュン": 25.0, "黒船熱": 25.0, "見送り": 0.0}
-            _max_odds = {"プチュン": 80.0, "黒船熱": 80.0, "見送り": 9999.0}
+            _max_odds = {"プチュン": 80.0, "黒船熱": 80.0, "見送り": 80.0}
             min_odds = _min_odds.get(_okuma_label, 0.0)
             max_odds = _max_odds.get(_okuma_label, 9999.0)
 
