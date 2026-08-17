@@ -1169,17 +1169,21 @@ def get_recommendations(
             hero = max(outer_h, key=_hero_score)
             print(f"  [hero] {hero}号艇 (score={_hero_score(hero):.3f})")
 
-            # ラベル別最低倍率フィルター（コンセプト：荒れ狙い＝高倍率帯に絞る）
-            _min_odds = {"プチュン": 40.0, "黒船熱": 20.0, "見送り": 0.0}
+            # ラベル別倍率フィルター（中穴帯狙い: 25〜80倍）
+            _min_odds = {"プチュン": 25.0, "黒船熱": 25.0, "見送り": 0.0}
+            _max_odds = {"プチュン": 80.0, "黒船熱": 80.0, "見送り": 9999.0}
             min_odds = _min_odds.get(_okuma_label, 0.0)
+            max_odds = _max_odds.get(_okuma_label, 9999.0)
 
-            # hero が1着の組み合わせを抽出・最低倍率フィルター
+            # hero が1着の組み合わせを抽出・倍率フィルター
             hero_first = _valid[_valid["boat1"] == hero].copy()
             if min_odds > 0:
                 hero_first = hero_first[hero_first["odds_value"] >= min_odds]
+            if max_odds < 9999.0:
+                hero_first = hero_first[hero_first["odds_value"] <= max_odds]
 
             if hero_first.empty:
-                print(f"  [スキップ] {hero}号艇1着で倍率{min_odds:.0f}倍以上の組み合わせなし")
+                print(f"  [スキップ] {hero}号艇1着で{min_odds:.0f}〜{max_odds:.0f}倍の組み合わせなし")
             else:
                 # ── 動態スコアリング：2着・3着をレース動態ロジックで選出 ──
                 # ① STタイミングの近さ（40%）: 第1ターンで競り合う艇を重視
