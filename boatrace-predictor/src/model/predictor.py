@@ -427,8 +427,9 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.Da
     """
     荒れ条件スコアを計算する（新版）
     ① 1号艇の弱さ（最大9点）: ST遅+3 / モーター低+3 / B級+2 / 展示最遅+1
-    ② 外艇の脅威（最大8点）: 前付け+3 / 外A1+2 / 外ST速+2 / 外タイム最速+1
-    ③ 環境・条件（最大6点）: 強風+2 / 波高+2 / 荒れ会場+1〜2 / 一般戦+1
+    ①' 2号艇の弱さ（最大4点）: ST遅(≥0.17)+2 / モーター低(<0.35)+2
+    ② 外艇の脅威（最大10点）: 前付け+3 / 外A1+2 / 外ST速+2 / 外タイム最速+1 / 複数外艇ST速(2艇以上)+2
+    ③ 環境・条件（最大4点）: 強風+1 / 波高+1 / 荒れ会場+1〜2 / 一般戦+1
     """
     score = 0
     reasons = []
@@ -459,7 +460,18 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.Da
             score += 1
             reasons.append(f"1号展示最遅({et_vals[1]:.2f}s)")
 
-    # ── ② 外艇の脅威（最大8点） ──
+    # ── ①' 2号艇の弱さ（最大4点） ──
+    st2 = _safe_float(race_row.get("boat2_exhibition_st"))
+    if st2 is not None and st2 >= 0.17:
+        score += 2
+        reasons.append(f"2号ST遅({st2:.2f})")
+
+    m2 = _safe_float(race_row.get("boat2_motor_2rate"))
+    if m2 is not None and m2 < 0.35:
+        score += 2
+        reasons.append(f"2号M低({m2:.0%})")
+
+    # ── ② 外艇の脅威（最大10点） ──
     # 前付け（4-6号艇が1-2コース進入、1艇でOK）
     for bn in [4, 5, 6]:
         ac_raw = race_row.get(f"boat{bn}_actual_course")
@@ -494,6 +506,15 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.Da
         score += 2
         reasons.append(f"{best_outer_st_bn}号ST速({best_outer_st:.2f})")
 
+    # 複数外艇ST速い（3〜6号で≤0.13が2艇以上）
+    fast_outer_count = sum(
+        1 for bn in [3, 4, 5, 6]
+        if (_ost := _safe_float(race_row.get(f"boat{bn}_exhibition_st"))) and _ost > 0 and _ost <= 0.13
+    )
+    if fast_outer_count >= 2:
+        score += 2
+        reasons.append(f"外艇ST速({fast_outer_count}艇≤0.13)")
+
     # 外艇展示タイム最速（3〜6号）
     if len(et_vals) >= 4:
         fastest_boat = min(et_vals, key=lambda b: et_vals[b])
@@ -501,15 +522,15 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.Da
             score += 1
             reasons.append(f"{fastest_boat}号展示最速({et_vals[fastest_boat]:.2f}s)")
 
-    # ── ③ 環境・条件（最大6点） ──
+    # ── ③ 環境・条件（最大4点） ──
     wind = _safe_float((weather or {}).get("wind_speed"))
     if wind and wind >= 7:
-        score += 2
+        score += 1
         reasons.append(f"強風{int(wind)}m")
 
     wave = _safe_float((weather or {}).get("wave_height"))
     if wave and wave >= 15:
-        score += 2
+        score += 1
         reasons.append(f"波高{int(wave)}cm")
 
     vc = str(race_row.get("venue_code", "")).zfill(2)
