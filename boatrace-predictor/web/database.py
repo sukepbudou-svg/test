@@ -369,7 +369,6 @@ def get_hero_stats():
                               THEN 1 ELSE 0 END) as hero_correct,
                     MAX(is_hit) as is_hit_any
                 FROM predictions
-                WHERE bet_label != '見送り'
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY bet_label
@@ -377,7 +376,8 @@ def get_hero_stats():
                 CASE bet_label
                     WHEN 'プチュン' THEN 1
                     WHEN '黒船熱' THEN 2
-                    ELSE 3
+                    WHEN '見送り' THEN 3
+                    ELSE 4
                 END
         """).fetchall()
     return [dict(r) for r in rows]
