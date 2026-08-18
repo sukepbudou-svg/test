@@ -1234,7 +1234,7 @@ def get_recommendations(
                 (by_prob["odds_source"] == "live") & (by_prob["boat1"] == 1)
             ] if "odds_source" in by_prob.columns else pd.DataFrame()
             _b1_min_live = float(_b1_live_cand["odds_value"].min()) if not _b1_live_cand.empty else None
-            _b1_odds_ok = _b1_min_live is not None and _b1_min_live > 8.0
+            _b1_odds_ok = _b1_min_live is not None and _b1_min_live > 7.5
 
             if not _pt_ok or not _b1_odds_ok:
                 _skip_rsn = (f"PT={arare_score}（5〜9外）" if not _pt_ok
