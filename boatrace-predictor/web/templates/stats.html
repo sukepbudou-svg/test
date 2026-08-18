@@ -270,8 +270,8 @@ footer{
     <div class="kpi-label">的中数</div>
     <div class="kpi-value {% if total_hit.v > 0 %}green{% else %}white{% endif %}">{{ total_hit.v }}</div>
     <div class="kpi-sub">
-      {% if total_bet.v > 0 and total_hit.v > 0 %}
-        {{ "%.1f" % (total_bet.v / total_hit.v) }}回に1回
+      {% if total_combos.v > 0 and total_hit.v > 0 %}
+        {{ "%.1f" % (total_combos.v / total_hit.v) }}回に1回
       {% else %}—{% endif %}
     </div>
   </div>
