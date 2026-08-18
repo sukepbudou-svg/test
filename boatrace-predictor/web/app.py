@@ -62,7 +62,7 @@ def create_app():
         cumulative = []
         running = 0
         for d in reversed(daily):
-            bet_cost = d["bet_count"] * 200  # 2点×100円
+            bet_cost = d["result_combos"] * 100
             running += d["total_payout"] - bet_cost
             cumulative.append({"date": d["date"], "pnl": running})
 
