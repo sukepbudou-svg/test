@@ -435,17 +435,20 @@ def _calc_streaks(rows, key_fn):
 
 
 def get_all_streaks():
-    """ラベル・PT・会場・等級別の直近連続外れ数を一括取得（参戦レースのみ）"""
+    """ラベル・PT・会場・等級別の直近連続外れ数を一括取得（参戦レースのみ・レース単位）"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute("""
-            SELECT bet_label, arare_score, venue_name,
-                   COALESCE(NULLIF(race_grade,''), '不明') as race_grade,
-                   is_hit
+            SELECT MAX(bet_label) as bet_label,
+                   MAX(arare_score) as arare_score,
+                   MAX(venue_name) as venue_name,
+                   COALESCE(NULLIF(MAX(race_grade),''), '不明') as race_grade,
+                   MAX(is_hit) as is_hit
             FROM predictions
             WHERE result_recorded_at IS NOT NULL
               AND bet_label != '見送り'
-            ORDER BY id DESC
+            GROUP BY date, venue_name, race_no
+            ORDER BY MAX(id) DESC
         """).fetchall()
     rows = [dict(r) for r in rows]
     return {
