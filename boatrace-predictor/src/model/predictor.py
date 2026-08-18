@@ -1241,16 +1241,29 @@ def get_recommendations(
                              else f"1号艇live={_b1_min_live:.1f}倍（5〜9倍外）" if _b1_min_live is not None
                              else "1号艇ライブ未取得")
                 print(f"  [見送り] {venue_name_log} {race_no}R {_skip_rsn}")
-                if not hero_first.empty:
-                    _hf_dc = hero_first.copy()
-                    _hf_dc["dynamics"] = _hf_dc.apply(
+                # データ収集: 参戦レースと同じ選出ロジックで記録
+                _dc_chuana = hero_first[hero_first["odds_value"].between(20.0, 50.0)].copy()
+                if "odds_source" in _dc_chuana.columns:
+                    _lm = _dc_chuana["odds_source"] == "live"
+                    _dc_chuana = _dc_chuana[~_lm | (_dc_chuana["odds_value"] <= 50.0)]
+                if not _dc_chuana.empty:
+                    _dc_chuana["dynamics"] = _dc_chuana.apply(
                         lambda row: _dynamics_score(int(row["boat2"]), int(row["boat3"])), axis=1
                     )
-                    _hf_dc = _hf_dc.sort_values("dynamics", ascending=False).reset_index(drop=True)
-                    for _, row in _hf_dc.head(3).iterrows():
+                    _dc_chuana = _dc_chuana.sort_values("dynamics", ascending=False).reset_index(drop=True)
+                    for _, row in _dc_chuana.head(2).iterrows():
                         r = row.copy()
                         r["ev"] = float(r["prob"]) * float(r["odds_value"])
-                        _add_rec(r, "大熊", label_override="見送り")
+                        _add_rec(r, "中穴", label_override="見送り")
+                _dc_duana = hero_first[hero_first["odds_value"] > 80.0].copy()
+                if not _dc_duana.empty:
+                    _dc_duana["hairan"] = _dc_duana.apply(
+                        lambda row: _hairan_score(int(row["boat2"]), int(row["boat3"])), axis=1
+                    )
+                    _dc_duana = _dc_duana.sort_values("hairan", ascending=False).reset_index(drop=True)
+                    _drow = _dc_duana.iloc[0].copy()
+                    _drow["ev"] = float(_drow["prob"]) * float(_drow["odds_value"])
+                    _add_rec(_drow, "大穴", label_override="見送り")
             else:
                 _b1_str = f"{_b1_min_live:.1f}倍"
                 print(f"  {_C_GREEN}[参戦確定]{_C_RESET} {_label_color}{_okuma_label}{_C_RESET} "
@@ -1294,16 +1307,7 @@ def get_recommendations(
                     print(f"  [大穴候補なし] {hero}号艇1着で80倍超なし")
 
                 if _total_bets == 0:
-                    print(f"  [結果見送り] {venue_name_log} {race_no}R 対象倍率帯なし")
-                    _hf_dc = hero_first.copy()
-                    _hf_dc["dynamics"] = _hf_dc.apply(
-                        lambda row: _dynamics_score(int(row["boat2"]), int(row["boat3"])), axis=1
-                    )
-                    _hf_dc = _hf_dc.sort_values("dynamics", ascending=False).reset_index(drop=True)
-                    for _, row in _hf_dc.head(3).iterrows():
-                        r = row.copy()
-                        r["ev"] = float(r["prob"]) * float(r["odds_value"])
-                        _add_rec(r, "大熊", label_override="見送り")
+                    print(f"  [結果見送り] {venue_name_log} {race_no}R 20〜50倍・80倍超の組み合わせなし")
 
     result_df = pd.DataFrame(all_recommendations)
     if not result_df.empty:
