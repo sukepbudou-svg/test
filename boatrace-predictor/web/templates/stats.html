@@ -246,19 +246,17 @@ footer{
 </div>
 
 <!-- ── KPI ── -->
-{% set total_bet = namespace(v=0) %}
+{% set total_combos = namespace(v=0) %}
 {% set total_hit = namespace(v=0) %}
 {% set total_pay = namespace(v=0) %}
 {% set total_rc = namespace(v=0) %}
 {% for s in label_stats %}
-  {% if s.bet_label != '見送り' %}
-    {% set total_bet.v = total_bet.v + s.result_count %}
-    {% set total_hit.v = total_hit.v + s.hits %}
-    {% set total_pay.v = total_pay.v + s.total_payout %}
-  {% endif %}
+  {% set total_combos.v = total_combos.v + s.result_combos %}
+  {% set total_hit.v = total_hit.v + s.hits %}
+  {% set total_pay.v = total_pay.v + s.total_payout %}
   {% set total_rc.v = total_rc.v + s.result_count %}
 {% endfor %}
-{% set cost = total_bet.v * 200 %}
+{% set cost = total_combos.v * 100 %}
 {% set pnl = total_pay.v - cost %}
 {% set roi_pct = (total_pay.v / cost * 100) if cost > 0 else 0 %}
 
@@ -266,7 +264,7 @@ footer{
   <div class="kpi">
     <div class="kpi-label">総予想回数</div>
     <div class="kpi-value white">{{ total_rc.v }}</div>
-    <div class="kpi-sub">内 参戦: {{ total_bet.v }}回</div>
+    <div class="kpi-sub">結果済: {{ total_combos.v }}点</div>
   </div>
   <div class="kpi">
     <div class="kpi-label">的中数</div>
@@ -325,7 +323,7 @@ footer{
       {% set rc = s.result_count %}
       {% set h = s.hits %}
       {% set pay = s.total_payout %}
-      {% set c = rc * 200 %}
+      {% set c = s.result_combos * 100 %}
       {% set p = pay - c %}
       {% set roi = (pay / c * 100) if c > 0 else 0 %}
       {% set hr = (h / rc * 100) if rc > 0 else 0 %}
@@ -491,7 +489,7 @@ footer{
       {% set rc = s.result_count %}
       {% set h = s.hits %}
       {% set pay = s.total_payout %}
-      {% set c = rc * 200 %}
+      {% set c = s.result_combos * 100 %}
       {% set p = pay - c %}
       {% set roi = (pay / c * 100) if c > 0 else 0 %}
       {% set hr = (h / rc * 100) if rc > 0 else 0 %}
@@ -544,7 +542,7 @@ footer{
       {% set rc = s.result_count %}
       {% set h = s.hits %}
       {% set pay = s.total_payout %}
-      {% set c = rc * 200 %}
+      {% set c = s.result_combos * 100 %}
       {% set p = pay - c %}
       {% set roi = (pay / c * 100) if c > 0 else 0 %}
       {% set hr = (h / rc * 100) if rc > 0 else 0 %}
@@ -597,7 +595,7 @@ footer{
       {% set rc = s.result_count %}
       {% set h = s.hits %}
       {% set pay = s.total_payout %}
-      {% set c = rc * 200 %}
+      {% set c = s.result_combos * 100 %}
       {% set p = pay - c %}
       {% set roi = (pay / c * 100) if c > 0 else 0 %}
       {% set hr = (h / rc * 100) if rc > 0 else 0 %}
@@ -635,7 +633,7 @@ footer{
       <tr>
         <th>日付</th>
         <th>予想数</th>
-        <th>参戦数</th>
+        <th>合計点数</th>
         <th>結果済</th>
         <th>的中</th>
         <th>払戻</th>
@@ -644,12 +642,12 @@ footer{
     </thead>
     <tbody>
     {% for d in daily %}
-      {% set c = d.bet_count * 200 %}
+      {% set c = d.result_combos * 100 %}
       {% set p = d.total_payout - c %}
       <tr>
         <td>{{ d.date }}</td>
         <td>{{ d.total }}</td>
-        <td>{{ d.bet_count }}</td>
+        <td>{{ d.result_combos }}</td>
         <td>{{ d.result_count }}</td>
         <td>{{ d.hits }}</td>
         <td>¥{{ "{:,}".format(d.total_payout) }}</td>

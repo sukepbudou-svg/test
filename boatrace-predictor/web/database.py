@@ -158,12 +158,14 @@ def get_pt_stats():
                 COUNT(*) as total,
                 SUM(has_result) as result_count,
                 SUM(is_hit_any) as hits,
-                SUM(race_payout) as total_payout
+                SUM(race_payout) as total_payout,
+                SUM(CASE WHEN has_result=1 THEN combo_count ELSE 0 END) as result_combos
             FROM (
                 SELECT date, venue_name, race_no, arare_score,
                     MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
                     MAX(is_hit) as is_hit_any,
-                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
+                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
+                    COUNT(*) as combo_count
                 FROM predictions
                 GROUP BY date, venue_name, race_no
             )
@@ -183,13 +185,15 @@ def get_label_stats():
                 COUNT(*) as total,
                 SUM(has_result) as result_count,
                 SUM(is_hit_any) as hits,
-                SUM(race_payout) as total_payout
+                SUM(race_payout) as total_payout,
+                SUM(CASE WHEN has_result=1 THEN combo_count ELSE 0 END) as result_combos
             FROM (
                 SELECT date, venue_name, race_no,
                     MAX(bet_label) as bet_label,
                     MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
                     MAX(is_hit) as is_hit_any,
-                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
+                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
+                    COUNT(*) as combo_count
                 FROM predictions
                 GROUP BY date, venue_name, race_no
             )
@@ -217,13 +221,14 @@ def get_daily_summary():
                 SUM(has_result) as result_count,
                 SUM(is_hit_any) as hits,
                 SUM(race_payout) as total_payout,
-                SUM(CASE WHEN bet_label != '見送り' THEN 1 ELSE 0 END) as bet_count
+                SUM(CASE WHEN has_result=1 THEN combo_count ELSE 0 END) as result_combos
             FROM (
                 SELECT date, venue_name, race_no,
                     MAX(bet_label) as bet_label,
                     MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
                     MAX(is_hit) as is_hit_any,
-                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
+                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
+                    COUNT(*) as combo_count
                 FROM predictions
                 GROUP BY date, venue_name, race_no
             )
@@ -245,13 +250,15 @@ def get_venue_detail(venue_name: str):
                 COUNT(*) as total,
                 SUM(has_result) as result_count,
                 SUM(is_hit_any) as hits,
-                SUM(race_payout) as total_payout
+                SUM(race_payout) as total_payout,
+                SUM(CASE WHEN has_result=1 THEN combo_count ELSE 0 END) as result_combos
             FROM (
                 SELECT date, venue_name, race_no, arare_score,
                     MAX(bet_label) as bet_label,
                     MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
                     MAX(is_hit) as is_hit_any,
-                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
+                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
+                    COUNT(*) as combo_count
                 FROM predictions
                 WHERE venue_name = ?
                 GROUP BY date, venue_name, race_no
@@ -266,14 +273,16 @@ def get_venue_detail(venue_name: str):
                 COUNT(*) as total,
                 SUM(has_result) as result_count,
                 SUM(is_hit_any) as hits,
-                SUM(race_payout) as total_payout
+                SUM(race_payout) as total_payout,
+                SUM(CASE WHEN has_result=1 THEN combo_count ELSE 0 END) as result_combos
             FROM (
                 SELECT date, venue_name, race_no,
                     MAX(bet_label) as bet_label,
                     MAX(COALESCE(NULLIF(race_grade,''), '不明')) as race_grade,
                     MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
                     MAX(is_hit) as is_hit_any,
-                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
+                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
+                    COUNT(*) as combo_count
                 FROM predictions
                 WHERE venue_name = ?
                 GROUP BY date, venue_name, race_no
@@ -294,7 +303,7 @@ def get_venue_detail(venue_name: str):
 
 
 def get_venue_stats():
-    """会場別集計（全期間・レース単位・参戦レースのみ）"""
+    """会場別集計（全期間・レース単位）"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute("""
@@ -303,13 +312,15 @@ def get_venue_stats():
                 COUNT(*) as total,
                 SUM(has_result) as result_count,
                 SUM(is_hit_any) as hits,
-                SUM(race_payout) as total_payout
+                SUM(race_payout) as total_payout,
+                SUM(CASE WHEN has_result=1 THEN combo_count ELSE 0 END) as result_combos
             FROM (
                 SELECT date, venue_name, race_no,
                     MAX(bet_label) as bet_label,
                     MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
                     MAX(is_hit) as is_hit_any,
-                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
+                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
+                    COUNT(*) as combo_count
                 FROM predictions
                 GROUP BY date, venue_name, race_no
             )
@@ -320,7 +331,7 @@ def get_venue_stats():
 
 
 def get_grade_stats():
-    """等級別集計（全期間・レース単位・参戦レースのみ）"""
+    """等級別集計（全期間・レース単位）"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute("""
@@ -329,14 +340,16 @@ def get_grade_stats():
                 COUNT(*) as total,
                 SUM(has_result) as result_count,
                 SUM(is_hit_any) as hits,
-                SUM(race_payout) as total_payout
+                SUM(race_payout) as total_payout,
+                SUM(CASE WHEN has_result=1 THEN combo_count ELSE 0 END) as result_combos
             FROM (
                 SELECT date, venue_name, race_no,
                     MAX(bet_label) as bet_label,
                     MAX(COALESCE(NULLIF(race_grade,''), '不明')) as race_grade,
                     MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
                     MAX(is_hit) as is_hit_any,
-                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout
+                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
+                    COUNT(*) as combo_count
                 FROM predictions
                 GROUP BY date, venue_name, race_no
             )
