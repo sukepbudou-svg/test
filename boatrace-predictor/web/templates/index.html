@@ -638,6 +638,7 @@ footer{
 
     {% for race in venue.races %}
       {% set lbl = race.bets[0].bet_label if race.bets else '見送り' %}
+      {% set pt = race.arare_score %}
       {% if lbl == 'プチュン' %}
         {% set pt_cls = "pt-puchun" %}{% set c_cls = "combo-puchun" %}{% set rank_cls = "rank-puchun" %}
       {% elif lbl == '黒船熱' %}
