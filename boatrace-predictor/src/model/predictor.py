@@ -1228,18 +1228,16 @@ def get_recommendations(
                         sc += (1.0 - rank / (_n_et - 1)) * wt
                 return sc
 
-            # ── 参戦条件チェック: ① PT5〜9  ② 1号艇ライブオッズ最安 5〜9倍 ──
+            # ── 参戦条件チェック: ① PT5〜9 ──
             _pt_ok = 5 <= arare_score <= 9
+            # 1号艇ライブオッズ（参照ログ用・参戦条件には使用しない）
             _b1_live_cand = by_prob[
                 (by_prob["odds_source"] == "live") & (by_prob["boat1"] == 1)
             ] if "odds_source" in by_prob.columns else pd.DataFrame()
             _b1_min_live = float(_b1_live_cand["odds_value"].min()) if not _b1_live_cand.empty else None
-            _b1_odds_ok = _b1_min_live is not None and _b1_min_live > 7.5
 
-            if not _pt_ok or not _b1_odds_ok:
-                _skip_rsn = (f"PT={arare_score}（5〜9外）" if not _pt_ok
-                             else f"1号艇live={_b1_min_live:.1f}倍（5〜9倍外）" if _b1_min_live is not None
-                             else "1号艇ライブ未取得")
+            if not _pt_ok:
+                _skip_rsn = f"PT={arare_score}（5〜9外）"
                 print(f"  [見送り] {venue_name_log} {race_no}R {_skip_rsn}")
                 # データ収集: 参戦レースと同じ選出ロジックで記録
                 _dc_chuana = hero_first[hero_first["odds_value"].between(20.0, 50.0)].copy()
@@ -1265,9 +1263,9 @@ def get_recommendations(
                     _drow["ev"] = float(_drow["prob"]) * float(_drow["odds_value"])
                     _add_rec(_drow, "大穴", label_override="見送り")
             else:
-                _b1_str = f"{_b1_min_live:.1f}倍"
+                _b1_str = f"{_b1_min_live:.1f}倍" if _b1_min_live is not None else "未取得"
                 print(f"  {_C_GREEN}[参戦確定]{_C_RESET} {_label_color}{_okuma_label}{_C_RESET} "
-                      f"PT={arare_score} 1号艇live={_b1_str}")
+                      f"PT={arare_score} 1号艇live={_b1_str}（参考）")
                 _total_bets = 0
 
                 # ── 中穴2点: 20〜50倍、動態スコア上位2点 ──
