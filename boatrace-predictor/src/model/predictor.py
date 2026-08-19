@@ -1228,44 +1228,37 @@ def get_recommendations(
                         sc += (1.0 - rank / (_n_et - 1)) * wt
                 return sc
 
-            # ── 参戦条件チェック: ① PT6〜9 ──
-            _pt_ok = 6 <= arare_score <= 9
-            # 1号艇ライブオッズ（参照ログ用・参戦条件には使用しない）
+            # Track2用: 全艇ETランキング（hero固定なし）
+            _all_et_sorted = sorted(et_vals_k.keys(), key=lambda b: et_vals_k[b]) if et_vals_k else []
+            _all_n_et = len(_all_et_sorted)
+
+            def _hairan_t2_score(b1, b2, b3):
+                """Track2 全艇波乱スコア: 1着(50%) + 2着(35%) + 3着(15%) × 攻撃性/ST/ET"""
+                sc = 0.0
+                for wt, bn in [(0.50, b1), (0.35, b2), (0.15, b3)]:
+                    bn_maku = min(1.0, _get_aggression(bn) / 2.0) * 0.55
+                    bn_st_raw = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                    bn_st = min(1.0, max(0.0, (0.20 - bn_st_raw) / 0.10)) * 0.30 if bn_st_raw and bn_st_raw > 0 else 0.0
+                    bn_et_rank = _all_et_sorted.index(bn) if bn in _all_et_sorted and _all_n_et > 1 else _all_n_et - 1
+                    bn_et = (1.0 - bn_et_rank / max(_all_n_et - 1, 1)) * 0.15
+                    sc += (bn_maku + bn_st + bn_et) * wt
+                return sc
+
+            # ── 参戦トラック判定 ──
             _b1_live_cand = by_prob[
                 (by_prob["odds_source"] == "live") & (by_prob["boat1"] == 1)
             ] if "odds_source" in by_prob.columns else pd.DataFrame()
             _b1_min_live = float(_b1_live_cand["odds_value"].min()) if not _b1_live_cand.empty else None
 
-            if not _pt_ok:
-                _skip_rsn = f"PT={arare_score}（6〜9外）"
-                print(f"  [見送り] {venue_name_log} {race_no}R {_skip_rsn}")
-                # データ収集: 参戦レースと同じ選出ロジックで記録
-                _dc_chuana = hero_first[hero_first["odds_value"].between(20.0, 50.0)].copy()
-                if "odds_source" in _dc_chuana.columns:
-                    _lm = _dc_chuana["odds_source"] == "live"
-                    _dc_chuana = _dc_chuana[~_lm | (_dc_chuana["odds_value"] <= 50.0)]
-                if not _dc_chuana.empty:
-                    _dc_chuana["dynamics"] = _dc_chuana.apply(
-                        lambda row: _dynamics_score(int(row["boat2"]), int(row["boat3"])), axis=1
-                    )
-                    _dc_chuana = _dc_chuana.sort_values("dynamics", ascending=False).reset_index(drop=True)
-                    for _, row in _dc_chuana.head(2).iterrows():
-                        r = row.copy()
-                        r["ev"] = float(r["prob"]) * float(r["odds_value"])
-                        _add_rec(r, "中穴", label_override="見送り")
-                _dc_duana = hero_first[hero_first["odds_value"] > 80.0].copy()
-                if not _dc_duana.empty:
-                    _dc_duana["hairan"] = _dc_duana.apply(
-                        lambda row: _hairan_score(int(row["boat2"]), int(row["boat3"])), axis=1
-                    )
-                    _dc_duana = _dc_duana.sort_values("hairan", ascending=False).reset_index(drop=True)
-                    _drow = _dc_duana.iloc[0].copy()
-                    _drow["ev"] = float(_drow["prob"]) * float(_drow["odds_value"])
-                    _add_rec(_drow, "大穴", label_override="見送り")
-            else:
-                _b1_str = f"{_b1_min_live:.1f}倍" if _b1_min_live is not None else "未取得"
-                print(f"  {_C_GREEN}[参戦確定]{_C_RESET} {_label_color}{_okuma_label}{_C_RESET} "
-                      f"PT={arare_score} 1号艇live={_b1_str}（参考）")
+            # Track1: PT5〜9 + 1号艇ライブ≤8倍（人気集中・逆転狙い）
+            _track1_ok = (5 <= arare_score <= 9) and (_b1_min_live is not None and _b1_min_live <= 8.0)
+            # Track2: PT7〜9 + 1号艇ライブ>8倍 or 未取得（市場察知・万舟狙い）
+            _track2_ok = (arare_score >= 7) and (_b1_min_live is None or _b1_min_live > 8.0)
+
+            if _track1_ok:
+                _b1_str = f"{_b1_min_live:.1f}倍"
+                print(f"  {_C_GREEN}[Track1 参戦]{_C_RESET} {_label_color}{_okuma_label}{_C_RESET} "
+                      f"PT={arare_score} 1号艇live={_b1_str}（人気集中・逆転狙い）")
                 _total_bets = 0
 
                 # ── 中穴2点: 20〜50倍、動態スコア上位2点 ──
@@ -1306,6 +1299,58 @@ def get_recommendations(
 
                 if _total_bets == 0:
                     print(f"  [結果見送り] {venue_name_log} {race_no}R 20〜50倍・80倍超の組み合わせなし")
+
+            elif _track2_ok:
+                _b1_str = f"{_b1_min_live:.1f}倍" if _b1_min_live is not None else "未取得"
+                print(f"  {_C_GREEN}[Track2 参戦]{_C_RESET} {_label_color}{_okuma_label}{_C_RESET} "
+                      f"PT={arare_score} 1号艇live={_b1_str}（市場察知・万舟狙い）")
+
+                # ── 全艇対象: 80倍超から波乱スコア上位3点 ──
+                _t2_cand = _valid[_valid["odds_value"] > 80.0].copy()
+                if not _t2_cand.empty:
+                    _t2_cand["t2_score"] = _t2_cand.apply(
+                        lambda row: _hairan_t2_score(int(row["boat1"]), int(row["boat2"]), int(row["boat3"])), axis=1
+                    )
+                    _t2_cand = _t2_cand.sort_values("t2_score", ascending=False).reset_index(drop=True)
+                    print(f"  [万舟候補] 波乱上位3: "
+                          f"{list(zip(_t2_cand['boat1'].astype(int), _t2_cand['boat2'].astype(int), _t2_cand['boat3'].astype(int), _t2_cand['t2_score'].round(3)))[:3]}")
+                    for _, row in _t2_cand.head(3).iterrows():
+                        r = row.copy()
+                        r["ev"] = float(r["prob"]) * float(r["odds_value"])
+                        _add_rec(r, "大穴", label_override=_okuma_label)
+                else:
+                    print(f"  [Track2 候補なし] {venue_name_log} {race_no}R 80倍超の組み合わせなし")
+
+            else:
+                # 見送り（データ収集）
+                if _b1_min_live is not None:
+                    _skip_rsn = f"PT={arare_score} 1号艇live={_b1_min_live:.1f}倍（トラック対象外）"
+                else:
+                    _skip_rsn = f"PT={arare_score}（PT1〜4 or 1号艇ライブ未取得）"
+                print(f"  [見送り] {venue_name_log} {race_no}R {_skip_rsn}")
+                # データ収集: hero固定ロジックで記録
+                _dc_chuana = hero_first[hero_first["odds_value"].between(20.0, 50.0)].copy()
+                if "odds_source" in _dc_chuana.columns:
+                    _lm = _dc_chuana["odds_source"] == "live"
+                    _dc_chuana = _dc_chuana[~_lm | (_dc_chuana["odds_value"] <= 50.0)]
+                if not _dc_chuana.empty:
+                    _dc_chuana["dynamics"] = _dc_chuana.apply(
+                        lambda row: _dynamics_score(int(row["boat2"]), int(row["boat3"])), axis=1
+                    )
+                    _dc_chuana = _dc_chuana.sort_values("dynamics", ascending=False).reset_index(drop=True)
+                    for _, row in _dc_chuana.head(2).iterrows():
+                        r = row.copy()
+                        r["ev"] = float(r["prob"]) * float(r["odds_value"])
+                        _add_rec(r, "中穴", label_override="見送り")
+                _dc_duana = hero_first[hero_first["odds_value"] > 80.0].copy()
+                if not _dc_duana.empty:
+                    _dc_duana["hairan"] = _dc_duana.apply(
+                        lambda row: _hairan_score(int(row["boat2"]), int(row["boat3"])), axis=1
+                    )
+                    _dc_duana = _dc_duana.sort_values("hairan", ascending=False).reset_index(drop=True)
+                    _drow = _dc_duana.iloc[0].copy()
+                    _drow["ev"] = float(_drow["prob"]) * float(_drow["odds_value"])
+                    _add_rec(_drow, "大穴", label_override="見送り")
 
     result_df = pd.DataFrame(all_recommendations)
     if not result_df.empty:
