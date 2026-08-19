@@ -1228,8 +1228,8 @@ def get_recommendations(
                         sc += (1.0 - rank / (_n_et - 1)) * wt
                 return sc
 
-            # ── 参戦条件チェック: ① PT5〜9 ──
-            _pt_ok = 5 <= arare_score <= 9
+            # ── 参戦条件チェック: ① PT6〜9 ──
+            _pt_ok = 6 <= arare_score <= 9
             # 1号艇ライブオッズ（参照ログ用・参戦条件には使用しない）
             _b1_live_cand = by_prob[
                 (by_prob["odds_source"] == "live") & (by_prob["boat1"] == 1)
@@ -1237,7 +1237,7 @@ def get_recommendations(
             _b1_min_live = float(_b1_live_cand["odds_value"].min()) if not _b1_live_cand.empty else None
 
             if not _pt_ok:
-                _skip_rsn = f"PT={arare_score}（5〜9外）"
+                _skip_rsn = f"PT={arare_score}（6〜9外）"
                 print(f"  [見送り] {venue_name_log} {race_no}R {_skip_rsn}")
                 # データ収集: 参戦レースと同じ選出ロジックで記録
                 _dc_chuana = hero_first[hero_first["odds_value"].between(20.0, 50.0)].copy()
