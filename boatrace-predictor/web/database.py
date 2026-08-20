@@ -46,7 +46,7 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_pred_venue_race ON predictions(date, venue_name, race_no);
         """)
         # 既存DBへのマイグレーション
-        for col in ["race_time TEXT", "race_grade TEXT"]:
+        for col in ["race_time TEXT", "race_grade TEXT", "okuma_signal_count INTEGER DEFAULT 0"]:
             try:
                 conn.execute(f"ALTER TABLE predictions ADD COLUMN {col}")
             except Exception:
@@ -78,8 +78,8 @@ def save_prediction(rec: dict):
             INSERT INTO predictions
               (date, venue_name, race_no, race_time, race_grade, combination, odds, odds_value,
                arare_score, arare_reasons, bet_label, tier,
-               prob, expected_roi, nigerate_str, boat1_risk)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               prob, expected_roi, nigerate_str, boat1_risk, okuma_signal_count)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             date, venue, race_no,
             str(rec.get("race_time", "")),
@@ -93,6 +93,7 @@ def save_prediction(rec: dict):
             str(rec.get("expected_roi", "")),
             str(rec.get("nigerate_str", "")),
             str(rec.get("boat1_risk", "")),
+            int(rec.get("okuma_signal_count", 0) or 0),
         ))
 
 
@@ -421,6 +422,42 @@ def get_pt_payout_stats():
             )
             GROUP BY arare_score
             ORDER BY arare_score
+        """).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_signal_stats():
+    """大穴シグナル数別集計（arare_reasonsから動的計算・全期間）"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT
+                sig,
+                COUNT(*) as race_count,
+                SUM(has_result) as result_count,
+                SUM(is_hit_any) as hits,
+                SUM(race_payout) as total_payout,
+                SUM(CASE WHEN has_result=1 THEN combo_count ELSE 0 END) as result_combos,
+                SUM(CASE WHEN has_result=1 AND actual_payout >= 8000 THEN 1 ELSE 0 END) as okuma_actual_count
+            FROM (
+                SELECT date, venue_name, race_no,
+                    (
+                        CASE WHEN MAX(arare_reasons) LIKE '%M低%'       THEN 1 ELSE 0 END +
+                        CASE WHEN MAX(arare_reasons) LIKE '%展示最遅%'  THEN 1 ELSE 0 END +
+                        CASE WHEN MAX(arare_reasons) LIKE '%A1選手%'    THEN 1 ELSE 0 END +
+                        CASE WHEN MAX(arare_reasons) LIKE '%荒れ会場%'
+                               OR MAX(arare_reasons) LIKE '%江戸川%'    THEN 1 ELSE 0 END
+                    ) as sig,
+                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
+                    MAX(is_hit) as is_hit_any,
+                    MAX(actual_payout) as actual_payout,
+                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
+                    COUNT(*) as combo_count
+                FROM predictions
+                GROUP BY date, venue_name, race_no
+            )
+            GROUP BY sig
+            ORDER BY sig
         """).fetchall()
     return [dict(r) for r in rows]
 

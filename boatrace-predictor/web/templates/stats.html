@@ -221,26 +221,12 @@ footer{
 <main>
 
 <!-- ── 連続外れアラート ── -->
-{% set ps = streaks.get('プチュン', 0) %}
-{% set ks = streaks.get('黒船熱', 0) %}
-{% set cs = streaks.get('中穴', 0) %}
+{% set okumas = streaks.get('大穴', 0) %}
 <div class="streak-box">
   <div class="streak-item">
-    <div class="streak-lbl">プチュン 連続外れ</div>
-    <div class="streak-num {% if ps >= 20 %}danger{% elif ps >= 10 %}warn{% else %}ok{% endif %}">
-      {{ ps }}<span class="streak-unit">連</span>
-    </div>
-  </div>
-  <div class="streak-item">
-    <div class="streak-lbl">黒船熱 連続外れ</div>
-    <div class="streak-num {% if ks >= 20 %}danger{% elif ks >= 10 %}warn{% else %}ok{% endif %}">
-      {{ ks }}<span class="streak-unit">連</span>
-    </div>
-  </div>
-  <div class="streak-item">
-    <div class="streak-lbl">中穴 連続外れ</div>
-    <div class="streak-num {% if cs >= 20 %}danger{% elif cs >= 10 %}warn{% else %}ok{% endif %}">
-      {{ cs }}<span class="streak-unit">連</span>
+    <div class="streak-lbl">大穴 連続外れ</div>
+    <div class="streak-num {% if okumas >= 20 %}danger{% elif okumas >= 10 %}warn{% else %}ok{% endif %}">
+      {{ okumas }}<span class="streak-unit">連</span>
     </div>
   </div>
 </div>
@@ -329,7 +315,7 @@ footer{
       {% set hr = (h / rc * 100) if rc > 0 else 0 %}
       {% set sk = all_streaks.label.get(lbl, 0) %}
       <tr>
-        <td class="{% if lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% elif lbl == '中穴' %}label-chuana{% else %}label-skip{% endif %}">{{ lbl }}</td>
+        <td class="{% if lbl == '大穴' %}label-chuana{% elif lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% elif lbl == '中穴' %}label-chuana{% else %}label-skip{% endif %}">{{ lbl }}</td>
         <td>{{ s.total }}</td>
         <td>{{ rc }}</td>
         <td>{{ h }}</td>
@@ -378,7 +364,7 @@ footer{
       {% set hhr = (hh / rc * 100) if rc > 0 else 0 %}
       {% set chr = (ch / rc * 100) if rc > 0 else 0 %}
       <tr>
-        <td class="{% if lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% elif lbl == '中穴' %}label-chuana{% else %}label-skip{% endif %}">{{ lbl }}</td>
+        <td class="{% if lbl == '大穴' %}label-chuana{% elif lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% elif lbl == '中穴' %}label-chuana{% else %}label-skip{% endif %}">{{ lbl }}</td>
         <td>{{ rc }}</td>
         <td class="{% if hh > 0 %}roi-good{% endif %}">{{ hh }}</td>
         <td class="{% if hhr >= 30 %}roi-good{% elif hhr >= 15 %}roi-neutral{% else %}roi-bad{% endif %}">
@@ -398,6 +384,68 @@ footer{
       </tr>
     {% else %}
       <tr><td colspan="7" style="text-align:center;color:var(--dim);padding:20px;">データなし</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- ── 大穴シグナル数別集計 ── -->
+<div class="section">
+  <h2>大穴シグナル数別集計（参戦判断基準の検証）</h2>
+  <p style="font-size:12px;color:var(--dim2);margin:-8px 0 12px;">シグナル: ①1号M低 ②展示最遅 ③外艇A1 ④荒れ会場 / 超人気集中（1号≤4倍）は除外対象</p>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>シグナル数</th>
+        <th>予想数</th>
+        <th>結果済</th>
+        <th>実大穴率</th>
+        <th>実大穴数</th>
+        <th>的中数</th>
+        <th>的中率</th>
+        <th>払戻合計</th>
+        <th>コスト</th>
+        <th>収支</th>
+        <th>参戦判断</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for s in signal_stats %}
+      {% set sig = s.sig %}
+      {% set rc = s.result_count or 0 %}
+      {% set h = s.hits or 0 %}
+      {% set pay = s.total_payout or 0 %}
+      {% set c = (s.result_combos or 0) * 100 %}
+      {% set okuma_r = s.okuma_actual_count or 0 %}
+      {% set okuma_rate = (okuma_r / rc * 100) if rc > 0 else 0 %}
+      {% set hr = (h / rc * 100) if rc > 0 else 0 %}
+      {% set pnl = pay - c %}
+      <tr>
+        <td style="font-weight:700;font-size:16px;
+          {% if sig >= 2 %}color:#40c8e0{% else %}color:var(--dim){% endif %}">
+          {{ sig }}/4
+        </td>
+        <td>{{ s.race_count }}</td>
+        <td>{{ rc }}</td>
+        <td class="{% if okuma_rate >= 25 %}roi-good{% elif okuma_rate >= 15 %}roi-neutral{% else %}roi-bad{% endif %}">
+          {{ "%.1f" % okuma_rate }}%
+        </td>
+        <td>{{ okuma_r }}</td>
+        <td>{{ h }}</td>
+        <td class="{% if hr >= 5 %}roi-good{% elif hr >= 2 %}roi-neutral{% else %}roi-bad{% endif %}">
+          {{ "%.1f" % hr }}%
+        </td>
+        <td>¥{{ "{:,}".format(pay) }}</td>
+        <td>¥{{ "{:,}".format(c) }}</td>
+        <td class="{% if pnl >= 0 %}roi-good{% else %}roi-bad{% endif %}">
+          {% if pnl >= 0 %}+{% endif %}¥{{ "{:,}".format(pnl) }}
+        </td>
+        <td>{% if sig >= 2 %}<span class="label-chuana">参戦</span>{% else %}<span class="label-skip">見送り</span>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="11" style="text-align:center;color:var(--dim);padding:20px;">データなし</td></tr>
     {% endfor %}
     </tbody>
   </table>
