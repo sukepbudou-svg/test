@@ -557,20 +557,14 @@ footer{
   <span>⟳ 予想追加時に自動更新</span>
 </div>
 
-{% set ns = namespace(skip=0, koku=0, puchu=0, chuana=0, hit_puchu=0, hit_koku=0, hit_chuana=0, hit_skip=0) %}
+{% set ns = namespace(skip=0, okuma=0, hit_okuma=0, hit_skip=0) %}
 {% for race in race_list %}
   {% set lbl = race.bets[0].bet_label if race.bets else '見送り' %}
   {% set hit = namespace(found=false) %}
   {% for b in race.bets %}{% if b.is_hit %}{% set hit.found = true %}{% endif %}{% endfor %}
-  {% if lbl == 'プチュン' %}
-    {% set ns.puchu = ns.puchu + 1 %}
-    {% if hit.found %}{% set ns.hit_puchu = ns.hit_puchu + 1 %}{% endif %}
-  {% elif lbl == '黒船熱' %}
-    {% set ns.koku = ns.koku + 1 %}
-    {% if hit.found %}{% set ns.hit_koku = ns.hit_koku + 1 %}{% endif %}
-  {% elif lbl == '中穴' %}
-    {% set ns.chuana = ns.chuana + 1 %}
-    {% if hit.found %}{% set ns.hit_chuana = ns.hit_chuana + 1 %}{% endif %}
+  {% if lbl == '大穴' %}
+    {% set ns.okuma = ns.okuma + 1 %}
+    {% if hit.found %}{% set ns.hit_okuma = ns.hit_okuma + 1 %}{% endif %}
   {% else %}
     {% set ns.skip = ns.skip + 1 %}
     {% if hit.found %}{% set ns.hit_skip = ns.hit_skip + 1 %}{% endif %}
@@ -581,22 +575,10 @@ footer{
   <div class="activity-log" id="activity-log"></div>
   <div class="today-counts">
     <div class="tc-row">
-      <span class="tc-label lbl-puchun">プチュン</span>
-      <span class="tc-num lbl-puchun">{{ ns.puchu }}</span>
+      <span class="tc-label lbl-chuana">大穴</span>
+      <span class="tc-num lbl-chuana">{{ ns.okuma }}</span>
       <span class="tc-sep">|</span>
-      <span class="tc-hit {% if ns.hit_puchu > 0 %}has-hit{% endif %}">◎ {{ ns.hit_puchu }}</span>
-    </div>
-    <div class="tc-row">
-      <span class="tc-label lbl-kokusen">黒船熱</span>
-      <span class="tc-num lbl-kokusen">{{ ns.koku }}</span>
-      <span class="tc-sep">|</span>
-      <span class="tc-hit {% if ns.hit_koku > 0 %}has-hit{% endif %}">◎ {{ ns.hit_koku }}</span>
-    </div>
-    <div class="tc-row">
-      <span class="tc-label lbl-chuana">中穴</span>
-      <span class="tc-num lbl-chuana">{{ ns.chuana }}</span>
-      <span class="tc-sep">|</span>
-      <span class="tc-hit {% if ns.hit_chuana > 0 %}has-hit{% endif %}">◎ {{ ns.hit_chuana }}</span>
+      <span class="tc-hit {% if ns.hit_okuma > 0 %}has-hit{% endif %}">◎ {{ ns.hit_okuma }}</span>
     </div>
     <div class="tc-row">
       <span class="tc-label lbl-skip">見送り</span>
@@ -614,11 +596,9 @@ footer{
         {% set vlbl = namespace(top='見送り') %}
         {% for race in venue.races %}
           {% set rl = race.bets[0].bet_label if race.bets else '見送り' %}
-          {% if rl == 'プチュン' %}{% set vlbl.top = 'プチュン' %}
-          {% elif rl == '黒船熱' and vlbl.top != 'プチュン' %}{% set vlbl.top = '黒船熱' %}
-          {% elif rl == '中穴' and vlbl.top not in ('プチュン','黒船熱') %}{% set vlbl.top = '中穴' %}{% endif %}
+          {% if rl == '大穴' and vlbl.top == '見送り' %}{% set vlbl.top = '大穴' %}{% endif %}
         {% endfor %}
-        <span class="vjl-tag vjl-{{ 'puchun' if vlbl.top == 'プチュン' else ('kokusen' if vlbl.top == '黒船熱' else ('chuana' if vlbl.top == '中穴' else 'skip')) }}"
+        <span class="vjl-tag vjl-{{ 'chuana' if vlbl.top == '大穴' else 'skip' }}"
               onclick="scrollToVenue('{{ venue.venue_name }}')">{{ venue.venue_name }}</span>
       {% endfor %}
     </div>
@@ -639,11 +619,7 @@ footer{
     {% for race in venue.races %}
       {% set lbl = race.bets[0].bet_label if race.bets else '見送り' %}
       {% set pt = race.arare_score %}
-      {% if lbl == 'プチュン' %}
-        {% set pt_cls = "pt-puchun" %}{% set c_cls = "combo-puchun" %}{% set rank_cls = "rank-puchun" %}
-      {% elif lbl == '黒船熱' %}
-        {% set pt_cls = "pt-kokusen" %}{% set c_cls = "combo-kokusen" %}{% set rank_cls = "rank-kokusen" %}
-      {% elif lbl == '中穴' %}
+      {% if lbl == '大穴' %}
         {% set pt_cls = "pt-chuana" %}{% set c_cls = "combo-chuana" %}{% set rank_cls = "rank-chuana" %}
       {% else %}
         {% set pt_cls = "pt-skip" %}{% set c_cls = "combo-skip" %}{% set rank_cls = "rank-skip" %}
@@ -658,8 +634,8 @@ footer{
         <span class="pt-badge {{ pt_cls }}">PT{{ pt }} {{ lbl }}</span>
       </div>
 
-      {% if race.arare_reasons and pt >= 7 %}
-      <div class="arare-info"><b>荒れ:</b> {{ race.arare_reasons }}</div>
+      {% if race.arare_reasons and lbl == '大穴' %}
+      <div class="arare-info"><b>シグナル:</b> {{ race.arare_reasons }}</div>
       {% endif %}
 
       {% set res = namespace(found=none, hit_pay=0) %}
@@ -725,9 +701,7 @@ footer{
   function rowKey(r){ return r.venue_name + '_' + r.race_no; }
 
   function labelClass(lbl){
-    if(lbl==='プチュン') return 'lbl-puchun';
-    if(lbl==='黒船熱')  return 'lbl-kokusen';
-    if(lbl==='中穴')    return 'lbl-chuana';
+    if(lbl==='大穴') return 'lbl-chuana';
     return 'lbl-skip';
   }
 
