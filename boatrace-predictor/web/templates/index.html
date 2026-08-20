@@ -148,6 +148,7 @@ nav a.active{
 .act-pt.lbl-puchun{background:rgba(217,50,50,0.2);color:#ff6b6b;}
 .act-pt.lbl-kokusen{background:rgba(217,124,40,0.2);color:#ffaa55;}
 .act-pt.lbl-chuana{background:rgba(64,200,224,0.15);color:#40c8e0;}
+.act-pt.lbl-shinnetsu{background:rgba(255,200,0,0.18);color:#ffcc00;}
 .act-pt.lbl-skip{background:rgba(80,90,120,0.2);color:#667;}
 .act-check{
   width:20px;height:20px;border-radius:50%;
@@ -201,6 +202,7 @@ nav a.active{
 .tc-label.lbl-puchun{color:#ff6b6b;}
 .tc-label.lbl-kokusen{color:#ffaa55;}
 .tc-label.lbl-chuana{color:#40c8e0;}
+.tc-label.lbl-shinnetsu{color:#ffcc00;}
 .tc-label.lbl-skip{color:#556;}
 .tc-num{
   font-size:20px;font-weight:700;
@@ -209,6 +211,7 @@ nav a.active{
 .tc-num.lbl-puchun{color:#ff6b6b;text-shadow:0 0 10px rgba(255,107,107,0.5);}
 .tc-num.lbl-kokusen{color:#ffaa55;text-shadow:0 0 10px rgba(255,170,85,0.5);}
 .tc-num.lbl-chuana{color:#40c8e0;text-shadow:0 0 10px rgba(64,200,224,0.5);}
+.tc-num.lbl-shinnetsu{color:#ffcc00;text-shadow:0 0 10px rgba(255,204,0,0.6);}
 .tc-num.lbl-skip{color:#334;}
 .tc-sep{color:rgba(255,255,255,0.12);font-size:13px;flex-shrink:0;}
 .tc-hit{
@@ -264,6 +267,12 @@ nav a.active{
   border-color:rgba(64,200,224,0.2);
 }
 .vjl-chuana:hover{background:rgba(64,200,224,0.2);border-color:rgba(64,200,224,0.5);}
+.vjl-shinnetsu{
+  color:#ffcc00;
+  background:rgba(255,204,0,0.08);
+  border-color:rgba(255,204,0,0.25);
+}
+.vjl-shinnetsu:hover{background:rgba(255,204,0,0.2);border-color:rgba(255,204,0,0.6);}
 .vjl-skip{
   color:var(--dim2);
   background:rgba(255,255,255,0.03);
@@ -345,6 +354,9 @@ nav a.active{
   border-left:3px solid rgba(255,140,0,0.5);
   box-shadow:inset 2px 0 10px rgba(255,140,0,0.04);
 }
+.race-mini.rank-shinnetsu{
+  border-left:3px solid rgba(255,204,0,0.5);
+}
 .race-mini.rank-skip{
   border-left:3px solid rgba(90,100,128,0.2);
   opacity:0.72;
@@ -404,6 +416,11 @@ nav a.active{
   border:1px solid rgba(64,200,224,0.3);
   text-shadow:0 0 6px rgba(64,200,224,0.5);
 }
+.pt-shinnetsu{
+  background:rgba(255,204,0,0.12);color:#ffcc00;
+  border:1px solid rgba(255,204,0,0.35);
+  text-shadow:0 0 6px rgba(255,204,0,0.6);
+}
 .pt-skip{
   background:rgba(90,100,128,0.1);color:var(--dim2);
   border:1px solid rgba(90,100,128,0.18);
@@ -436,6 +453,10 @@ nav a.active{
 .combo-chuana{
   color:#40c8e0;
   text-shadow:0 0 8px #40c8e0,0 0 16px rgba(64,200,224,0.4);
+}
+.combo-shinnetsu{
+  color:#ffcc00;
+  text-shadow:0 0 8px #ffcc00,0 0 18px rgba(255,204,0,0.5);
 }
 .combo-skip{color:var(--dim2)}
 
@@ -562,7 +583,7 @@ footer{
   {% set lbl = race.bets[0].bet_label if race.bets else '見送り' %}
   {% set hit = namespace(found=false) %}
   {% for b in race.bets %}{% if b.is_hit %}{% set hit.found = true %}{% endif %}{% endfor %}
-  {% if lbl == '大穴' %}
+  {% if lbl == '神熱' %}
     {% set ns.okuma = ns.okuma + 1 %}
     {% if hit.found %}{% set ns.hit_okuma = ns.hit_okuma + 1 %}{% endif %}
   {% else %}
@@ -575,8 +596,8 @@ footer{
   <div class="activity-log" id="activity-log"></div>
   <div class="today-counts">
     <div class="tc-row">
-      <span class="tc-label lbl-chuana">大穴</span>
-      <span class="tc-num lbl-chuana">{{ ns.okuma }}</span>
+      <span class="tc-label lbl-shinnetsu">神熱</span>
+      <span class="tc-num lbl-shinnetsu">{{ ns.okuma }}</span>
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if ns.hit_okuma > 0 %}has-hit{% endif %}">◎ {{ ns.hit_okuma }}</span>
     </div>
@@ -596,9 +617,9 @@ footer{
         {% set vlbl = namespace(top='見送り') %}
         {% for race in venue.races %}
           {% set rl = race.bets[0].bet_label if race.bets else '見送り' %}
-          {% if rl == '大穴' and vlbl.top == '見送り' %}{% set vlbl.top = '大穴' %}{% endif %}
+          {% if rl == '神熱' and vlbl.top == '見送り' %}{% set vlbl.top = '神熱' %}{% endif %}
         {% endfor %}
-        <span class="vjl-tag vjl-{{ 'chuana' if vlbl.top == '大穴' else 'skip' }}"
+        <span class="vjl-tag vjl-{{ 'shinnetsu' if vlbl.top == '神熱' else 'skip' }}"
               onclick="scrollToVenue('{{ venue.venue_name }}')">{{ venue.venue_name }}</span>
       {% endfor %}
     </div>
@@ -619,8 +640,8 @@ footer{
     {% for race in venue.races %}
       {% set lbl = race.bets[0].bet_label if race.bets else '見送り' %}
       {% set pt = race.arare_score %}
-      {% if lbl == '大穴' %}
-        {% set pt_cls = "pt-chuana" %}{% set c_cls = "combo-chuana" %}{% set rank_cls = "rank-chuana" %}
+      {% if lbl == '神熱' %}
+        {% set pt_cls = "pt-shinnetsu" %}{% set c_cls = "combo-shinnetsu" %}{% set rank_cls = "rank-shinnetsu" %}
       {% else %}
         {% set pt_cls = "pt-skip" %}{% set c_cls = "combo-skip" %}{% set rank_cls = "rank-skip" %}
       {% endif %}
@@ -634,7 +655,7 @@ footer{
         <span class="pt-badge {{ pt_cls }}">PT{{ pt }} {{ lbl }}</span>
       </div>
 
-      {% if race.arare_reasons and lbl == '大穴' %}
+      {% if race.arare_reasons and lbl == '神熱' %}
       <div class="arare-info"><b>シグナル:</b> {{ race.arare_reasons }}</div>
       {% endif %}
 
@@ -701,7 +722,7 @@ footer{
   function rowKey(r){ return r.venue_name + '_' + r.race_no; }
 
   function labelClass(lbl){
-    if(lbl==='大穴') return 'lbl-chuana';
+    if(lbl==='神熱') return 'lbl-shinnetsu';
     return 'lbl-skip';
   }
 

@@ -1110,8 +1110,8 @@ def get_recommendations(
         _super_conc = "超人気集中" in _sig_text
 
         if _sig_count >= 2 and not _super_conc:
-            _okuma_label = "大穴"
-            _label_color = _C_CYAN
+            _okuma_label = "神熱"
+            _label_color = _C_YELLOW
         else:
             _okuma_label = "見送り"
             _label_color = ""
@@ -1165,8 +1165,8 @@ def get_recommendations(
                 sc += (bn_maku + bn_st + bn_et) * wt
             return sc
 
-        if _okuma_label == "大穴" and not _valid.empty:
-            print(f"  {_C_GREEN}[大穴参戦]{_C_RESET} PT={arare_score} シグナル={_sig_count}/4 → 80倍超・波乱スコア上位2点")
+        if _okuma_label == "神熱" and not _valid.empty:
+            print(f"  {_C_GREEN}[神熱参戦]{_C_RESET} PT={arare_score} シグナル={_sig_count}/4 → 80倍超・波乱スコア上位2点")
             _t2_cand = _valid[_valid["odds_value"] > 80.0].copy()
             if not _t2_cand.empty:
                 _t2_cand["t2_score"] = _t2_cand.apply(
@@ -1178,7 +1178,7 @@ def get_recommendations(
                 for _, row in _t2_cand.head(2).iterrows():
                     r = row.copy()
                     r["ev"] = float(r["prob"]) * float(r["odds_value"])
-                    _add_rec(r, "大穴", label_override=_okuma_label)
+                    _add_rec(r, "神熱", label_override=_okuma_label)
             else:
                 print(f"  [80倍超なし] {venue_name_log} {race_no}R → 見送り")
         else:
@@ -1196,7 +1196,7 @@ def get_recommendations(
                     for _, row in _dc_cand.head(2).iterrows():
                         r = row.copy()
                         r["ev"] = float(r["prob"]) * float(r["odds_value"])
-                        _add_rec(r, "大穴", label_override="見送り")
+                        _add_rec(r, "神熱", label_override="見送り")
 
     result_df = pd.DataFrame(all_recommendations)
     if not result_df.empty:
