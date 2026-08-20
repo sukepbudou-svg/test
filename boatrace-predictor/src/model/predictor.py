@@ -1144,7 +1144,7 @@ def get_recommendations(
                 "boat1_risk":    _calc_boat1_risk(race_row),
             })
 
-        outer_h = [b for b in [2, 3, 4, 5, 6] if b in available_kuma]
+        outer_h = [b for b in [1, 2, 3, 4, 5, 6] if b in available_kuma]
 
         if not _valid.empty and outer_h:
             et_sorted_h = sorted(et_vals_k.values()) if et_vals_k else []
