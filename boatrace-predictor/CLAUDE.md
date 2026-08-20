@@ -17,12 +17,13 @@ boatrace-predictorプロジェクトの続きをお願いします。
 ```
 
 ## Claudeへの運用ルール
-- コード変更後に `git pull` を案内するときは、必ずその後に以下も伝えること：
+- **git pull が必要なとき・その日最初の起動時は、必ず以下の3行をセットで提示すること（省略厳禁）：**
   ```
+  cd C:\Users\user\Desktop\test\boatrace-predictor
+  git pull
   python main.py --mode auto
   ```
-  を貼って予想を再スタートさせてください。
-- ブラウザで `http://localhost:5001` を開くよう案内してください。
+- その後必ず `http://localhost:5001` をブラウザで開くよう案内すること。
 
 ## 実行コマンド（Windows）
 ```
