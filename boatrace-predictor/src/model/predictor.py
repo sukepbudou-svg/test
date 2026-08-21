@@ -1165,20 +1165,26 @@ def get_recommendations(
                 sc += (bn_maku + bn_st + bn_et) * wt
             return sc
 
+        def _pick_by_ev(cand_df, label_override, n_each=2):
+            """1号艇頭EV上位n点 + 2〜5号艇頭EV上位n点を選出してDBに登録"""
+            cand = cand_df.copy()
+            cand["ev_score"] = cand["prob"].astype(float) * cand["odds_value"].astype(float)
+            g1 = cand[cand["boat1"].astype(int) == 1].sort_values("ev_score", ascending=False)
+            g2 = cand[(cand["boat1"].astype(int) >= 2) & (cand["boat1"].astype(int) <= 5)].sort_values("ev_score", ascending=False)
+            g1_picks = list(g1.head(n_each).iterrows())
+            g2_picks = list(g2.head(n_each).iterrows())
+            print(f"  [1号艇頭EV上位] {[(int(r['boat1']),int(r['boat2']),int(r['boat3']),round(r['ev_score'],1)) for _,r in g1_picks]}")
+            print(f"  [他艇頭EV上位] {[(int(r['boat1']),int(r['boat2']),int(r['boat3']),round(r['ev_score'],1)) for _,r in g2_picks]}")
+            for _, row in g1_picks + g2_picks:
+                r = row.copy()
+                r["ev"] = float(r["ev_score"])
+                _add_rec(r, "神熱", label_override=label_override)
+
         if _okuma_label == "神熱" and not _valid.empty:
-            print(f"  {_C_GREEN}[神熱参戦]{_C_RESET} PT={arare_score} シグナル={_sig_count}/4 → 80倍超・波乱スコア上位4点")
+            print(f"  {_C_GREEN}[神熱参戦]{_C_RESET} PT={arare_score} シグナル={_sig_count}/4 → 80倍超・1号艇頭EV上位2点＋他艇頭EV上位2点")
             _t2_cand = _valid[_valid["odds_value"] > 80.0].copy()
             if not _t2_cand.empty:
-                _t2_cand["t2_score"] = _t2_cand.apply(
-                    lambda row: _hairan_t2_score(int(row["boat1"]), int(row["boat2"]), int(row["boat3"])), axis=1
-                )
-                _t2_cand = _t2_cand.sort_values("t2_score", ascending=False).reset_index(drop=True)
-                print(f"  [大穴候補] 波乱上位4: "
-                      f"{list(zip(_t2_cand['boat1'].astype(int), _t2_cand['boat2'].astype(int), _t2_cand['boat3'].astype(int), _t2_cand['t2_score'].round(3)))[:4]}")
-                for _, row in _t2_cand.head(4).iterrows():
-                    r = row.copy()
-                    r["ev"] = float(r["prob"]) * float(r["odds_value"])
-                    _add_rec(r, "神熱", label_override=_okuma_label)
+                _pick_by_ev(_t2_cand, _okuma_label)
             else:
                 print(f"  [80倍超なし] {venue_name_log} {race_no}R → 見送り")
         else:
@@ -1189,14 +1195,7 @@ def get_recommendations(
             if not _valid.empty:
                 _dc_cand = _valid[_valid["odds_value"] > 80.0].copy()
                 if not _dc_cand.empty:
-                    _dc_cand["t2_score"] = _dc_cand.apply(
-                        lambda row: _hairan_t2_score(int(row["boat1"]), int(row["boat2"]), int(row["boat3"])), axis=1
-                    )
-                    _dc_cand = _dc_cand.sort_values("t2_score", ascending=False).reset_index(drop=True)
-                    for _, row in _dc_cand.head(4).iterrows():
-                        r = row.copy()
-                        r["ev"] = float(r["prob"]) * float(r["odds_value"])
-                        _add_rec(r, "神熱", label_override="見送り")
+                    _pick_by_ev(_dc_cand, "見送り")
 
     result_df = pd.DataFrame(all_recommendations)
     if not result_df.empty:
