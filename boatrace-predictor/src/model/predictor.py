@@ -1270,36 +1270,53 @@ def get_recommendations(
 
             print(f"  [3連単候補] 1着={top1},{top2} 2着={second_cand} 3着={third_cand} 脅威艇={threat_boats}")
 
-            seen_3ren = set()
-            for first_boat in [top1, top2]:
-                if first_boat == 6:
-                    continue  # 6号艇1着は除外
-                key = (first_boat, second_cand, third_cand)
+            def _try_add_3ren(f, s, t):
+                """3連単1点追加試行（6号艇1着除外・250倍上限・重複チェック込み）"""
+                if f == 6 or len({f, s, t}) < 3:
+                    return False
+                key = (f, s, t)
                 if key in seen_3ren:
-                    continue
+                    return False
                 seen_3ren.add(key)
                 m = _valid[
-                    (_valid["boat1"].astype(int) == first_boat) &
-                    (_valid["boat2"].astype(int) == second_cand) &
-                    (_valid["boat3"].astype(int) == third_cand) &
+                    (_valid["boat1"].astype(int) == f) &
+                    (_valid["boat2"].astype(int) == s) &
+                    (_valid["boat3"].astype(int) == t) &
                     (_valid["odds_value"] <= 250)
                 ]
                 if not m.empty:
                     r = m.iloc[0].copy()
                     r["ev"] = float(r["prob"]) * float(r["odds_value"])
                     _add_rec(r, "神熱", label_override=label_override, bet_type="3連単")
+                    return True
                 else:
-                    # オッズなし or 250倍超 → スキップ
                     full_m = _valid[
-                        (_valid["boat1"].astype(int) == first_boat) &
-                        (_valid["boat2"].astype(int) == second_cand) &
-                        (_valid["boat3"].astype(int) == third_cand)
+                        (_valid["boat1"].astype(int) == f) &
+                        (_valid["boat2"].astype(int) == s) &
+                        (_valid["boat3"].astype(int) == t)
                     ]
                     if not full_m.empty:
                         ov = float(full_m.iloc[0]["odds_value"])
-                        print(f"  [3連単] {first_boat}-{second_cand}-{third_cand} {ov:.0f}倍 > 250倍上限→スキップ")
+                        print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 > 250倍上限→スキップ")
                     else:
-                        print(f"  [3連単] {first_boat}-{second_cand}-{third_cand} オッズデータなし→スキップ")
+                        print(f"  [3連単] {f}-{s}-{t} オッズデータなし→スキップ")
+                    return False
+
+            seen_3ren = set()
+            # 基本2点: top1・top2 それぞれを1着に
+            for first_boat in [top1, top2]:
+                _try_add_3ren(first_boat, second_cand, third_cand)
+
+            # 3点目: 脅威艇が2艇以上 → top1 × 2番目の脅威艇を3着に
+            if len(threat_boats) >= 2:
+                alt_third = next(
+                    (b for b in threat_boats if b not in (top1, top2, second_cand, third_cand)),
+                    None
+                )
+                if alt_third is not None:
+                    added = _try_add_3ren(top1, second_cand, alt_third)
+                    if added:
+                        print(f"  [3連単3点目] 脅威艇2艇以上 → {top1}-{second_cand}-{alt_third}")
 
         if not _valid.empty:
             _lbl_disp = _okuma_label
