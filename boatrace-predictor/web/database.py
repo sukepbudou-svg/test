@@ -47,7 +47,8 @@ def init_db():
         """)
         # 既存DBへのマイグレーション
         for col in ["race_time TEXT", "race_grade TEXT", "okuma_signal_count INTEGER DEFAULT 0",
-                    "bet_type TEXT DEFAULT '3連単'"]:
+                    "bet_type TEXT DEFAULT '3連単'",
+                    "strategy_version TEXT"]:
             try:
                 conn.execute(f"ALTER TABLE predictions ADD COLUMN {col}")
             except Exception:
@@ -79,8 +80,9 @@ def save_prediction(rec: dict):
             INSERT INTO predictions
               (date, venue_name, race_no, race_time, race_grade, combination, odds, odds_value,
                arare_score, arare_reasons, bet_label, tier,
-               prob, expected_roi, nigerate_str, boat1_risk, okuma_signal_count, bet_type)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               prob, expected_roi, nigerate_str, boat1_risk, okuma_signal_count, bet_type,
+               strategy_version)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             date, venue, race_no,
             str(rec.get("race_time", "")),
@@ -96,12 +98,14 @@ def save_prediction(rec: dict):
             str(rec.get("boat1_risk", "")),
             int(rec.get("okuma_signal_count", 0) or 0),
             str(rec.get("bet_type", "3連単")),
+            "2",
         ))
 
 
 def update_result(date: str, venue_name: str, race_no: int,
-                  actual_combination: str, actual_payout: int):
-    """結果をDBに反映"""
+                  actual_combination: str, actual_payout: int,
+                  actual_payout_2ren: int = 0):
+    """結果をDBに反映（2連単と3連単で配当を別々に保存）"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute(
@@ -116,13 +120,15 @@ def update_result(date: str, venue_name: str, race_no: int,
                 # 2連単: actual_combination の先頭2艇と一致すれば的中
                 actual_prefix = "-".join(actual_combination.split("-")[:2]) if actual_combination else ""
                 is_hit = 1 if combo == actual_prefix else 0
+                pay = actual_payout_2ren  # 2連単の配当を別途保存
             else:
                 is_hit = 1 if combo == actual_combination else 0
+                pay = actual_payout  # 3連単の配当
             conn.execute("""
                 UPDATE predictions
                 SET actual_combination=?, actual_payout=?, is_hit=?, result_recorded_at=?
                 WHERE id=?
-            """, (actual_combination, actual_payout, is_hit, now, row["id"]))
+            """, (actual_combination, pay, is_hit, now, row["id"]))
 
 
 def get_recent_activity(date: str = None, limit: int = 5):
@@ -177,6 +183,7 @@ def get_pt_stats():
                     SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
                     COUNT(*) as combo_count
                 FROM predictions
+                WHERE strategy_version = '2'
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY arare_score
@@ -205,6 +212,7 @@ def get_label_stats():
                     SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
                     COUNT(*) as combo_count
                 FROM predictions
+                WHERE strategy_version = '2'
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY bet_label
@@ -240,6 +248,7 @@ def get_daily_summary():
                     SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
                     COUNT(*) as combo_count
                 FROM predictions
+                WHERE strategy_version = '2'
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY date
@@ -270,7 +279,7 @@ def get_venue_detail(venue_name: str):
                     SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
                     COUNT(*) as combo_count
                 FROM predictions
-                WHERE venue_name = ?
+                WHERE venue_name = ? AND strategy_version = '2'
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY arare_score
@@ -294,7 +303,7 @@ def get_venue_detail(venue_name: str):
                     SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
                     COUNT(*) as combo_count
                 FROM predictions
-                WHERE venue_name = ?
+                WHERE venue_name = ? AND strategy_version = '2'
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY race_grade
@@ -332,6 +341,7 @@ def get_venue_stats():
                     SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
                     COUNT(*) as combo_count
                 FROM predictions
+                WHERE strategy_version = '2'
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY venue_name
@@ -361,6 +371,7 @@ def get_grade_stats():
                     SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
                     COUNT(*) as combo_count
                 FROM predictions
+                WHERE strategy_version = '2'
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY race_grade
@@ -393,6 +404,7 @@ def get_hero_stats():
                               THEN 1 ELSE 0 END) as hero_correct,
                     MAX(is_hit) as is_hit_any
                 FROM predictions
+                WHERE strategy_version = '2'
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY bet_label
@@ -427,6 +439,7 @@ def get_pt_payout_stats():
                     MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
                     MAX(actual_payout) as actual_payout
                 FROM predictions
+                WHERE strategy_version = '2'
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY arare_score
@@ -455,7 +468,9 @@ def get_signal_stats():
                         CASE WHEN MAX(arare_reasons) LIKE '%展示最遅%'  THEN 1 ELSE 0 END +
                         CASE WHEN MAX(arare_reasons) LIKE '%A1選手%'    THEN 1 ELSE 0 END +
                         CASE WHEN MAX(arare_reasons) LIKE '%荒れ会場%'
-                               OR MAX(arare_reasons) LIKE '%江戸川%'    THEN 1 ELSE 0 END
+                               OR MAX(arare_reasons) LIKE '%江戸川%'    THEN 1 ELSE 0 END +
+                        CASE WHEN MAX(arare_reasons) LIKE '%前付け%'    THEN 1 ELSE 0 END +
+                        CASE WHEN MAX(arare_reasons) LIKE '%1号ST遅%'   THEN 1 ELSE 0 END
                     ) as sig,
                     MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
                     MAX(is_hit) as is_hit_any,
@@ -463,6 +478,7 @@ def get_signal_stats():
                     SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
                     COUNT(*) as combo_count
                 FROM predictions
+                WHERE strategy_version = '2'
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY sig
@@ -506,6 +522,7 @@ def get_all_streaks():
             FROM predictions
             WHERE result_recorded_at IS NOT NULL
               AND bet_label != '見送り'
+              AND strategy_version = '2'
             GROUP BY date, venue_name, race_no
             ORDER BY MAX(id) DESC
         """).fetchall()

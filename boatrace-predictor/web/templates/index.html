@@ -676,7 +676,8 @@ footer{
       <div class="arare-info"><b>シグナル:</b> {{ race.arare_reasons }}</div>
       {% endif %}
 
-      {% set res = namespace(found=none, hit_pay=0) %}
+      {% set res_3ren = namespace(found=none, payout=0) %}
+      {% set res_2ren = namespace(found=none, payout=0) %}
       {% for b in race.bets %}
       <div class="bet-row">
         {% if b.bet_type == '2連単' %}
@@ -687,8 +688,13 @@ footer{
         <span class="odds-val {% if b.odds_value >= 200 %}odds-hi{% endif %}">{{ b.odds }}</span>
         <span class="bet-result">
           {% if b.result_recorded_at %}
-            {% if res.found is none %}{% set res.found = b %}{% endif %}
-            {% if b.is_hit and b.actual_payout %}{% set res.hit_pay = b.actual_payout %}{% endif %}
+            {% if b.bet_type == '2連単' %}
+              {% if res_2ren.found is none %}{% set res_2ren.found = b %}{% endif %}
+              {% if b.is_hit %}{% set res_2ren.payout = b.actual_payout %}{% endif %}
+            {% else %}
+              {% if res_3ren.found is none %}{% set res_3ren.found = b %}{% endif %}
+              {% if b.is_hit %}{% set res_3ren.payout = b.actual_payout %}{% endif %}
+            {% endif %}
             {% if b.is_hit %}
               <span class="hit-badge hit-yes">◎ 的中</span>
             {% else %}
@@ -701,14 +707,25 @@ footer{
       </div>
       {% endfor %}
 
-      {% if res.found %}
+      {% set any_res = res_3ren.found or res_2ren.found %}
+      {% if any_res %}
       <div class="race-actual">
-        <span class="actual-label">実結果</span>
-        <span class="actual-combo">{{ res.found.actual_combination }}</span>
-        <span class="actual-pay {% if not res.hit_pay %}actual-pay-miss{% endif %}">
-          ¥{{ "{:,}".format(res.found.actual_payout) }}
+        <span class="actual-label">3連単</span>
+        <span class="actual-combo">{{ any_res.actual_combination }}</span>
+        <span class="actual-pay {% if not res_3ren.payout %}actual-pay-miss{% endif %}">
+          {% if res_3ren.payout %}¥{{ "{:,}".format(res_3ren.payout) }}{% else %}—{% endif %}
         </span>
       </div>
+      {% if res_2ren.found %}
+      {% set ac = any_res.actual_combination.split('-') %}
+      <div class="race-actual" style="margin-top:4px;border-color:rgba(0,200,255,0.25)">
+        <span class="actual-label" style="color:#00c8ff">2連単</span>
+        <span class="actual-combo" style="color:#00c8ff;font-size:13px">{{ ac[0] }}-{{ ac[1] }}</span>
+        <span class="actual-pay {% if not res_2ren.payout %}actual-pay-miss{% endif %}">
+          {% if res_2ren.payout %}¥{{ "{:,}".format(res_2ren.payout) }}{% else %}—{% endif %}
+        </span>
+      </div>
+      {% endif %}
       {% endif %}
     </div>
     {% endfor %}

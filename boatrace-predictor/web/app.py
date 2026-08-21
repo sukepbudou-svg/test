@@ -130,6 +130,7 @@ def create_app():
             int(data.get("race_no", 0)),
             data.get("actual_combination", ""),
             int(data.get("actual_payout", 0)),
+            int(data.get("actual_payout_2ren", 0)),
         )
         return jsonify({"ok": True})
 
