@@ -1,6 +1,6 @@
 """
 リアルタイムオッズ取得モジュール
-boatrace.jp PC版から3連単オッズをスクレイピングする
+boatrace.jp PC版から3連単・2連単オッズをスクレイピングする
 """
 
 import time
@@ -24,9 +24,21 @@ def _generate_trifecta_order() -> list[str]:
     return combos
 
 
+# 2連単の全30組み合わせ（b1=1〜6、b2=1〜6 b1以外を昇順）
+def _generate_exacta_order() -> list[str]:
+    combos = []
+    for b1 in range(1, 7):
+        for b2 in range(1, 7):
+            if b2 != b1:
+                combos.append(f"{b1}-{b2}")
+    return combos
+
+
 TRIFECTA_ORDER = _generate_trifecta_order()
+EXACTA_ORDER = _generate_exacta_order()
 
 ODDS_URL = "https://www.boatrace.jp/owpc/pc/race/odds3t"
+ODDS_2REN_URL = "https://www.boatrace.jp/owpc/pc/race/odds2tf"
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -96,6 +108,79 @@ def fetch_odds(date: datetime, venue_code: str, race_no: int, timeout: int = 10)
             pass
 
     return odds_dict
+
+
+def fetch_2ren_odds(date: datetime, venue_code: str, race_no: int, timeout: int = 10) -> dict[str, float]:
+    """
+    指定レースの2連単オッズを取得する
+
+    Returns:
+        {"1-2": 3.5, "1-3": 12.0, ...} の30通りdict。取得失敗時は空dict。
+    """
+    hd = date.strftime("%Y%m%d")
+    params = {"rno": race_no, "jcd": venue_code.zfill(2), "hd": hd}
+
+    for attempt in range(3):
+        try:
+            resp = requests.get(ODDS_2REN_URL, params=params, headers=HEADERS, timeout=timeout)
+            resp.raise_for_status()
+            break
+        except requests.RequestException as e:
+            if attempt < 2:
+                time.sleep(3)
+            else:
+                print(f"[WARN] 2連単オッズ取得失敗 {venue_code}-R{race_no}: {e}")
+                return {}
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    points = soup.select("td.oddsPoint")
+
+    if len(points) != 30:
+        # ページ構造差異: テーブル内のみで絞り込む
+        tables = soup.select(".table1")
+        for tbl in tables:
+            pts = tbl.select("td.oddsPoint")
+            if len(pts) == 30:
+                points = pts
+                break
+
+    if len(points) != 30:
+        print(f"[WARN] 2連単オッズ数が不正 {venue_code}-R{race_no}: {len(points)}件（期待値30）")
+        return {}
+
+    odds_dict: dict[str, float] = {}
+    for combo, td in zip(EXACTA_ORDER, points):
+        text = td.get_text(strip=True).replace(",", "")
+        try:
+            odds_dict[combo] = float(text)
+        except ValueError:
+            pass
+
+    return odds_dict
+
+
+def fetch_2ren_odds_for_races(
+    df_today,
+    date: datetime = None,
+    interval: float = 1.0,
+) -> dict[tuple, dict[str, float]]:
+    """本日の全レースの2連単オッズを取得する"""
+    if date is None:
+        date = datetime.now()
+
+    races = df_today[["venue_code", "race_no"]].drop_duplicates()
+    all_odds: dict[tuple, dict[str, float]] = {}
+
+    for _, row in races.iterrows():
+        venue_code = str(row["venue_code"]).zfill(2)
+        race_no = int(row["race_no"])
+        key = (venue_code, race_no)
+        odds = fetch_2ren_odds(date, venue_code, race_no)
+        if odds:
+            all_odds[key] = odds
+        time.sleep(interval)
+
+    return all_odds
 
 
 def fetch_odds_for_races(

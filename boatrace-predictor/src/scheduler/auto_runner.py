@@ -456,17 +456,21 @@ def _predict_one_race(
         print(f"  [WARN] 特徴量生成失敗: {venue_name} {race_no}R")
         return
 
-    # リアルタイムオッズ取得
-    from src.collector.odds import fetch_odds
+    # リアルタイムオッズ取得（3連単・2連単）
+    from src.collector.odds import fetch_odds, fetch_2ren_odds
     live_odds = fetch_odds(today, venue_code, race_no)
+    live_2ren = fetch_2ren_odds(today, venue_code, race_no)
+    if live_2ren:
+        print(f"  2連単オッズ: {len(live_2ren)}通り取得")
     all_live_odds = {(venue_code, race_no): live_odds} if live_odds else {}
+    all_2ren_live_odds = {(venue_code, race_no): live_2ren} if live_2ren else {}
     all_weather = {(venue_code, race_no): race_weather} if race_weather else {}
     all_absent = {(venue_code, race_no): absent_boats} if absent_boats else {}
 
     # 予想生成
     recs = get_recommendations(model, df_features, payout_lookup=payout_lookup,
                                all_live_odds=all_live_odds, all_weather=all_weather,
-                               all_absent=all_absent)
+                               all_absent=all_absent, all_2ren_live_odds=all_2ren_live_odds)
 
     # DB + Sheetsに書き込む＆メモリキャッシュ用にリストを作成
     pred_rows = []

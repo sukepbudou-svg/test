@@ -921,6 +921,7 @@ def get_recommendations(
     all_live_odds: dict = None,
     all_weather: dict = None,
     all_absent: dict = None,
+    all_2ren_live_odds: dict = None,
 ) -> pd.DataFrame:
     """
     本日の全レースから推奨買い目を選出する
@@ -941,6 +942,7 @@ def get_recommendations(
         live_odds = all_live_odds.get((venue_code, race_no)) if all_live_odds else None
         weather = all_weather.get((venue_code, race_no)) if all_weather else None
         absent_boats = all_absent.get((venue_code, race_no)) if all_absent else None
+        live_2ren_odds = all_2ren_live_odds.get((venue_code, race_no)) if all_2ren_live_odds else None
 
         # 1号艇逃げ推定率（J列表示用）
         nigerate_str = _calc_nigerate(race_row)
@@ -1154,7 +1156,7 @@ def get_recommendations(
             })
 
         def _add_rec_2ren(b1, b2, tier, label_override=None):
-            """2連単1点: 組み合わせ形式はX-Y (2艇)、確率は3連単合計で近似"""
+            """2連単1点: 実オッズがあれば使用、なければ3連単確率合計から推定"""
             combo = f"{b1}-{b2}"
             prob_sum = 0.0
             for b3 in range(1, 7):
@@ -1167,10 +1169,19 @@ def get_recommendations(
                 ]
                 if not m.empty:
                     prob_sum += float(m.iloc[0]["prob"])
-            odds_approx = round(1.0 / prob_sum) if prob_sum > 0.005 else 0
+            # 実オッズ優先（live_2ren_oddsはクロージャで参照）
+            if live_2ren_odds and combo in live_2ren_odds:
+                real_odds = live_2ren_odds[combo]
+                odds_str = f"{real_odds:.1f}倍"
+                odds_approx = real_odds
+                odds_src = "live"
+            else:
+                odds_approx = round(1.0 / prob_sum) if prob_sum > 0.005 else 0
+                odds_str = f"{odds_approx:.0f}倍(推定)"
+                odds_src = "2連単"
             bl = label_override if label_override is not None else _okuma_label
             _clr = _label_color if bl != "見送り" else ""
-            print(f"  [2連単] {venue_name_log} {race_no}R {combo} {odds_approx:.0f}倍(推定) {_clr}PT:{arare_score}={bl}{_C_RESET}")
+            print(f"  [2連単] {venue_name_log} {race_no}R {combo} {odds_str} {_clr}PT:{arare_score}={bl}{_C_RESET}")
             all_recommendations.append({
                 "date":          race_row.get("date", ""),
                 "venue_name":    race_row.get("venue_name", ""),
@@ -1178,10 +1189,10 @@ def get_recommendations(
                 "race_grade":    race_row.get("meet_grade", ""),
                 "combination":   combo,
                 "prob":          f"{prob_sum:.4f}",
-                "odds":          f"{odds_approx:.0f}倍(推定)",
+                "odds":          odds_str,
                 "expected_roi":  f"{prob_sum * odds_approx:.2f}",
                 "confidence":    tier,
-                "odds_source":   "2連単",
+                "odds_source":   odds_src,
                 "nigerate_str":  nigerate_str,
                 "tier":          tier,
                 "bet_label":     bl,
@@ -1257,18 +1268,19 @@ def get_recommendations(
             if second_cand is None:
                 return
 
-            # 3着候補: 脅威艇（top1・top2・second_cand以外）、なければ強さ最下位
-            third_cand = next(
-                (b for b in threat_boats if b not in (top1, top2, second_cand)), None
-            )
-            if third_cand is None:
-                third_cand = next(
-                    (b for b in reversed(ranked) if b not in (top1, top2, second_cand)), None
-                )
-            if third_cand is None:
+            # 3着候補リスト: 脅威艇優先 → 強さ最下位順（top1・top2・second_cand除外）
+            all_third_cands = []
+            for b in threat_boats:
+                if b not in (top1, top2, second_cand) and b not in all_third_cands:
+                    all_third_cands.append(b)
+            for b in reversed(ranked):
+                if b not in (top1, top2, second_cand) and b not in all_third_cands:
+                    all_third_cands.append(b)
+
+            if not all_third_cands:
                 return
 
-            print(f"  [3連単候補] 1着={top1},{top2} 2着={second_cand} 3着={third_cand} 脅威艇={threat_boats}")
+            print(f"  [3連単候補] 1着={top1},{top2} 2着={second_cand} 3着候補={all_third_cands} 脅威艇={threat_boats}")
 
             def _try_add_3ren(f, s, t):
                 """3連単1点追加試行（6号艇1着除外・250倍上限・重複チェック込み）"""
@@ -1307,14 +1319,20 @@ def get_recommendations(
                     return False
 
             seen_3ren = set()
-            # 基本2点: top1・top2 それぞれを1着に
+            used_thirds = {}
+            # 基本2点: 各first_boatで3着候補を順に試して1点ずつ確保
             for first_boat in [top1, top2]:
-                _try_add_3ren(first_boat, second_cand, third_cand)
+                for tc in all_third_cands:
+                    if _try_add_3ren(first_boat, second_cand, tc):
+                        used_thirds[first_boat] = tc
+                        break
 
-            # 3点目: 脅威艇が2艇以上 → top1 × 2番目の脅威艇を3着に
+            # 3点目: 脅威艇が2艇以上 → まだ未使用の脅威艇を3着に
             if len(threat_boats) >= 2:
+                used_set = set(used_thirds.values())
                 alt_third = next(
-                    (b for b in threat_boats if b not in (top1, top2, second_cand, third_cand)),
+                    (b for b in threat_boats
+                     if b not in (top1, top2, second_cand) and b not in used_set),
                     None
                 )
                 if alt_third is not None:
