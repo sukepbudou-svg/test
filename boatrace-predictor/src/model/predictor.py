@@ -1213,13 +1213,14 @@ def get_recommendations(
             top1, top2 = ranked[0], ranked[1]
             print(f"  [強さランク] {ranked} スコア={[round(boat_scores[b], 3) for b in ranked]}")
 
-            # ── 2連単2点: 強さスコア上位2艇の両方向（top1-top2 / top2-top1）──
+            # ── 2連単2点: top1/top2を1着、second_cand(3位)を2着（3連単Pattern Bと整合）──
+            # 3連単が当たれば2連単も当たる構造にするため2着をsecond_candに統一
             # 6号艇1着のみ除外
-            print(f"  [2連単] 強さ1位={top1} 強さ2位={top2}")
+            print(f"  [2連単] 強さ1位={top1} 強さ2位={top2} 2着(3連単共通)={second_cand}")
             if top1 != 6:
-                _add_rec_2ren(top1, top2, "神熱", label_override)
+                _add_rec_2ren(top1, second_cand, "神熱", label_override)
             if top2 != 6:
-                _add_rec_2ren(top2, top1, "神熱", label_override)
+                _add_rec_2ren(top2, second_cand, "神熱", label_override)
 
             # ── 3連単: Pattern B ──
             # 脅威艇を特定（A1選手/前付け/ST速のある艇）
