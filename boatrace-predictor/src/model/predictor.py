@@ -1235,22 +1235,24 @@ def get_recommendations(
             if second_cand is None:
                 return
 
-            # 3着候補リスト: 脅威艇優先 → 強さ最下位順（top1・top2・second_cand除外）
+            # 3着候補リスト: 脅威艇優先 → 強さ最下位順（second_cand除外のみ）
             all_third_cands = []
             for b in threat_boats:
-                if b not in (top1, top2, second_cand) and b not in all_third_cands:
+                if b != second_cand and b not in all_third_cands:
                     all_third_cands.append(b)
             for b in reversed(ranked):
-                if b not in (top1, top2, second_cand) and b not in all_third_cands:
+                if b != second_cand and b not in all_third_cands:
                     all_third_cands.append(b)
 
             if not all_third_cands:
                 return
 
-            print(f"  [3連単候補] 1着={top1},{top2} 2着={second_cand} 3着候補={all_third_cands} 脅威艇={threat_boats}")
+            # 軸艇候補: 強さ順・6号艇1着除外・second_cand除外
+            axis_pool = [b for b in ranked if b != 6 and b != second_cand]
+            print(f"  [3連単候補] 軸候補={axis_pool} 2着={second_cand} 3着候補={all_third_cands} 脅威艇={threat_boats}")
 
             def _try_add_3ren(f, s, t):
-                """3連単1点追加試行（6号艇1着除外・250倍上限・重複チェック込み）"""
+                """3連単1点追加試行（6号艇1着除外・70〜250倍・重複チェック込み）"""
                 if f == 6 or len({f, s, t}) < 3:
                     return False
                 key = (f, s, t)
@@ -1261,7 +1263,7 @@ def get_recommendations(
                     (_valid["boat1"].astype(int) == f) &
                     (_valid["boat2"].astype(int) == s) &
                     (_valid["boat3"].astype(int) == t) &
-                    (_valid["odds_value"] >= 80) &
+                    (_valid["odds_value"] >= 70) &
                     (_valid["odds_value"] <= 250)
                 ]
                 if not m.empty:
@@ -1280,32 +1282,37 @@ def get_recommendations(
                         if ov > 250:
                             print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 > 250倍上限→スキップ")
                         else:
-                            print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 < 80倍下限→スキップ")
+                            print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 < 70倍下限→スキップ")
                     else:
                         print(f"  [3連単] {f}-{s}-{t} オッズデータなし→スキップ")
                     return False
 
             seen_3ren = set()
-            used_thirds = {}
-            # 基本2点: 各first_boatで3着候補を順に試して1点ずつ確保
-            for first_boat in [top1, top2]:
+            used_thirds_by_first = {}
+            # 軸艇を順に試して2点確保（上位が70-250倍になければ次点の軸艇へ）
+            for first_boat in axis_pool:
+                if len(used_thirds_by_first) >= 2:
+                    break
                 for tc in all_third_cands:
+                    if tc == first_boat:
+                        continue
                     if _try_add_3ren(first_boat, second_cand, tc):
-                        used_thirds[first_boat] = tc
+                        used_thirds_by_first[first_boat] = tc
                         break
 
-            # 3点目: 脅威艇が2艇以上 → まだ未使用の脅威艇を3着に
-            if len(threat_boats) >= 2:
-                used_set = set(used_thirds.values())
+            # 3点目: 脅威艇が2艇以上 → 最初の軸艇で未使用の脅威艇を3着に
+            if len(threat_boats) >= 2 and used_thirds_by_first:
+                first_axis = next(iter(used_thirds_by_first))
+                used_thirds_set = set(used_thirds_by_first.values())
                 alt_third = next(
                     (b for b in threat_boats
-                     if b not in (top1, top2, second_cand) and b not in used_set),
+                     if b not in (second_cand, first_axis) and b not in used_thirds_set),
                     None
                 )
                 if alt_third is not None:
-                    added = _try_add_3ren(top1, second_cand, alt_third)
+                    added = _try_add_3ren(first_axis, second_cand, alt_third)
                     if added:
-                        print(f"  [3連単3点目] 脅威艇2艇以上 → {top1}-{second_cand}-{alt_third}")
+                        print(f"  [3連単3点目] 脅威艇2艇以上 → {first_axis}-{second_cand}-{alt_third}")
 
         if not _valid.empty:
             _lbl_disp = _okuma_label
