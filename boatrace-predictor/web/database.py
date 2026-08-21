@@ -46,7 +46,8 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_pred_venue_race ON predictions(date, venue_name, race_no);
         """)
         # 既存DBへのマイグレーション
-        for col in ["race_time TEXT", "race_grade TEXT", "okuma_signal_count INTEGER DEFAULT 0"]:
+        for col in ["race_time TEXT", "race_grade TEXT", "okuma_signal_count INTEGER DEFAULT 0",
+                    "bet_type TEXT DEFAULT '3連単'"]:
             try:
                 conn.execute(f"ALTER TABLE predictions ADD COLUMN {col}")
             except Exception:
@@ -63,7 +64,7 @@ def save_prediction(rec: dict):
 
     odds_str = str(rec.get("odds", ""))
     try:
-        odds_val = float(odds_str.replace("倍", "").replace("(履歴)", "").strip())
+        odds_val = float(odds_str.replace("倍", "").replace("(履歴)", "").replace("(推定)", "").strip())
     except (ValueError, AttributeError):
         odds_val = 0.0
 
@@ -78,8 +79,8 @@ def save_prediction(rec: dict):
             INSERT INTO predictions
               (date, venue_name, race_no, race_time, race_grade, combination, odds, odds_value,
                arare_score, arare_reasons, bet_label, tier,
-               prob, expected_roi, nigerate_str, boat1_risk, okuma_signal_count)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               prob, expected_roi, nigerate_str, boat1_risk, okuma_signal_count, bet_type)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             date, venue, race_no,
             str(rec.get("race_time", "")),
@@ -94,6 +95,7 @@ def save_prediction(rec: dict):
             str(rec.get("nigerate_str", "")),
             str(rec.get("boat1_risk", "")),
             int(rec.get("okuma_signal_count", 0) or 0),
+            str(rec.get("bet_type", "3連単")),
         ))
 
 
@@ -108,7 +110,14 @@ def update_result(date: str, venue_name: str, race_no: int,
         ).fetchall()
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         for row in rows:
-            is_hit = 1 if row["combination"] == actual_combination else 0
+            combo = row["combination"]
+            parts = combo.split("-")
+            if len(parts) == 2:
+                # 2連単: actual_combination の先頭2艇と一致すれば的中
+                actual_prefix = "-".join(actual_combination.split("-")[:2]) if actual_combination else ""
+                is_hit = 1 if combo == actual_prefix else 0
+            else:
+                is_hit = 1 if combo == actual_combination else 0
             conn.execute("""
                 UPDATE predictions
                 SET actual_combination=?, actual_payout=?, is_hit=?, result_recorded_at=?

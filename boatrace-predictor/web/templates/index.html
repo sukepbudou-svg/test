@@ -493,6 +493,23 @@ nav a.active{
   font-family:var(--font-mono);font-size:9px;color:var(--dim);
 }
 
+/* 2連単バッジ */
+.bet-type-tag{
+  font-family:var(--font-mono);
+  font-size:9px;font-weight:700;letter-spacing:1px;
+  padding:1px 5px;border-radius:3px;
+  background:rgba(0,200,255,0.13);
+  color:#00c8ff;
+  border:1px solid rgba(0,200,255,0.3);
+  margin-left:4px;
+  vertical-align:middle;
+  flex-shrink:0;
+}
+.combo-2ren{
+  color:#00c8ff;
+  text-shadow:0 0 8px #00c8ff,0 0 18px rgba(0,200,255,0.4);
+}
+
 /* 払戻（的中時） */
 .payout-hi{
   font-family:var(--font-logo);font-size:12px;
@@ -662,7 +679,11 @@ footer{
       {% set res = namespace(found=none, hit_pay=0) %}
       {% for b in race.bets %}
       <div class="bet-row">
-        <span class="combo {{ c_cls }}">{{ b.combination }}</span>
+        {% if b.bet_type == '2連単' %}
+          <span class="combo combo-2ren">{{ b.combination }}<span class="bet-type-tag">2連</span></span>
+        {% else %}
+          <span class="combo {{ c_cls }}">{{ b.combination }}</span>
+        {% endif %}
         <span class="odds-val {% if b.odds_value >= 200 %}odds-hi{% endif %}">{{ b.odds }}</span>
         <span class="bet-result">
           {% if b.result_recorded_at %}

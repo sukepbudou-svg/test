@@ -4,6 +4,7 @@
 """
 
 import json
+import re
 from itertools import permutations
 from pathlib import Path
 
@@ -1120,7 +1121,7 @@ def get_recommendations(
         print(f"  {_label_color}[{_okuma_label}]{_C_RESET} 荒れPT={arare_score} シグナル={_sig_count}/6"
               + (" ⚠超人気集中除外" if _super_conc else ""))
 
-        def _add_rec(row, tier, label_override=None):
+        def _add_rec(row, tier, label_override=None, bet_type="3連単"):
             f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
             combo    = f"{f}-{s}-{t}"
             ev_val   = float(row.get("ev", float(row["prob"]) * float(row["odds_value"])))
@@ -1149,74 +1150,115 @@ def get_recommendations(
                 "arare_reasons":      " / ".join(arare_reasons),
                 "boat1_risk":         _calc_boat1_risk(race_row),
                 "okuma_signal_count": _sig_count,
+                "bet_type":           bet_type,
             })
 
-        # ── 全艇波乱スコア（大穴シグナル方式・hero固定なし） ──
-        _all_et_sorted = sorted(et_vals_k.keys(), key=lambda b: et_vals_k[b]) if et_vals_k else []
-        _all_n_et = len(_all_et_sorted)
+        def _add_rec_2ren(b1, b2, tier, label_override=None):
+            """2連単1点: 組み合わせ形式はX-Y (2艇)、確率は3連単合計で近似"""
+            combo = f"{b1}-{b2}"
+            prob_sum = 0.0
+            for b3 in range(1, 7):
+                if b3 in (b1, b2):
+                    continue
+                m = _valid[
+                    (_valid["boat1"].astype(int) == b1) &
+                    (_valid["boat2"].astype(int) == b2) &
+                    (_valid["boat3"].astype(int) == b3)
+                ]
+                if not m.empty:
+                    prob_sum += float(m.iloc[0]["prob"])
+            odds_approx = round(1.0 / prob_sum) if prob_sum > 0.005 else 0
+            bl = label_override if label_override is not None else _okuma_label
+            _clr = _label_color if bl != "見送り" else ""
+            print(f"  [2連単] {venue_name_log} {race_no}R {combo} {odds_approx:.0f}倍(推定) {_clr}PT:{arare_score}={bl}{_C_RESET}")
+            all_recommendations.append({
+                "date":          race_row.get("date", ""),
+                "venue_name":    race_row.get("venue_name", ""),
+                "race_no":       race_row.get("race_no", ""),
+                "race_grade":    race_row.get("meet_grade", ""),
+                "combination":   combo,
+                "prob":          f"{prob_sum:.4f}",
+                "odds":          f"{odds_approx:.0f}倍(推定)",
+                "expected_roi":  f"{prob_sum * odds_approx:.2f}",
+                "confidence":    tier,
+                "odds_source":   "2連単",
+                "nigerate_str":  nigerate_str,
+                "tier":          tier,
+                "bet_label":     bl,
+                "edge":          f"{prob_sum * odds_approx:.2f}",
+                "arare_score":        arare_score,
+                "arare_reasons":      " / ".join(arare_reasons),
+                "boat1_risk":         _calc_boat1_risk(race_row),
+                "okuma_signal_count": _sig_count,
+                "bet_type":           "2連単",
+            })
 
-        def _hairan_t2_score(b1, b2, b3):
-            """全艇波乱スコア: 1着(50%) + 2着(35%) + 3着(15%) × 攻撃性/ST/ET"""
-            sc = 0.0
-            for wt, bn in [(0.50, b1), (0.35, b2), (0.15, b3)]:
-                bn_maku = min(1.0, _get_aggression(bn) / 2.0) * 0.55
-                bn_st_raw = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-                bn_st = min(1.0, max(0.0, (0.20 - bn_st_raw) / 0.10)) * 0.30 if bn_st_raw and bn_st_raw > 0 else 0.0
-                bn_et_rank = _all_et_sorted.index(bn) if bn in _all_et_sorted and _all_n_et > 1 else _all_n_et - 1
-                bn_et = (1.0 - bn_et_rank / max(_all_n_et - 1, 1)) * 0.15
-                sc += (bn_maku + bn_st + bn_et) * wt
-            return sc
+        def _pick_strength_based(label_override):
+            """強さスコアベース選出: 2連単2点 + 3連単2点 (Pattern B)
+            1着=強さ上位2艇, 2着=3番目強さ, 3着=脅威艇(A1選手/前付け/ST速)or最下位
+            """
+            boat_scores = {bn: _first_cand_score(bn) for bn in range(1, 7)}
+            ranked = sorted(boat_scores.keys(), key=lambda b: boat_scores[b], reverse=True)
+            top1, top2 = ranked[0], ranked[1]
+            print(f"  [強さランク] {ranked} スコア={[round(boat_scores[b], 3) for b in ranked]}")
 
-        def _pick_ev_with_flip(cand_df, all_df, label_override, n_base=2):
-            """EV上位n点 + 各組み合わせの1-2着入れ替えを追加（計最大2n点）"""
-            cand = cand_df.copy()
-            cand["ev_score"] = cand["prob"].astype(float) * cand["odds_value"].astype(float)
-            # 6号艇1着は現実的でないため除外（2着以降はOK）
-            cand_filtered = cand[cand["boat1"].astype(int) != 6]
-            base_picks = list(cand_filtered.sort_values("ev_score", ascending=False).head(n_base).iterrows())
-            seen = set()
-            selected = []
-            for _, row in base_picks:
-                b1, b2, b3 = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
-                if (b1, b2, b3) not in seen:
-                    seen.add((b1, b2, b3))
-                    r = row.copy()
-                    r["ev"] = float(r["ev_score"])
-                    selected.append(r)
-                # 1-2着入れ替え（全組み合わせから倍率問わず取得）
-                flip_b1, flip_b2 = b2, b1
-                if (flip_b1, flip_b2, b3) not in seen:
-                    seen.add((flip_b1, flip_b2, b3))
-                    flip_rows = all_df[
-                        (all_df["boat1"].astype(int) == flip_b1) &
-                        (all_df["boat2"].astype(int) == flip_b2) &
-                        (all_df["boat3"].astype(int) == b3)
-                    ]
-                    if not flip_rows.empty:
-                        r_flip = flip_rows.iloc[0].copy()
-                        r_flip["ev"] = float(r_flip["prob"]) * float(r_flip["odds_value"])
-                        selected.append(r_flip)
-            print(f"  [EV上位＋flip計{len(selected)}点] "
-                  f"{[(int(r['boat1']),int(r['boat2']),int(r['boat3']),int(r['odds_value'])) for r in selected]}")
-            for r in selected:
-                _add_rec(r, "神熱", label_override=label_override)
+            # ── 2連単2点: top1-top2 と top2-top1 ──
+            _add_rec_2ren(top1, top2, "神熱", label_override)
+            _add_rec_2ren(top2, top1, "神熱", label_override)
 
-        if _okuma_label == "神熱" and not _valid.empty:
-            print(f"  {_C_GREEN}[神熱参戦]{_C_RESET} PT={arare_score} シグナル={_sig_count}/4 → 80倍超EV上位2点＋1-2着flip")
-            _t2_cand = _valid[_valid["odds_value"] > 80.0].copy()
-            if not _t2_cand.empty:
-                _pick_ev_with_flip(_t2_cand, _valid, _okuma_label)
-            else:
-                print(f"  [80倍超なし] {venue_name_log} {race_no}R → 見送り")
+            # ── 3連単: Pattern B ──
+            # 脅威艇を特定（A1選手/前付け/ST速のある艇）
+            _sig_joined = " ".join(arare_reasons)
+            threat_boats = []
+            for _tm in re.finditer(r'(\d+)号(?:A1選手|前付け|ST速)', _sig_joined):
+                _tbn = int(_tm.group(1))
+                if _tbn not in threat_boats:
+                    threat_boats.append(_tbn)
+
+            # 2着候補: top1・top2以外で強さ最上位
+            second_cand = next((b for b in ranked if b not in (top1, top2)), None)
+            if second_cand is None:
+                return
+
+            # 3着候補: 脅威艇（top1・top2・second_cand以外）、なければ強さ最下位
+            third_cand = next(
+                (b for b in threat_boats if b not in (top1, top2, second_cand)), None
+            )
+            if third_cand is None:
+                third_cand = next(
+                    (b for b in reversed(ranked) if b not in (top1, top2, second_cand)), None
+                )
+            if third_cand is None:
+                return
+
+            print(f"  [3連単候補] 1着={top1},{top2} 2着={second_cand} 3着={third_cand} 脅威艇={threat_boats}")
+
+            seen_3ren = set()
+            for first_boat in [top1, top2]:
+                key = (first_boat, second_cand, third_cand)
+                if key in seen_3ren:
+                    continue
+                seen_3ren.add(key)
+                m = _valid[
+                    (_valid["boat1"].astype(int) == first_boat) &
+                    (_valid["boat2"].astype(int) == second_cand) &
+                    (_valid["boat3"].astype(int) == third_cand)
+                ]
+                if not m.empty:
+                    r = m.iloc[0].copy()
+                    r["ev"] = float(r["prob"]) * float(r["odds_value"])
+                    _add_rec(r, "神熱", label_override=label_override, bet_type="3連単")
+                else:
+                    print(f"  [3連単] {first_boat}-{second_cand}-{third_cand} オッズデータなし→スキップ")
+
+        if not _valid.empty:
+            _lbl_disp = _okuma_label
+            _rsn_disp = (f"シグナル={_sig_count}/6 超人気集中除外" if _super_conc
+                         else f"シグナル={_sig_count}/6")
+            print(f"  {_label_color}[{_lbl_disp}]{_C_RESET} {_rsn_disp} → 強さスコアベース選出")
+            _pick_strength_based(_okuma_label)
         else:
-            _skip_rsn = (f"シグナル={_sig_count}/4 超人気集中除外" if _super_conc
-                         else f"シグナル={_sig_count}/4（2未満）PT={arare_score}")
-            print(f"  [見送り] {venue_name_log} {race_no}R {_skip_rsn}")
-            # データ収集: 80倍超の組み合わせを記録（見送り扱い）
-            if not _valid.empty:
-                _dc_cand = _valid[_valid["odds_value"] > 80.0].copy()
-                if not _dc_cand.empty:
-                    _pick_ev_with_flip(_dc_cand, _valid, "見送り")
+            print(f"  [スキップ] {venue_name_log} {race_no}R オッズデータなし")
 
     result_df = pd.DataFrame(all_recommendations)
     if not result_df.empty:
