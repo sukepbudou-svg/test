@@ -1202,9 +1202,11 @@ def get_recommendations(
             top1, top2 = ranked[0], ranked[1]
             print(f"  [強さランク] {ranked} スコア={[round(boat_scores[b], 3) for b in ranked]}")
 
-            # ── 2連単2点: EV上位（市場の1番人気除外）──
+            # ── 2連単2点: EV上位（市場の1番人気除外・6号艇1着除外）──
             _ren2 = {}
             for _rb1 in range(1, 7):
+                if _rb1 == 6:
+                    continue  # 6号艇1着は除外
                 for _rb2 in range(1, 7):
                     if _rb1 == _rb2:
                         continue
@@ -1270,6 +1272,8 @@ def get_recommendations(
 
             seen_3ren = set()
             for first_boat in [top1, top2]:
+                if first_boat == 6:
+                    continue  # 6号艇1着は除外
                 key = (first_boat, second_cand, third_cand)
                 if key in seen_3ren:
                     continue
@@ -1277,14 +1281,25 @@ def get_recommendations(
                 m = _valid[
                     (_valid["boat1"].astype(int) == first_boat) &
                     (_valid["boat2"].astype(int) == second_cand) &
-                    (_valid["boat3"].astype(int) == third_cand)
+                    (_valid["boat3"].astype(int) == third_cand) &
+                    (_valid["odds_value"] <= 250)
                 ]
                 if not m.empty:
                     r = m.iloc[0].copy()
                     r["ev"] = float(r["prob"]) * float(r["odds_value"])
                     _add_rec(r, "神熱", label_override=label_override, bet_type="3連単")
                 else:
-                    print(f"  [3連単] {first_boat}-{second_cand}-{third_cand} オッズデータなし→スキップ")
+                    # オッズなし or 250倍超 → スキップ
+                    full_m = _valid[
+                        (_valid["boat1"].astype(int) == first_boat) &
+                        (_valid["boat2"].astype(int) == second_cand) &
+                        (_valid["boat3"].astype(int) == third_cand)
+                    ]
+                    if not full_m.empty:
+                        ov = float(full_m.iloc[0]["odds_value"])
+                        print(f"  [3連単] {first_boat}-{second_cand}-{third_cand} {ov:.0f}倍 > 250倍上限→スキップ")
+                    else:
+                        print(f"  [3連単] {first_boat}-{second_cand}-{third_cand} オッズデータなし→スキップ")
 
         if not _valid.empty:
             _lbl_disp = _okuma_label
