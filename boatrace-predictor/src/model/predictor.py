@@ -1171,7 +1171,9 @@ def get_recommendations(
             """EV上位n点 + 各組み合わせの1-2着入れ替えを追加（計最大2n点）"""
             cand = cand_df.copy()
             cand["ev_score"] = cand["prob"].astype(float) * cand["odds_value"].astype(float)
-            base_picks = list(cand.sort_values("ev_score", ascending=False).head(n_base).iterrows())
+            # 6号艇1着は現実的でないため除外（2着以降はOK）
+            cand_filtered = cand[cand["boat1"].astype(int) != 6]
+            base_picks = list(cand_filtered.sort_values("ev_score", ascending=False).head(n_base).iterrows())
             seen = set()
             selected = []
             for _, row in base_picks:
