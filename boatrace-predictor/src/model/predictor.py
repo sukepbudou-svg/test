@@ -1106,6 +1106,8 @@ def get_recommendations(
             "展示最遅" in _sig_text,
             "A1選手" in _sig_text,
             ("荒れ会場" in _sig_text or "江戸川" in _sig_text),
+            "1号ST遅" in _sig_text,
+            "前付け" in _sig_text,
         ])
         _super_conc = "超人気集中" in _sig_text
 
@@ -1115,7 +1117,7 @@ def get_recommendations(
         else:
             _okuma_label = "見送り"
             _label_color = ""
-        print(f"  {_label_color}[{_okuma_label}]{_C_RESET} 荒れPT={arare_score} シグナル={_sig_count}/4"
+        print(f"  {_label_color}[{_okuma_label}]{_C_RESET} 荒れPT={arare_score} シグナル={_sig_count}/6"
               + (" ⚠超人気集中除外" if _super_conc else ""))
 
         def _add_rec(row, tier, label_override=None):
