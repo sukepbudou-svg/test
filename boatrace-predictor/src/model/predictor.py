@@ -1213,46 +1213,13 @@ def get_recommendations(
             top1, top2 = ranked[0], ranked[1]
             print(f"  [強さランク] {ranked} スコア={[round(boat_scores[b], 3) for b in ranked]}")
 
-            # ── 2連単2点: EV上位（市場の1番人気除外・6号艇1着除外）──
-            _ren2 = {}
-            for _rb1 in range(1, 7):
-                if _rb1 == 6:
-                    continue  # 6号艇1着は除外
-                for _rb2 in range(1, 7):
-                    if _rb1 == _rb2:
-                        continue
-                    _rps = 0.0
-                    _rms = 0.0
-                    for _rb3 in range(1, 7):
-                        if _rb3 in (_rb1, _rb2):
-                            continue
-                        _rm = _valid[
-                            (_valid["boat1"].astype(int) == _rb1) &
-                            (_valid["boat2"].astype(int) == _rb2) &
-                            (_valid["boat3"].astype(int) == _rb3)
-                        ]
-                        if not _rm.empty:
-                            _rps += float(_rm.iloc[0]["prob"])
-                            _rov = float(_rm.iloc[0]["odds_value"])
-                            if _rov > 0:
-                                _rms += 1.0 / _rov
-                    _rev = _rps / _rms if _rms > 0.001 else 0.0
-                    _ren2[(_rb1, _rb2)] = (_rps, _rms, _rev)
-
-            if _ren2:
-                # 市場1番人気（市場implied prob最大）を除外
-                _most_pop = max(_ren2, key=lambda k: _ren2[k][1])
-                # prob >= 2%かつ1番人気除外、EV降順で上位2点
-                _2ren_sorted = sorted(
-                    [(k, v) for k, v in _ren2.items()
-                     if k != _most_pop and v[0] >= 0.02],
-                    key=lambda x: x[1][2],
-                    reverse=True,
-                )
-                print(f"  [2連単] 市場1番人気除外: {_most_pop[0]}-{_most_pop[1]}"
-                      f" (市場implied={_ren2[_most_pop][1]:.3f})")
-                for (_rb1, _rb2), (_rps, _rms, _rev) in _2ren_sorted[:2]:
-                    _add_rec_2ren(_rb1, _rb2, "神熱", label_override)
+            # ── 2連単2点: 強さスコア上位2艇の両方向（top1-top2 / top2-top1）──
+            # 6号艇1着のみ除外
+            print(f"  [2連単] 強さ1位={top1} 強さ2位={top2}")
+            if top1 != 6:
+                _add_rec_2ren(top1, top2, "神熱", label_override)
+            if top2 != 6:
+                _add_rec_2ren(top2, top1, "神熱", label_override)
 
             # ── 3連単: Pattern B ──
             # 脅威艇を特定（A1選手/前付け/ST速のある艇）
