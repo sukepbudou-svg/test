@@ -1205,18 +1205,42 @@ def get_recommendations(
             })
 
         def _pick_strength_based(label_override):
-            """展示タイムベース選出: 2連単2点 + 3連単2点
-            1着=ET速い順1位・2位, 2着=互いに相手, 3着=脅威艇(A1選手/前付け/ST速)orETワースト順
+            """ET速い順 + ST≥0.18除外 + 1号艇0.05秒しきい値で軸選出
+            2連単: ET1-ET2 / ET2-ET1
+            3連単: ET1-ET2-脅威艇 / ET2-ET1-脅威艇（70〜250倍）
             """
             if len(et_vals_k) < 2:
                 print(f"  [スキップ] 展示タイムデータ不足")
                 return
 
-            # 展示タイム速い順（値が小さいほど速い）
-            et_sorted = sorted(et_vals_k.items(), key=lambda x: x[1])
-            et1 = et_sorted[0][0]  # ET最速
-            et2 = et_sorted[1][0]  # ET2位
-            print(f"  [ETランク] {et_sorted} ET1={et1} ET2={et2}")
+            et_sorted = sorted(et_vals_k.items(), key=lambda x: x[1])  # 速い順（値小さい=速い）
+
+            def _boat_st(bn):
+                v = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                return v if (v and v > 0) else None
+
+            # ST≥0.18の艇はET1/ET2候補から除外（STデータなしは除外しない）
+            def _st_ok(bn):
+                st = _boat_st(bn)
+                return st is None or st < 0.18
+
+            axis_cands = [bn for bn, _ in et_sorted if _st_ok(bn)]
+            if len(axis_cands) < 2:
+                axis_cands = [bn for bn, _ in et_sorted]  # 全除外なら絞り込みなし
+
+            if len(axis_cands) < 2:
+                print(f"  [スキップ] ET軸候補不足")
+                return
+
+            # 1号艇しきい値: STフィルター通過済みの1号艇が最速候補との差0.05秒以内ならET1に昇格
+            fastest_bn, fastest_et = axis_cands[0], et_vals_k[axis_cands[0]]
+            if 1 in axis_cands and fastest_bn != 1:
+                if et_vals_k[1] - fastest_et <= 0.05:
+                    axis_cands = [1] + [b for b in axis_cands if b != 1]
+
+            et1, et2 = axis_cands[0], axis_cands[1]
+            st_log = {bn: _boat_st(bn) for bn in [et1, et2]}
+            print(f"  [ET選出] ET1={et1}({et_vals_k.get(et1,'?')}秒) ET2={et2}({et_vals_k.get(et2,'?')}秒) ST={st_log}")
 
             # 脅威艇: A1選手/前付け/ST速 を arare_reasons から特定
             _sig_joined = " ".join(arare_reasons)
@@ -1247,7 +1271,6 @@ def get_recommendations(
             print(f"  [3連単候補] ET1={et1} ET2={et2} 3着候補={all_third_cands} 脅威艇={threat_boats}")
 
             def _try_add_3ren(f, s, t):
-                """3連単1点追加試行（6号艇1着除外・70〜250倍・重複チェック込み）"""
                 if f == 6 or len({f, s, t}) < 3:
                     return False
                 key = (f, s, t)
@@ -1283,7 +1306,7 @@ def get_recommendations(
                     return False
 
             seen_3ren = set()
-            # 3連単2点: ET1-ET2-脅威 と ET2-ET1-脅威（70〜250倍。範囲外なら次の3着候補へ）
+            # 3連単2点: ET1-ET2-3着 と ET2-ET1-3着（70〜250倍。範囲外なら次の3着候補へ）
             for first_boat, second_boat in [(et1, et2), (et2, et1)]:
                 if first_boat == 6:
                     continue
