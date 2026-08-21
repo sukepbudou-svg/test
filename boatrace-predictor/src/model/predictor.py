@@ -1282,6 +1282,7 @@ def get_recommendations(
                     (_valid["boat1"].astype(int) == f) &
                     (_valid["boat2"].astype(int) == s) &
                     (_valid["boat3"].astype(int) == t) &
+                    (_valid["odds_value"] >= 80) &
                     (_valid["odds_value"] <= 250)
                 ]
                 if not m.empty:
@@ -1297,7 +1298,10 @@ def get_recommendations(
                     ]
                     if not full_m.empty:
                         ov = float(full_m.iloc[0]["odds_value"])
-                        print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 > 250倍上限→スキップ")
+                        if ov > 250:
+                            print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 > 250倍上限→スキップ")
+                        else:
+                            print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 < 80倍下限→スキップ")
                     else:
                         print(f"  [3連単] {f}-{s}-{t} オッズデータなし→スキップ")
                     return False

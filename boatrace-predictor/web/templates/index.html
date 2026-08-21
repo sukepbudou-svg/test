@@ -213,6 +213,19 @@ nav a.active{
 .tc-num.lbl-chuana{color:#40c8e0;text-shadow:0 0 10px rgba(64,200,224,0.5);}
 .tc-num.lbl-shinnetsu{color:#ffcc00;text-shadow:0 0 10px rgba(255,204,0,0.6);}
 .tc-num.lbl-skip{color:#334;}
+.tc-row.tc-ren2{
+  background:rgba(0,200,255,0.04);
+  border-color:rgba(0,200,255,0.12);
+  margin-left:12px;
+  padding:4px 10px;
+}
+.tc-ren2-lbl{color:#00c8ff;font-size:10px;letter-spacing:1px;}
+.tc-ren2-num{
+  font-size:16px;font-weight:700;
+  font-family:var(--font-logo);
+  color:#00c8ff;
+  text-shadow:0 0 8px rgba(0,200,255,0.4);
+}
 .tc-sep{color:rgba(255,255,255,0.12);font-size:13px;flex-shrink:0;}
 .tc-hit{
   font-family:var(--font-mono);font-size:12px;
@@ -595,17 +608,26 @@ footer{
   <span>⟳ 予想追加時に自動更新</span>
 </div>
 
-{% set ns = namespace(skip=0, okuma=0, hit_okuma=0, hit_skip=0) %}
+{% set ns = namespace(skip=0, okuma=0, hit_okuma=0, hit_skip=0,
+                      ren2_okuma=0, ren2_skip=0, hit_ren2_okuma=0, hit_ren2_skip=0) %}
 {% for race in race_list %}
   {% set lbl = race.bets[0].bet_label if race.bets else '見送り' %}
-  {% set hit = namespace(found=false) %}
-  {% for b in race.bets %}{% if b.is_hit %}{% set hit.found = true %}{% endif %}{% endfor %}
+  {% set hit = namespace(found=false, has_ren2=false, hit_ren2=false) %}
+  {% for b in race.bets %}
+    {% if b.is_hit %}{% set hit.found = true %}{% endif %}
+    {% if b.bet_type == '2連単' %}{% set hit.has_ren2 = true %}{% endif %}
+    {% if b.bet_type == '2連単' and b.is_hit %}{% set hit.hit_ren2 = true %}{% endif %}
+  {% endfor %}
   {% if lbl == '神熱' %}
     {% set ns.okuma = ns.okuma + 1 %}
     {% if hit.found %}{% set ns.hit_okuma = ns.hit_okuma + 1 %}{% endif %}
+    {% if hit.has_ren2 %}{% set ns.ren2_okuma = ns.ren2_okuma + 1 %}{% endif %}
+    {% if hit.hit_ren2 %}{% set ns.hit_ren2_okuma = ns.hit_ren2_okuma + 1 %}{% endif %}
   {% else %}
     {% set ns.skip = ns.skip + 1 %}
     {% if hit.found %}{% set ns.hit_skip = ns.hit_skip + 1 %}{% endif %}
+    {% if hit.has_ren2 %}{% set ns.ren2_skip = ns.ren2_skip + 1 %}{% endif %}
+    {% if hit.hit_ren2 %}{% set ns.hit_ren2_skip = ns.hit_ren2_skip + 1 %}{% endif %}
   {% endif %}
 {% endfor %}
 
@@ -613,16 +635,28 @@ footer{
   <div class="activity-log" id="activity-log"></div>
   <div class="today-counts">
     <div class="tc-row">
-      <span class="tc-label lbl-shinnetsu">神熱</span>
+      <span class="tc-label lbl-shinnetsu">神熱 3連単</span>
       <span class="tc-num lbl-shinnetsu">{{ ns.okuma }}</span>
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if ns.hit_okuma > 0 %}has-hit{% endif %}">◎ {{ ns.hit_okuma }}</span>
     </div>
+    <div class="tc-row tc-ren2">
+      <span class="tc-label tc-ren2-lbl">神熱 2連単</span>
+      <span class="tc-num tc-ren2-num">{{ ns.ren2_okuma }}</span>
+      <span class="tc-sep">|</span>
+      <span class="tc-hit {% if ns.hit_ren2_okuma > 0 %}has-hit{% endif %}">◎ {{ ns.hit_ren2_okuma }}</span>
+    </div>
     <div class="tc-row">
-      <span class="tc-label lbl-skip">見送り</span>
+      <span class="tc-label lbl-skip">見送り 3連単</span>
       <span class="tc-num lbl-skip">{{ ns.skip }}</span>
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if ns.hit_skip > 0 %}has-hit{% endif %}">◎ {{ ns.hit_skip }}</span>
+    </div>
+    <div class="tc-row tc-ren2">
+      <span class="tc-label tc-ren2-lbl">見送り 2連単</span>
+      <span class="tc-num tc-ren2-num">{{ ns.ren2_skip }}</span>
+      <span class="tc-sep">|</span>
+      <span class="tc-hit {% if ns.hit_ren2_skip > 0 %}has-hit{% endif %}">◎ {{ ns.hit_ren2_skip }}</span>
     </div>
   </div>
 
@@ -709,16 +743,9 @@ footer{
 
       {% set any_res = res_3ren.found or res_2ren.found %}
       {% if any_res %}
-      <div class="race-actual">
-        <span class="actual-label">3連単</span>
-        <span class="actual-combo">{{ any_res.actual_combination }}</span>
-        <span class="actual-pay {% if not res_3ren.payout %}actual-pay-miss{% endif %}">
-          {% if res_3ren.payout %}¥{{ "{:,}".format(res_3ren.payout) }}{% else %}—{% endif %}
-        </span>
-      </div>
-      {% if res_2ren.found %}
       {% set ac = any_res.actual_combination.split('-') %}
-      <div class="race-actual" style="margin-top:4px;border-color:rgba(0,200,255,0.25)">
+      {% if res_2ren.found %}
+      <div class="race-actual" style="border-color:rgba(0,200,255,0.25)">
         <span class="actual-label" style="color:#00c8ff">2連単</span>
         <span class="actual-combo" style="color:#00c8ff;font-size:13px">{{ ac[0] }}-{{ ac[1] }}</span>
         <span class="actual-pay {% if not res_2ren.payout %}actual-pay-miss{% endif %}">
@@ -726,6 +753,13 @@ footer{
         </span>
       </div>
       {% endif %}
+      <div class="race-actual" style="{% if res_2ren.found %}margin-top:4px;{% endif %}">
+        <span class="actual-label">3連単</span>
+        <span class="actual-combo">{{ any_res.actual_combination }}</span>
+        <span class="actual-pay {% if not res_3ren.payout %}actual-pay-miss{% endif %}">
+          {% if res_3ren.payout %}¥{{ "{:,}".format(res_3ren.payout) }}{% else %}—{% endif %}
+        </span>
+      </div>
       {% endif %}
     </div>
     {% endfor %}
