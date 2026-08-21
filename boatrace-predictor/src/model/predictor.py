@@ -1166,16 +1166,16 @@ def get_recommendations(
             return sc
 
         if _okuma_label == "神熱" and not _valid.empty:
-            print(f"  {_C_GREEN}[神熱参戦]{_C_RESET} PT={arare_score} シグナル={_sig_count}/4 → 80倍超・波乱スコア上位2点")
+            print(f"  {_C_GREEN}[神熱参戦]{_C_RESET} PT={arare_score} シグナル={_sig_count}/4 → 80倍超・波乱スコア上位4点")
             _t2_cand = _valid[_valid["odds_value"] > 80.0].copy()
             if not _t2_cand.empty:
                 _t2_cand["t2_score"] = _t2_cand.apply(
                     lambda row: _hairan_t2_score(int(row["boat1"]), int(row["boat2"]), int(row["boat3"])), axis=1
                 )
                 _t2_cand = _t2_cand.sort_values("t2_score", ascending=False).reset_index(drop=True)
-                print(f"  [大穴候補] 波乱上位2: "
-                      f"{list(zip(_t2_cand['boat1'].astype(int), _t2_cand['boat2'].astype(int), _t2_cand['boat3'].astype(int), _t2_cand['t2_score'].round(3)))[:2]}")
-                for _, row in _t2_cand.head(2).iterrows():
+                print(f"  [大穴候補] 波乱上位4: "
+                      f"{list(zip(_t2_cand['boat1'].astype(int), _t2_cand['boat2'].astype(int), _t2_cand['boat3'].astype(int), _t2_cand['t2_score'].round(3)))[:4]}")
+                for _, row in _t2_cand.head(4).iterrows():
                     r = row.copy()
                     r["ev"] = float(r["prob"]) * float(r["odds_value"])
                     _add_rec(r, "神熱", label_override=_okuma_label)
