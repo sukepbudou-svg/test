@@ -522,6 +522,11 @@ nav a.active{
   color:#00c8ff;
   text-shadow:0 0 8px #00c8ff,0 0 18px rgba(0,200,255,0.4);
 }
+.bet-type-tag-skip{
+  background:rgba(90,100,128,0.1);
+  color:var(--dim2);
+  border-color:rgba(90,100,128,0.18);
+}
 
 /* 払戻（的中時） */
 .payout-hi{
@@ -715,7 +720,11 @@ footer{
       {% for b in race.bets %}
       <div class="bet-row">
         {% if b.bet_type == '2連単' %}
-          <span class="combo combo-2ren">{{ b.combination }}<span class="bet-type-tag">2連</span></span>
+          {% if lbl == '神熱' %}
+            <span class="combo combo-2ren">{{ b.combination }}<span class="bet-type-tag">2連</span></span>
+          {% else %}
+            <span class="combo combo-skip">{{ b.combination }}<span class="bet-type-tag bet-type-tag-skip">2連</span></span>
+          {% endif %}
         {% else %}
           <span class="combo {{ c_cls }}">{{ b.combination }}</span>
         {% endif %}
@@ -749,7 +758,7 @@ footer{
         <span class="actual-label" style="color:#00c8ff">2連単</span>
         <span class="actual-combo" style="color:#00c8ff;font-size:13px">{{ ac[0] }}-{{ ac[1] }}</span>
         <span class="actual-pay {% if not res_2ren.payout %}actual-pay-miss{% endif %}">
-          {% if res_2ren.payout %}¥{{ "{:,}".format(res_2ren.payout) }}{% else %}—{% endif %}
+          ¥{{ "{:,}".format(res_2ren.found.actual_payout) }}
         </span>
       </div>
       {% endif %}
@@ -757,7 +766,7 @@ footer{
         <span class="actual-label">3連単</span>
         <span class="actual-combo">{{ any_res.actual_combination }}</span>
         <span class="actual-pay {% if not res_3ren.payout %}actual-pay-miss{% endif %}">
-          {% if res_3ren.payout %}¥{{ "{:,}".format(res_3ren.payout) }}{% else %}—{% endif %}
+          {% if res_3ren.found %}¥{{ "{:,}".format(res_3ren.found.actual_payout) }}{% else %}—{% endif %}
         </span>
       </div>
       {% endif %}
