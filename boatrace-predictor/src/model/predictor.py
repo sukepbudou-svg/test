@@ -1193,7 +1193,7 @@ def get_recommendations(
                         lambda row: _hairan_t2_score(int(row["boat1"]), int(row["boat2"]), int(row["boat3"])), axis=1
                     )
                     _dc_cand = _dc_cand.sort_values("t2_score", ascending=False).reset_index(drop=True)
-                    for _, row in _dc_cand.head(2).iterrows():
+                    for _, row in _dc_cand.head(4).iterrows():
                         r = row.copy()
                         r["ev"] = float(r["prob"]) * float(r["odds_value"])
                         _add_rec(r, "神熱", label_override="見送り")
