@@ -1279,7 +1279,6 @@ def get_recommendations(
                     (_valid["boat1"].astype(int) == f) &
                     (_valid["boat2"].astype(int) == s) &
                     (_valid["boat3"].astype(int) == t) &
-                    (_valid["odds_value"] >= 40) &
                     (_valid["odds_value"] <= 250)
                 ]
                 if not m.empty:
@@ -1298,7 +1297,7 @@ def get_recommendations(
                         if ov > 250:
                             print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 > 250倍上限→スキップ")
                         else:
-                            print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 < 40倍下限→スキップ")
+                            print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 > 250倍上限→スキップ")
                     else:
                         print(f"  [3連単] {f}-{s}-{t} オッズデータなし→スキップ")
                     return False
