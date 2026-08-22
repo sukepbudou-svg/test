@@ -666,20 +666,20 @@ footer{
                       ren2_okuma=0, ren2_skip=0, hit_ren2_okuma=0, hit_ren2_skip=0) %}
 {% for race in race_list %}
   {% set lbl = race.bets[0].bet_label if race.bets else '見送り' %}
-  {% set hit = namespace(found=false, has_ren2=false, hit_ren2=false) %}
+  {% set hit = namespace(hit_3ren=false, has_ren2=false, hit_ren2=false) %}
   {% for b in race.bets %}
-    {% if b.is_hit %}{% set hit.found = true %}{% endif %}
+    {% if b.is_hit and b.bet_type != '2連単' %}{% set hit.hit_3ren = true %}{% endif %}
     {% if b.bet_type == '2連単' %}{% set hit.has_ren2 = true %}{% endif %}
     {% if b.bet_type == '2連単' and b.is_hit %}{% set hit.hit_ren2 = true %}{% endif %}
   {% endfor %}
   {% if lbl == '神熱' %}
     {% set ns.okuma = ns.okuma + 1 %}
-    {% if hit.found %}{% set ns.hit_okuma = ns.hit_okuma + 1 %}{% endif %}
+    {% if hit.hit_3ren %}{% set ns.hit_okuma = ns.hit_okuma + 1 %}{% endif %}
     {% if hit.has_ren2 %}{% set ns.ren2_okuma = ns.ren2_okuma + 1 %}{% endif %}
     {% if hit.hit_ren2 %}{% set ns.hit_ren2_okuma = ns.hit_ren2_okuma + 1 %}{% endif %}
   {% else %}
     {% set ns.skip = ns.skip + 1 %}
-    {% if hit.found %}{% set ns.hit_skip = ns.hit_skip + 1 %}{% endif %}
+    {% if hit.hit_3ren %}{% set ns.hit_skip = ns.hit_skip + 1 %}{% endif %}
     {% if hit.has_ren2 %}{% set ns.ren2_skip = ns.ren2_skip + 1 %}{% endif %}
     {% if hit.hit_ren2 %}{% set ns.hit_ren2_skip = ns.hit_ren2_skip + 1 %}{% endif %}
   {% endif %}
