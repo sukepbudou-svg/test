@@ -1250,12 +1250,12 @@ def get_recommendations(
                 if _tbn not in threat_boats:
                     threat_boats.append(_tbn)
 
-            # 3着候補: 脅威艇優先 → ETワースト順（et1・et2除外）
+            # 3着候補: 脅威艇優先 → ET中位（3位以降）順（et1・et2除外）
             all_third_cands = []
             for b in threat_boats:
                 if b not in (et1, et2) and b not in all_third_cands:
                     all_third_cands.append(b)
-            for bn, _ in reversed(et_sorted):
+            for bn, _ in et_sorted:
                 if bn not in (et1, et2) and bn not in all_third_cands:
                     all_third_cands.append(bn)
 
@@ -1279,7 +1279,7 @@ def get_recommendations(
                     (_valid["boat1"].astype(int) == f) &
                     (_valid["boat2"].astype(int) == s) &
                     (_valid["boat3"].astype(int) == t) &
-                    (_valid["odds_value"] >= 70) &
+                    (_valid["odds_value"] >= 40) &
                     (_valid["odds_value"] <= 250)
                 ]
                 if not m.empty:
@@ -1298,7 +1298,7 @@ def get_recommendations(
                         if ov > 250:
                             print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 > 250倍上限→スキップ")
                         else:
-                            print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 < 70倍下限→スキップ")
+                            print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 < 40倍下限→スキップ")
                     else:
                         print(f"  [3連単] {f}-{s}-{t} オッズデータなし→スキップ")
                     return False
