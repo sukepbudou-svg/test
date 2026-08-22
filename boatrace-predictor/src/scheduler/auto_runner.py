@@ -389,9 +389,12 @@ def _catchup_missing_results(today, df_program, db_update_fn, fetch_race_result_
             if result.get("available"):
                 combo  = result["combination"]
                 payout = result["payout"]
-                print(f"  → {combo} ¥{payout:,}")
+                from src.collector.result_scraper import fetch_nirentan_payout
+                result_2ren = fetch_nirentan_payout(today, venue_code, race_no)
+                payout_2ren = result_2ren.get("payout", 0) if result_2ren.get("available") else 0
+                print(f"  → {combo} ¥{payout:,} / 2連単¥{payout_2ren:,}")
                 if db_update_fn:
-                    db_update_fn(date_str, venue_name, race_no, combo, payout)
+                    db_update_fn(date_str, venue_name, race_no, combo, payout, payout_2ren)
             else:
                 print(f"  → 結果未確定（スキップ）")
         except Exception as e:
@@ -541,10 +544,17 @@ def _fetch_and_record_result(
     payout = result["payout"]
     print(f"  結果: {combo} 払戻:¥{payout:,}")
 
+    # 2連単払戻も取得
+    from src.collector.result_scraper import fetch_nirentan_payout
+    result_2ren = fetch_nirentan_payout(today, venue_code, race_no)
+    payout_2ren = result_2ren.get("payout", 0) if result_2ren.get("available") else 0
+    if payout_2ren:
+        print(f"  2連単結果: {result_2ren.get('combination','')} 払戻:¥{payout_2ren:,}")
+
     # DB更新（常時）
     if db_update_fn:
         try:
-            db_update_fn(date_str, venue_name, race_no, combo, payout)
+            db_update_fn(date_str, venue_name, race_no, combo, payout, payout_2ren)
         except Exception as _e:
             print(f"  [WARN] DB結果更新失敗: {_e}")
 

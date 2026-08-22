@@ -48,7 +48,8 @@ def init_db():
         # 既存DBへのマイグレーション
         for col in ["race_time TEXT", "race_grade TEXT", "okuma_signal_count INTEGER DEFAULT 0",
                     "bet_type TEXT DEFAULT '3連単'",
-                    "strategy_version TEXT"]:
+                    "strategy_version TEXT",
+                    "actual_payout_3ren INTEGER DEFAULT 0"]:
             try:
                 conn.execute(f"ALTER TABLE predictions ADD COLUMN {col}")
             except Exception:
@@ -120,15 +121,15 @@ def update_result(date: str, venue_name: str, race_no: int,
                 # 2連単: actual_combination の先頭2艇と一致すれば的中
                 actual_prefix = "-".join(actual_combination.split("-")[:2]) if actual_combination else ""
                 is_hit = 1 if combo == actual_prefix else 0
-                pay = actual_payout_2ren  # 2連単の配当を別途保存
+                pay = actual_payout_2ren  # 2連単の配当
             else:
                 is_hit = 1 if combo == actual_combination else 0
                 pay = actual_payout  # 3連単の配当
             conn.execute("""
                 UPDATE predictions
-                SET actual_combination=?, actual_payout=?, is_hit=?, result_recorded_at=?
+                SET actual_combination=?, actual_payout=?, actual_payout_3ren=?, is_hit=?, result_recorded_at=?
                 WHERE id=?
-            """, (actual_combination, pay, is_hit, now, row["id"]))
+            """, (actual_combination, pay, actual_payout, is_hit, now, row["id"]))
 
 
 def get_recent_activity(date: str = None, limit: int = 5):
