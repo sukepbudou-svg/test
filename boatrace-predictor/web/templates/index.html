@@ -698,32 +698,6 @@ footer{
     </div>
   </div>
 
-  {% set any_hit = namespace(v=false) %}
-  {% for race in race_list %}
-    {% for b in race.bets %}
-      {% if b.is_hit %}{% set any_hit.v = true %}{% endif %}
-    {% endfor %}
-  {% endfor %}
-  {% if any_hit.v %}
-  <div class="hit-summary">
-    <div class="hit-sum-title">◎ 本日の的中</div>
-    <div class="hit-chips">
-    {% for race in race_list %}
-      {% for b in race.bets %}
-        {% if b.is_hit %}
-        <span class="hit-chip {{ 'hit-chip-2ren' if b.bet_type == '2連単' else 'hit-chip-3ren' }}"
-              onclick="document.getElementById('race-{{ race.venue_name }}-{{ race.race_no }}')?.scrollIntoView({behavior:'smooth',block:'center'})">
-          {{ race.venue_name }} {{ race.race_no }}R
-          <b>{{ b.combination }}</b>
-          {% if b.actual_payout %}¥{{ "{:,}".format(b.actual_payout) }}{% endif %}
-        </span>
-        {% endif %}
-      {% endfor %}
-    {% endfor %}
-    </div>
-  </div>
-  {% endif %}
-
   {% if venue_list %}
   <div class="venue-jump-list">
     <div class="vjl-title">本日の会場</div>
@@ -741,6 +715,32 @@ footer{
   </div>
   {% endif %}
 </div>
+
+{% set any_hit = namespace(v=false) %}
+{% for race in race_list %}
+  {% for b in race.bets %}
+    {% if b.is_hit %}{% set any_hit.v = true %}{% endif %}
+  {% endfor %}
+{% endfor %}
+{% if any_hit.v %}
+<div class="hit-summary" style="margin:0 24px 4px;">
+  <div class="hit-sum-title">◎ 本日の的中</div>
+  <div class="hit-chips">
+  {% for race in race_list %}
+    {% for b in race.bets %}
+      {% if b.is_hit %}
+      <span class="hit-chip {{ 'hit-chip-2ren' if b.bet_type == '2連単' else 'hit-chip-3ren' }}"
+            onclick="document.getElementById('race-{{ race.venue_name }}-{{ race.race_no }}')?.scrollIntoView({behavior:'smooth',block:'center'})">
+        {{ race.venue_name }} {{ race.race_no }}R
+        <b>{{ b.combination }}</b>
+        {% if b.actual_payout %}¥{{ "{:,}".format(b.actual_payout) }}{% endif %}
+      </span>
+      {% endif %}
+    {% endfor %}
+  {% endfor %}
+  </div>
+</div>
+{% endif %}
 
 {% if venue_list %}
 <div class="venues-wrap">
