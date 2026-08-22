@@ -1259,11 +1259,9 @@ def get_recommendations(
                 if bn not in (et1, et2) and bn not in all_third_cands:
                     all_third_cands.append(bn)
 
-            # 2連単: ET1-ET2 と ET2-ET1（6号艇1着のみ除外）
-            if et1 != 6:
-                _add_rec_2ren(et1, et2, "神熱", label_override)
-            if et2 != 6:
-                _add_rec_2ren(et2, et1, "神熱", label_override)
+            # 2連単: ET1-ET2 と ET2-ET1
+            _add_rec_2ren(et1, et2, "神熱", label_override)
+            _add_rec_2ren(et2, et1, "神熱", label_override)
 
             if not all_third_cands:
                 return
@@ -1271,7 +1269,7 @@ def get_recommendations(
             print(f"  [3連単候補] ET1={et1} ET2={et2} 3着候補={all_third_cands} 脅威艇={threat_boats}")
 
             def _try_add_3ren(f, s, t):
-                if f == 6 or len({f, s, t}) < 3:
+                if len({f, s, t}) < 3:
                     return False
                 key = (f, s, t)
                 if key in seen_3ren:
@@ -1308,15 +1306,13 @@ def get_recommendations(
             seen_3ren = set()
             # 3連単2点: ET1-ET2-3着 と ET2-ET1-3着（70〜250倍。範囲外なら次の3着候補へ）
             for first_boat, second_boat in [(et1, et2), (et2, et1)]:
-                if first_boat == 6:
-                    continue
                 for tc in all_third_cands:
                     if _try_add_3ren(first_boat, second_boat, tc):
                         break
 
             # 3点目: 脅威艇が2艇以上 → ET1-ET2で未使用の2番目脅威艇を3着に
             used_thirds = {t for (_, _, t) in seen_3ren}
-            if len(threat_boats) >= 2 and et1 != 6:
+            if len(threat_boats) >= 2:
                 alt_third = next(
                     (b for b in threat_boats
                      if b not in (et1, et2) and b not in used_thirds),

@@ -754,19 +754,21 @@ footer{
       {% if any_res %}
       {% set ac = any_res.actual_combination.split('-') %}
       {% if res_2ren.found %}
-      <div class="race-actual" style="border-color:rgba(0,200,255,0.25)">
-        <span class="actual-label" style="color:#00c8ff">2連単</span>
-        <span class="actual-combo" style="color:#00c8ff;font-size:13px">{{ ac[0] }}-{{ ac[1] }}</span>
-        <span class="actual-pay {% if not res_2ren.payout %}actual-pay-miss{% endif %}">
+      {% set hit2 = res_2ren.payout > 0 %}
+      <div class="race-actual" style="border-color:{% if hit2 %}rgba(0,200,255,0.35){% else %}rgba(90,100,128,0.25){% endif %}">
+        <span class="actual-label" style="color:{% if hit2 %}#00c8ff{% else %}var(--dim2){% endif %}">2連単</span>
+        <span class="actual-combo" style="color:{% if hit2 %}#00c8ff{% else %}var(--dim2){% endif %};font-size:13px;{% if not hit2 %}text-shadow:none{% endif %}">{{ ac[0] }}-{{ ac[1] }}</span>
+        <span class="actual-pay {% if not hit2 %}actual-pay-miss{% endif %}">
           {% if res_2ren.payout %}¥{{ "{:,}".format(res_2ren.payout) }}{% else %}¥{{ "{:,}".format(res_2ren.found.actual_payout) }}{% endif %}
         </span>
       </div>
       {% endif %}
       {% set payout3 = res_3ren.found.actual_payout if res_3ren.found else (any_res.actual_payout_3ren if any_res.actual_payout_3ren else 0) %}
-      <div class="race-actual" style="{% if res_2ren.found %}margin-top:4px;{% endif %}">
-        <span class="actual-label">3連単</span>
-        <span class="actual-combo">{{ any_res.actual_combination }}</span>
-        <span class="actual-pay {% if not payout3 %}actual-pay-miss{% endif %}">
+      {% set hit3 = res_3ren.payout > 0 %}
+      <div class="race-actual" style="{% if res_2ren.found %}margin-top:4px;{% endif %}{% if not hit3 %}border-color:rgba(90,100,128,0.25);background:rgba(90,100,128,0.04){% endif %}">
+        <span class="actual-label" style="{% if not hit3 %}color:var(--dim2){% endif %}">3連単</span>
+        <span class="actual-combo {% if not hit3 %}actual-pay-miss{% endif %}">{{ any_res.actual_combination }}</span>
+        <span class="actual-pay {% if not hit3 %}actual-pay-miss{% endif %}">
           {% if payout3 %}¥{{ "{:,}".format(payout3) }}{% else %}—{% endif %}
         </span>
       </div>
