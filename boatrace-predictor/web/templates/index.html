@@ -180,9 +180,25 @@ nav a.active{
         background-color:rgba(255,200,0,0.22); outline:2px solid rgba(255,210,0,1);}
   100% {box-shadow:none; background-color:transparent; outline:2px solid transparent;}
 }
+@keyframes raceHighlightHit{
+  0%   {box-shadow:none; background-color:transparent; outline:2px solid transparent;}
+  10%  {box-shadow:0 0 0 3px rgba(255,80,180,1), 0 0 40px 14px rgba(255,60,160,0.75);
+        background-color:rgba(255,60,160,0.18); outline:2px solid rgba(255,80,180,1);}
+  25%  {box-shadow:none; background-color:transparent; outline:2px solid transparent;}
+  40%  {box-shadow:0 0 0 3px rgba(255,80,180,1), 0 0 40px 14px rgba(255,60,160,0.75);
+        background-color:rgba(255,60,160,0.18); outline:2px solid rgba(255,80,180,1);}
+  55%  {box-shadow:none; background-color:transparent; outline:2px solid transparent;}
+  70%  {box-shadow:0 0 0 3px rgba(255,80,180,1), 0 0 40px 14px rgba(255,60,160,0.75);
+        background-color:rgba(255,60,160,0.18); outline:2px solid rgba(255,80,180,1);}
+  100% {box-shadow:none; background-color:transparent; outline:2px solid transparent;}
+}
 .race-highlight{
   border-radius:6px;
   animation:raceHighlight 2.6s ease forwards;
+}
+.race-highlight-hit{
+  border-radius:6px;
+  animation:raceHighlightHit 2.6s ease forwards;
 }
 @keyframes checkPulse{0%,100%{box-shadow:0 0 6px rgba(0,212,255,0.5);}50%{box-shadow:0 0 12px rgba(0,212,255,0.9);}}
 
@@ -730,7 +746,7 @@ footer{
     {% for b in race.bets %}
       {% if b.is_hit %}
       <span class="hit-chip {{ 'hit-chip-2ren' if b.bet_type == '2連単' else 'hit-chip-3ren' }}"
-            onclick="document.getElementById('race-{{ race.venue_name }}-{{ race.race_no }}')?.scrollIntoView({behavior:'smooth',block:'center'})">
+            onclick="scrollToRaceHit('{{ race.venue_name }}', {{ race.race_no }})">
         {{ race.venue_name }} {{ race.race_no }}R
         <b>{{ b.combination }}</b>
         {% if b.actual_payout %}¥{{ "{:,}".format(b.actual_payout) }}{% endif %}
@@ -921,6 +937,26 @@ footer{
           void el.offsetWidth; // reflow
           el.classList.add('race-highlight');
           setTimeout(()=>el.classList.remove('race-highlight'), 2800);
+        }
+      });
+    }, {threshold: 0.6});
+
+    observer.observe(el);
+    el.scrollIntoView({behavior:'smooth', block:'center'});
+  };
+
+  window.scrollToRaceHit = function(venue, raceNo){
+    const el = document.getElementById('race-' + venue + '-' + raceNo);
+    if(!el) return;
+    el.classList.remove('race-highlight-hit');
+
+    const observer = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if(entry.isIntersecting){
+          observer.disconnect();
+          void el.offsetWidth;
+          el.classList.add('race-highlight-hit');
+          setTimeout(()=>el.classList.remove('race-highlight-hit'), 2800);
         }
       });
     }, {threshold: 0.6});
