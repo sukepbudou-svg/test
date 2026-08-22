@@ -194,12 +194,13 @@ def get_pt_stats():
 
 
 def get_label_stats():
-    """ラベル別集計（全期間・レース単位）"""
+    """ラベル×賭け種別集計（全期間・レース単位）"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute("""
             SELECT
                 bet_label,
+                COALESCE(NULLIF(bet_type,''), '3連単') as bet_type,
                 COUNT(*) as total,
                 SUM(has_result) as result_count,
                 SUM(is_hit_any) as hits,
@@ -208,15 +209,16 @@ def get_label_stats():
             FROM (
                 SELECT date, venue_name, race_no,
                     MAX(bet_label) as bet_label,
+                    COALESCE(NULLIF(bet_type,''), '3連単') as bet_type,
                     MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
                     MAX(is_hit) as is_hit_any,
                     SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
                     COUNT(*) as combo_count
                 FROM predictions
                 WHERE strategy_version = '2'
-                GROUP BY date, venue_name, race_no
+                GROUP BY date, venue_name, race_no, COALESCE(NULLIF(bet_type,''), '3連単')
             )
-            GROUP BY bet_label
+            GROUP BY bet_label, bet_type
             ORDER BY
                 CASE bet_label
                     WHEN 'プチュン' THEN 1
@@ -224,7 +226,8 @@ def get_label_stats():
                     WHEN '中穴' THEN 3
                     WHEN '見送り' THEN 4
                     ELSE 5
-                END
+                END,
+                CASE bet_type WHEN '3連単' THEN 1 WHEN '2連単' THEN 2 ELSE 3 END
         """).fetchall()
     return [dict(r) for r in rows]
 
@@ -511,11 +514,12 @@ def _calc_streaks(rows, key_fn):
 
 
 def get_all_streaks():
-    """ラベル・PT・会場・等級別の直近連続外れ数を一括取得（参戦レースのみ・レース単位）"""
+    """ラベル・賭け種・PT・会場・等級別の直近連続外れ数を一括取得（参戦レースのみ・レース単位）"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute("""
             SELECT MAX(bet_label) as bet_label,
+                   COALESCE(NULLIF(bet_type,''), '3連単') as bet_type,
                    MAX(arare_score) as arare_score,
                    MAX(venue_name) as venue_name,
                    COALESCE(NULLIF(MAX(race_grade),''), '不明') as race_grade,
@@ -524,12 +528,12 @@ def get_all_streaks():
             WHERE result_recorded_at IS NOT NULL
               AND bet_label != '見送り'
               AND strategy_version = '2'
-            GROUP BY date, venue_name, race_no
+            GROUP BY date, venue_name, race_no, COALESCE(NULLIF(bet_type,''), '3連単')
             ORDER BY MAX(id) DESC
         """).fetchall()
     rows = [dict(r) for r in rows]
     return {
-        "label": _calc_streaks(rows, lambda r: r["bet_label"]),
+        "label": _calc_streaks(rows, lambda r: (r["bet_label"], r["bet_type"])),
         "pt":    _calc_streaks(rows, lambda r: r["arare_score"]),
         "venue": _calc_streaks(rows, lambda r: r["venue_name"]),
         "grade": _calc_streaks(rows, lambda r: r["race_grade"]),

@@ -310,6 +310,7 @@ footer{
     <tbody>
     {% for s in label_stats %}
       {% set lbl = s.bet_label %}
+      {% set btype = s.bet_type %}
       {% set rc = s.result_count %}
       {% set h = s.hits %}
       {% set pay = s.total_payout %}
@@ -317,9 +318,11 @@ footer{
       {% set p = pay - c %}
       {% set roi = (pay / c * 100) if c > 0 else 0 %}
       {% set hr = (h / rc * 100) if rc > 0 else 0 %}
-      {% set sk = all_streaks.label.get(lbl, 0) %}
+      {% set sk = all_streaks.label.get((lbl, btype), 0) %}
       <tr>
-        <td class="{% if lbl == '神熱' %}label-shinnetsu{% elif lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% elif lbl == '中穴' %}label-chuana{% else %}label-skip{% endif %}">{{ lbl }}</td>
+        <td class="{% if lbl == '神熱' %}label-shinnetsu{% elif lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% elif lbl == '中穴' %}label-chuana{% else %}label-skip{% endif %}">
+          {{ lbl }}<span style="font-size:9px;opacity:0.7;margin-left:4px">{{ btype }}</span>
+        </td>
         <td>{{ s.total }}</td>
         <td>{{ rc }}</td>
         <td>{{ h }}</td>
