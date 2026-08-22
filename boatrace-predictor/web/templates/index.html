@@ -590,6 +590,39 @@ footer{
   font-family:var(--font-mono);letter-spacing:1px;
   margin-top:8px;
 }
+
+/* 的中チップ */
+.hit-summary{
+  margin-top:8px;
+  padding:7px 10px;
+  border-radius:6px;
+  background:rgba(0,255,170,0.04);
+  border:1px solid rgba(0,255,170,0.18);
+}
+.hit-sum-title{
+  font-family:var(--font-mono);font-size:9px;
+  color:var(--green);letter-spacing:1px;
+  margin-bottom:5px;
+}
+.hit-chips{display:flex;flex-wrap:wrap;gap:4px;}
+.hit-chip{
+  display:inline-flex;align-items:center;gap:4px;
+  font-family:var(--font-mono);font-size:10px;
+  padding:3px 8px;border-radius:4px;
+  cursor:pointer;
+  transition:opacity .15s;
+}
+.hit-chip:hover{opacity:.75;}
+.hit-chip-3ren{
+  background:rgba(0,255,170,0.12);
+  border:1px solid rgba(0,255,170,0.35);
+  color:var(--green);
+}
+.hit-chip-2ren{
+  background:rgba(0,200,255,0.12);
+  border:1px solid rgba(0,200,255,0.35);
+  color:#00c8ff;
+}
 </style>
 </head>
 <body>
@@ -664,6 +697,32 @@ footer{
       <span class="tc-hit {% if ns.hit_ren2_skip > 0 %}has-hit{% endif %}">◎ {{ ns.hit_ren2_skip }}</span>
     </div>
   </div>
+
+  {% set any_hit = namespace(v=false) %}
+  {% for race in race_list %}
+    {% for b in race.bets %}
+      {% if b.is_hit %}{% set any_hit.v = true %}{% endif %}
+    {% endfor %}
+  {% endfor %}
+  {% if any_hit.v %}
+  <div class="hit-summary">
+    <div class="hit-sum-title">◎ 本日の的中</div>
+    <div class="hit-chips">
+    {% for race in race_list %}
+      {% for b in race.bets %}
+        {% if b.is_hit %}
+        <span class="hit-chip {{ 'hit-chip-2ren' if b.bet_type == '2連単' else 'hit-chip-3ren' }}"
+              onclick="document.getElementById('race-{{ race.venue_name }}-{{ race.race_no }}')?.scrollIntoView({behavior:'smooth',block:'center'})">
+          {{ race.venue_name }} {{ race.race_no }}R
+          <b>{{ b.combination }}</b>
+          {% if b.actual_payout %}¥{{ "{:,}".format(b.actual_payout) }}{% endif %}
+        </span>
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+    </div>
+  </div>
+  {% endif %}
 
   {% if venue_list %}
   <div class="venue-jump-list">
