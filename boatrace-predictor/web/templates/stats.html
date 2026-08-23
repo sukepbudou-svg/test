@@ -749,9 +749,9 @@ footer{
   </div>
 </div>
 
-<!-- ── 日別サマリー ── -->
+<!-- ── 日別サマリー（合計） ── -->
 <div class="section">
-  <h2>日別サマリー（直近30日）</h2>
+  <h2>日別サマリー（直近30日・全体合計）</h2>
   <div class="daily-table-wrap table-wrap">
   <table class="data-table">
     <thead>
@@ -780,6 +780,64 @@ footer{
           {% if p >= 0 %}+{% endif %}¥{{ "{:,}".format(p) }}
         </td>
       </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- ── 日別ラベル別詳細 ── -->
+<div class="section">
+  <h2>日別ラベル別詳細（神熱 / 見送り × 3連単 / 2連単）</h2>
+  <div class="daily-table-wrap table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>日付</th>
+        <th>ラベル</th>
+        <th>予想数</th>
+        <th>結果済</th>
+        <th>的中</th>
+        <th>的中率</th>
+        <th>払戻</th>
+        <th>収支</th>
+        <th>回収率</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% set prev_date = namespace(v='') %}
+    {% for d in daily_label %}
+      {% set rc = d.result_count or 0 %}
+      {% set h = d.hits or 0 %}
+      {% set pay = d.total_payout or 0 %}
+      {% set c = (d.result_combos or 0) * 100 %}
+      {% set p = pay - c %}
+      {% set roi = (pay / c * 100) if c > 0 else 0 %}
+      {% set hr = (h / rc * 100) if rc > 0 else 0 %}
+      <tr {% if d.date != prev_date.v %}style="border-top:2px solid rgba(79,143,255,0.2)"{% endif %}>
+        <td style="color:var(--dim2);font-size:12px">
+          {% if d.date != prev_date.v %}{{ d.date }}{% endif %}
+          {% set prev_date.v = d.date %}
+        </td>
+        <td class="{% if d.bet_label == '神熱' %}label-shinnetsu{% else %}label-skip{% endif %}">
+          {{ d.bet_label }}<span style="font-size:9px;opacity:0.7;margin-left:4px">{{ d.bet_type }}</span>
+        </td>
+        <td>{{ d.total }}</td>
+        <td>{{ rc }}</td>
+        <td class="{% if h > 0 %}roi-good{% endif %}">{{ h }}</td>
+        <td class="{% if hr >= 20 %}roi-good{% elif hr >= 10 %}roi-neutral{% elif rc > 0 %}roi-bad{% endif %}">
+          {{ "%.1f" % hr }}%
+        </td>
+        <td>{% if pay > 0 %}¥{{ "{:,}".format(pay) }}{% else %}—{% endif %}</td>
+        <td class="{% if p >= 0 %}roi-good{% else %}roi-bad{% endif %}">
+          {% if c > 0 %}{% if p >= 0 %}+{% endif %}¥{{ "{:,}".format(p) }}{% else %}—{% endif %}
+        </td>
+        <td class="{% if roi >= 100 %}roi-good{% elif roi >= 70 %}roi-neutral{% elif c > 0 %}roi-bad{% endif %}">
+          {% if c > 0 %}{{ "%.1f" % roi }}%{% else %}—{% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="9" style="text-align:center;color:var(--dim);padding:20px;">データなし（新方式のデータが蓄積されると表示されます）</td></tr>
     {% endfor %}
     </tbody>
   </table>

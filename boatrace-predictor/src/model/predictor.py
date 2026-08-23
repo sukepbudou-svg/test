@@ -1205,42 +1205,52 @@ def get_recommendations(
             })
 
         def _pick_strength_based(label_override):
-            """ET速い順 + ST≥0.18除外 + 1号艇0.05秒しきい値で軸選出
-            2連単: ET1-ET2 / ET2-ET1
-            3連単: ET1-ET2-脅威艇 / ET2-ET1-脅威艇（70〜250倍）
+            """コース+STスコアで軸選出
+            参戦条件: ライブオッズがある場合、1号艇3連単最安 ≥ 10倍
+            2連単: 軸1-軸2 / 軸2-軸1
+            3連単: 軸1-軸2-3着 / 軸2-軸1-3着（上限250倍）
+            3着候補: 脅威艇 → ST速い外艇(≤0.14) → ETワースト順
             """
-            if len(et_vals_k) < 2:
-                print(f"  [スキップ] 展示タイムデータ不足")
+            # 1号艇3連単最安チェック（ライブオッズがある場合のみ）
+            if live_odds:
+                b1_live = [v for k, v in live_odds.items() if k.startswith("1-") and v > 0]
+                if b1_live:
+                    b1_min = min(b1_live)
+                    if b1_min < 10:
+                        print(f"  [スキップ] 1号艇3連単最安{b1_min:.1f}倍 < 10倍 → 低配当除外")
+                        return
+
+            available = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
+            if len(available) < 2:
+                print(f"  [スキップ] 出走艇不足")
                 return
 
-            et_sorted = sorted(et_vals_k.items(), key=lambda x: x[1])  # 速い順（値小さい=速い）
+            def _axis_score(bn):
+                """軸スコア: コース位置点(内側=高) + 展示STボーナス"""
+                ac_raw = race_row.get(f"boat{bn}_actual_course")
+                try:
+                    course = int(ac_raw) if ac_raw is not None else bn
+                except (TypeError, ValueError):
+                    course = bn
+                course_score = max(0, 7 - course)  # 1コース=6, 2コース=5, ..., 6コース=1
+                st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+                if st and st > 0:
+                    if st <= 0.12:   st_bonus = 4
+                    elif st <= 0.14: st_bonus = 3
+                    elif st <= 0.16: st_bonus = 2
+                    elif st <= 0.17: st_bonus = 1
+                    else:            st_bonus = -2  # 0.18以上は大幅減点
+                else:
+                    st_bonus = 0
+                return course_score + st_bonus
 
-            def _boat_st(bn):
-                v = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-                return v if (v and v > 0) else None
-
-            # ST≥0.18の艇はET1/ET2候補から除外（STデータなしは除外しない）
-            def _st_ok(bn):
-                st = _boat_st(bn)
-                return st is None or st < 0.18
-
-            axis_cands = [bn for bn, _ in et_sorted if _st_ok(bn)]
-            if len(axis_cands) < 2:
-                axis_cands = [bn for bn, _ in et_sorted]  # 全除外なら絞り込みなし
-
-            if len(axis_cands) < 2:
-                print(f"  [スキップ] ET軸候補不足")
+            scored = sorted(available, key=lambda b: _axis_score(b), reverse=True)
+            if len(scored) < 2:
+                print(f"  [スキップ] 軸候補不足")
                 return
 
-            # 1号艇しきい値: STフィルター通過済みの1号艇が最速候補との差0.05秒以内ならET1に昇格
-            fastest_bn, fastest_et = axis_cands[0], et_vals_k[axis_cands[0]]
-            if 1 in axis_cands and fastest_bn != 1:
-                if et_vals_k[1] - fastest_et <= 0.05:
-                    axis_cands = [1] + [b for b in axis_cands if b != 1]
-
-            et1, et2 = axis_cands[0], axis_cands[1]
-            st_log = {bn: _boat_st(bn) for bn in [et1, et2]}
-            print(f"  [ET選出] ET1={et1}({et_vals_k.get(et1,'?')}秒) ET2={et2}({et_vals_k.get(et2,'?')}秒) ST={st_log}")
+            axis1, axis2 = scored[0], scored[1]
+            print(f"  [軸選出] 軸1={axis1}(スコア{_axis_score(axis1)}) 軸2={axis2}(スコア{_axis_score(axis2)})")
 
             # 脅威艇: A1選手/前付け/ST速 を arare_reasons から特定
             _sig_joined = " ".join(arare_reasons)
@@ -1250,23 +1260,36 @@ def get_recommendations(
                 if _tbn not in threat_boats:
                     threat_boats.append(_tbn)
 
-            # 3着候補: 脅威艇優先 → ET中位（3位以降）順（et1・et2除外）
+            # 3着候補: ①脅威艇 → ②ST速い外艇(3〜6号でST≤0.14) → ③ETワースト順
             all_third_cands = []
             for b in threat_boats:
-                if b not in (et1, et2) and b not in all_third_cands:
+                if b not in (axis1, axis2) and b not in all_third_cands:
                     all_third_cands.append(b)
-            for bn, _ in et_sorted:
-                if bn not in (et1, et2) and bn not in all_third_cands:
+            fast_outer = sorted(
+                [(bn, _safe_float(race_row.get(f"boat{bn}_exhibition_st")))
+                 for bn in available
+                 if bn >= 3 and bn not in (axis1, axis2) and bn not in all_third_cands
+                 and (_safe_float(race_row.get(f"boat{bn}_exhibition_st")) or 1) <= 0.14],
+                key=lambda x: x[1]
+            )
+            for bn, _ in fast_outer:
+                all_third_cands.append(bn)
+            et_sorted_rev = sorted(et_vals_k.items(), key=lambda x: x[1], reverse=True)
+            for bn, _ in et_sorted_rev:
+                if bn not in (axis1, axis2) and bn not in all_third_cands:
+                    all_third_cands.append(bn)
+            for bn in available:
+                if bn not in (axis1, axis2) and bn not in all_third_cands:
                     all_third_cands.append(bn)
 
-            # 2連単: ET1-ET2 と ET2-ET1
-            _add_rec_2ren(et1, et2, "神熱", label_override)
-            _add_rec_2ren(et2, et1, "神熱", label_override)
+            # 2連単: 軸1-軸2 と 軸2-軸1
+            _add_rec_2ren(axis1, axis2, "神熱", label_override)
+            _add_rec_2ren(axis2, axis1, "神熱", label_override)
 
             if not all_third_cands:
                 return
 
-            print(f"  [3連単候補] ET1={et1} ET2={et2} 3着候補={all_third_cands} 脅威艇={threat_boats}")
+            print(f"  [3連単候補] 軸1={axis1} 軸2={axis2} 3着候補={all_third_cands} 脅威艇={threat_boats}")
 
             def _try_add_3ren(f, s, t):
                 if len({f, s, t}) < 3:
@@ -1294,33 +1317,29 @@ def get_recommendations(
                     ]
                     if not full_m.empty:
                         ov = float(full_m.iloc[0]["odds_value"])
-                        if ov > 250:
-                            print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 > 250倍上限→スキップ")
-                        else:
-                            print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 > 250倍上限→スキップ")
+                        print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 > 250倍上限→スキップ")
                     else:
                         print(f"  [3連単] {f}-{s}-{t} オッズデータなし→スキップ")
                     return False
 
             seen_3ren = set()
-            # 3連単2点: ET1-ET2-3着 と ET2-ET1-3着（70〜250倍。範囲外なら次の3着候補へ）
-            for first_boat, second_boat in [(et1, et2), (et2, et1)]:
+            for first_boat, second_boat in [(axis1, axis2), (axis2, axis1)]:
                 for tc in all_third_cands:
                     if _try_add_3ren(first_boat, second_boat, tc):
                         break
 
-            # 3点目: 脅威艇が2艇以上 → ET1-ET2で未使用の2番目脅威艇を3着に
+            # 3点目: 脅威艇2艇以上 → 軸1-軸2で未使用の2番目脅威艇を3着に
             used_thirds = {t for (_, _, t) in seen_3ren}
             if len(threat_boats) >= 2:
                 alt_third = next(
                     (b for b in threat_boats
-                     if b not in (et1, et2) and b not in used_thirds),
+                     if b not in (axis1, axis2) and b not in used_thirds),
                     None
                 )
                 if alt_third is not None:
-                    added = _try_add_3ren(et1, et2, alt_third)
+                    added = _try_add_3ren(axis1, axis2, alt_third)
                     if added:
-                        print(f"  [3連単3点目] 脅威艇2艇以上 → {et1}-{et2}-{alt_third}")
+                        print(f"  [3連単3点目] 脅威艇2艇以上 → {axis1}-{axis2}-{alt_third}")
 
         if not _valid.empty:
             _lbl_disp = _okuma_label
