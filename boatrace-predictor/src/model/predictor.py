@@ -1114,14 +1114,17 @@ def get_recommendations(
         ])
         _super_conc = "超人気集中" in _sig_text
 
-        if _sig_count >= 2 and not _super_conc:
+        if _sig_count >= 2 and not _super_conc and arare_score >= 5:
             _okuma_label = "神熱"
             _label_color = _C_YELLOW
         else:
             _okuma_label = "見送り"
             _label_color = ""
+        _skip_reason = ""
+        if _sig_count >= 2 and not _super_conc and arare_score < 5:
+            _skip_reason = f" ⚠PT{arare_score}<5→見送り"
         print(f"  {_label_color}[{_okuma_label}]{_C_RESET} 荒れPT={arare_score} シグナル={_sig_count}/6"
-              + (" ⚠超人気集中除外" if _super_conc else ""))
+              + (" ⚠超人気集中除外" if _super_conc else "") + _skip_reason)
 
         def _add_rec(row, tier, label_override=None, bet_type="3連単"):
             f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
