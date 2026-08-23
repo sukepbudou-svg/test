@@ -1211,15 +1211,6 @@ def get_recommendations(
             3連単: 軸1-軸2-3着 / 軸2-軸1-3着（上限250倍）
             3着候補: 脅威艇 → ST速い外艇(≤0.14) → ETワースト順
             """
-            # 1号艇3連単最安チェック（ライブオッズがある場合のみ）
-            if live_odds:
-                b1_live = [v for k, v in live_odds.items() if k.startswith("1-") and v > 0]
-                if b1_live:
-                    b1_min = min(b1_live)
-                    if b1_min < 10:
-                        print(f"  [スキップ] 1号艇3連単最安{b1_min:.1f}倍 < 10倍 → 低配当除外")
-                        return
-
             available = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             if len(available) < 2:
                 print(f"  [スキップ] 出走艇不足")
