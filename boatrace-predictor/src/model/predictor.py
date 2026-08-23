@@ -1226,7 +1226,7 @@ def get_recommendations(
                 return
 
             def _axis_score(bn):
-                """軸スコア: コース位置点(内側=高) + 展示STボーナス"""
+                """軸スコア: コース位置点(内側=高) + 展示STボーナス + 選手等級ボーナス"""
                 ac_raw = race_row.get(f"boat{bn}_actual_course")
                 try:
                     course = int(ac_raw) if ac_raw is not None else bn
@@ -1242,7 +1242,17 @@ def get_recommendations(
                     else:            st_bonus = -2  # 0.18以上は大幅減点
                 else:
                     st_bonus = 0
-                return course_score + st_bonus
+                # 選手等級ボーナス: A1=+3, A2=+2, B1=+1, B2=0
+                gn_raw = race_row.get(f"boat{bn}_grade_num", 2)
+                try:
+                    gn = int(float(gn_raw)) if gn_raw is not None else 2
+                    if gn >= 4:    grade_bonus = 3  # A1
+                    elif gn >= 3:  grade_bonus = 2  # A2
+                    elif gn >= 2:  grade_bonus = 1  # B1
+                    else:          grade_bonus = 0  # B2
+                except (TypeError, ValueError):
+                    grade_bonus = 0
+                return course_score + st_bonus + grade_bonus
 
             scored = sorted(available, key=lambda b: _axis_score(b), reverse=True)
             if len(scored) < 2:
