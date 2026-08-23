@@ -1308,8 +1308,7 @@ def get_recommendations(
                 m = _valid[
                     (_valid["boat1"].astype(int) == f) &
                     (_valid["boat2"].astype(int) == s) &
-                    (_valid["boat3"].astype(int) == t) &
-                    (_valid["odds_value"] <= 250)
+                    (_valid["boat3"].astype(int) == t)
                 ]
                 if not m.empty:
                     r = m.iloc[0].copy()
@@ -1317,16 +1316,7 @@ def get_recommendations(
                     _add_rec(r, "神熱", label_override=label_override, bet_type="3連単")
                     return True
                 else:
-                    full_m = _valid[
-                        (_valid["boat1"].astype(int) == f) &
-                        (_valid["boat2"].astype(int) == s) &
-                        (_valid["boat3"].astype(int) == t)
-                    ]
-                    if not full_m.empty:
-                        ov = float(full_m.iloc[0]["odds_value"])
-                        print(f"  [3連単] {f}-{s}-{t} {ov:.0f}倍 > 250倍上限→スキップ")
-                    else:
-                        print(f"  [3連単] {f}-{s}-{t} オッズデータなし→スキップ")
+                    print(f"  [3連単] {f}-{s}-{t} オッズデータなし→スキップ")
                     return False
 
             seen_3ren = set()
