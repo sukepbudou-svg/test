@@ -346,6 +346,76 @@ footer{
   </div>
 </div>
 
+<!-- ── 実結果3連単払戻分布（神熱 vs 見送り） ── -->
+<div class="section">
+  <h2>実結果 3連単払戻分布（神熱 vs 見送り比較）</h2>
+  <p style="font-size:12px;color:var(--dim2);margin:-8px 0 12px;">参戦した全レースの実際の3連単決着配当がどの倍率帯に分布しているかを比較。狙う中荒れ帯（50〜250倍）に神熱レースが集まっているほど参戦基準が機能している。</p>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>ラベル</th>
+        <th>結果済</th>
+        <th style="color:#ff6b6b">50倍未満<br><span style="font-size:9px;font-weight:400">〜¥4,999</span></th>
+        <th style="color:#00ffaa">50〜250倍<br><span style="font-size:9px;font-weight:400">¥5,000〜¥25,000</span></th>
+        <th style="color:#4f8fff">250倍超<br><span style="font-size:9px;font-weight:400">¥25,001〜</span></th>
+        <th>平均配当</th>
+        <th>最高配当</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for s in payout_dist %}
+      {% set rc = s.has_result or 0 %}
+      {% set u50 = s.under_50 or 0 %}
+      {% set m = s.range_50_250 or 0 %}
+      {% set o250 = s.over_250 or 0 %}
+      {% set u50p = (u50 / rc * 100) if rc > 0 else 0 %}
+      {% set mp = (m / rc * 100) if rc > 0 else 0 %}
+      {% set o250p = (o250 / rc * 100) if rc > 0 else 0 %}
+      {% set avg = s.avg_payout_3ren or 0 %}
+      {% set mx = s.max_payout_3ren or 0 %}
+      <tr>
+        <td class="{% if s.bet_label == '神熱' %}label-shinnetsu{% else %}label-skip{% endif %}">{{ s.bet_label }}</td>
+        <td>{{ rc }}</td>
+        <td>
+          <span style="color:#ff6b6b;font-weight:{% if u50p > 50 %}700{% else %}400{% endif %}">
+            {{ u50 }}回 ({{ "%.0f" % u50p }}%)
+          </span>
+          <div style="background:rgba(255,107,107,0.15);border-radius:3px;height:4px;margin-top:4px;width:100%">
+            <div style="background:#ff6b6b;height:4px;border-radius:3px;width:{{ "%.0f" % [u50p,100]|min }}%"></div>
+          </div>
+        </td>
+        <td>
+          <span style="color:#00ffaa;font-weight:{% if mp > 30 %}700{% else %}400{% endif %}">
+            {{ m }}回 ({{ "%.0f" % mp }}%)
+          </span>
+          <div style="background:rgba(0,255,170,0.1);border-radius:3px;height:4px;margin-top:4px;width:100%">
+            <div style="background:#00ffaa;height:4px;border-radius:3px;width:{{ "%.0f" % [mp,100]|min }}%"></div>
+          </div>
+        </td>
+        <td>
+          <span style="color:#4f8fff;font-weight:400">
+            {{ o250 }}回 ({{ "%.0f" % o250p }}%)
+          </span>
+          <div style="background:rgba(79,143,255,0.1);border-radius:3px;height:4px;margin-top:4px;width:100%">
+            <div style="background:#4f8fff;height:4px;border-radius:3px;width:{{ "%.0f" % [o250p,100]|min }}%"></div>
+          </div>
+        </td>
+        <td class="{% if avg >= 10000 %}roi-good{% elif avg >= 5000 %}roi-neutral{% elif avg > 0 %}roi-bad{% endif %}">
+          {% if avg > 0 %}¥{{ "{:,}".format(avg|int) }}{% else %}—{% endif %}
+        </td>
+        <td class="{% if mx >= 25000 %}roi-good{% elif mx >= 10000 %}roi-neutral{% elif mx > 0 %}roi-bad{% endif %}">
+          {% if mx > 0 %}¥{{ "{:,}".format(mx) }}{% else %}—{% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" style="text-align:center;color:var(--dim);padding:20px;">データなし</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
 <!-- ── ヒーロー的中分析 ── -->
 <div class="section">
   <h2>ヒーロー（1着）的中分析</h2>

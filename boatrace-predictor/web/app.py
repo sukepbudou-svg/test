@@ -12,6 +12,7 @@ from web.database import (
     get_daily_summary, get_consecutive_misses, init_db, update_result,
     get_venue_stats, get_grade_stats, get_venue_detail, get_all_streaks,
     get_recent_activity, get_hero_stats, get_pt_payout_stats, get_signal_stats,
+    get_payout_distribution,
 )
 
 
@@ -72,6 +73,7 @@ def create_app():
         hero_stats = get_hero_stats()
         pt_payout_stats = get_pt_payout_stats()
         signal_stats = get_signal_stats()
+        payout_dist = get_payout_distribution()
         return render_template("stats.html",
                                pt_stats=pt_stats,
                                label_stats=label_stats,
@@ -83,7 +85,8 @@ def create_app():
                                all_streaks=all_streaks,
                                hero_stats=hero_stats,
                                pt_payout_stats=pt_payout_stats,
-                               signal_stats=signal_stats)
+                               signal_stats=signal_stats,
+                               payout_dist=payout_dist)
 
     @app.route("/api/today")
     def api_today():

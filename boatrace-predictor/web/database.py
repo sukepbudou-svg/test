@@ -388,6 +388,35 @@ def get_grade_stats():
     return [dict(r) for r in rows]
 
 
+def get_payout_distribution():
+    """ラベル別・実結果3連単配当分布（神熱 vs 見送り比較用）"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT
+                bet_label,
+                COUNT(*) as total_races,
+                SUM(CASE WHEN actual_payout_3ren > 0 THEN 1 ELSE 0 END) as has_result,
+                SUM(CASE WHEN actual_payout_3ren > 0 AND actual_payout_3ren < 5000 THEN 1 ELSE 0 END) as under_50,
+                SUM(CASE WHEN actual_payout_3ren >= 5000 AND actual_payout_3ren <= 25000 THEN 1 ELSE 0 END) as range_50_250,
+                SUM(CASE WHEN actual_payout_3ren > 25000 THEN 1 ELSE 0 END) as over_250,
+                ROUND(AVG(CASE WHEN actual_payout_3ren > 0 THEN actual_payout_3ren END)) as avg_payout_3ren,
+                MAX(actual_payout_3ren) as max_payout_3ren
+            FROM (
+                SELECT date, venue_name, race_no,
+                    MAX(bet_label) as bet_label,
+                    MAX(actual_payout_3ren) as actual_payout_3ren
+                FROM predictions
+                WHERE strategy_version = '2'
+                GROUP BY date, venue_name, race_no
+            )
+            GROUP BY bet_label
+            ORDER BY
+                CASE bet_label WHEN '神熱' THEN 1 ELSE 2 END
+        """).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_hero_stats():
     """ヒーロー（1着）的中率分析：ラベル別にヒーロー的中と組み合わせ的中を集計"""
     init_db()
