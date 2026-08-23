@@ -1246,7 +1246,10 @@ def get_recommendations(
                     else:          grade_bonus = 0  # B2
                 except (TypeError, ValueError):
                     grade_bonus = 0
-                return course_score + st_bonus + grade_bonus
+                # 弱モーター減点: 2連率<0.35 → -2点
+                motor = _safe_float(race_row.get(f"boat{bn}_motor_2rate"))
+                motor_penalty = -2 if (motor is not None and motor < 0.35) else 0
+                return course_score + st_bonus + grade_bonus + motor_penalty
 
             scored = sorted(available, key=lambda b: _axis_score(b), reverse=True)
             if len(scored) < 2:
