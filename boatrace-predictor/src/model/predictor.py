@@ -1325,18 +1325,15 @@ def get_recommendations(
                     if _try_add_3ren(first_boat, second_boat, tc):
                         break
 
-            # 3点目: 脅威艇2艇以上 → 軸1-軸2で未使用の2番目脅威艇を3着に
-            used_thirds = {t for (_, _, t) in seen_3ren}
-            if len(threat_boats) >= 2:
-                alt_third = next(
-                    (b for b in threat_boats
-                     if b not in (axis1, axis2) and b not in used_thirds),
-                    None
-                )
-                if alt_third is not None:
-                    added = _try_add_3ren(axis1, axis2, alt_third)
+            # 3点目: スコア4位が外艇（3〜6号）の場合 → 4位-3位-1位（大穴狙い）
+            if len(scored) >= 4:
+                rank4_boat = scored[3]
+                rank3_boat = scored[2]
+                rank1_boat = scored[0]
+                if rank4_boat >= 3:  # 外艇のみ
+                    added = _try_add_3ren(rank4_boat, rank3_boat, rank1_boat)
                     if added:
-                        print(f"  [3連単3点目] 脅威艇2艇以上 → {axis1}-{axis2}-{alt_third}")
+                        print(f"  [3連単3点目] 大穴(4位外艇頭) → {rank4_boat}-{rank3_boat}-{rank1_boat}")
 
         if not _valid.empty:
             _lbl_disp = _okuma_label
