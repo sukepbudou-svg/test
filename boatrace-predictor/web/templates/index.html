@@ -786,8 +786,8 @@ footer{
         <span class="pt-badge {{ pt_cls }}">PT{{ pt }} {{ lbl }}</span>
       </div>
 
-      {% if race.arare_reasons and lbl == '神熱' %}
-      <div class="arare-info"><b>シグナル:</b> {{ race.arare_reasons }}</div>
+      {% if race.arare_reasons %}
+      <div class="arare-info" style="{% if lbl != '神熱' %}opacity:0.5{% endif %}"><b>シグナル:</b> {{ race.arare_reasons }}</div>
       {% endif %}
 
       {% set res_3ren = namespace(found=none, payout=0) %}
