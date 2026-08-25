@@ -136,7 +136,7 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
     from src.features.builder import build_features
     from src.model.trainer import load_model
     from src.model.predictor import get_recommendations, load_payout_lookup
-    from web.database import save_prediction, update_result as db_update_result
+    from web.database import save_prediction, sync_race_predictions, update_result as db_update_result
 
     # Sheets書き込みは無効化（DBとブラウザで管理するため不要）
     _sheets_ok = False
@@ -259,6 +259,7 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                             recent_form_lookup=recent_form_lookup,
                             border_lookup=border_lookup,
                             db_save_fn=save_prediction,
+                            db_sync_fn=sync_race_predictions,
                         )
                         race["pred_rows"] = pred_rows or []
                         race["daily_race_count"] = daily_race_count
@@ -413,6 +414,7 @@ def _predict_one_race(
     recent_form_lookup: dict = None,
     border_lookup: dict = None,
     db_save_fn=None,
+    db_sync_fn=None,
 ) -> list:
     """1レース分の予想を実行してDB(+オプションでSheets)に書き込む。予想行リストを返す"""
     import pandas as pd
@@ -474,6 +476,13 @@ def _predict_one_race(
     recs = get_recommendations(model, df_features, payout_lookup=payout_lookup,
                                all_live_odds=all_live_odds, all_weather=all_weather,
                                all_absent=all_absent, all_2ren_live_odds=all_2ren_live_odds)
+
+    # 再計算で選出組み合わせが変わった場合、未確定の古い買い目を削除してから保存する
+    if db_sync_fn and not recs.empty:
+        try:
+            db_sync_fn(today.strftime("%Y-%m-%d"), venue_name, race_no, recs["combination"].tolist())
+        except Exception as _e:
+            print(f"  [WARN] DB同期失敗: {_e}")
 
     # DB + Sheetsに書き込む＆メモリキャッシュ用にリストを作成
     pred_rows = []

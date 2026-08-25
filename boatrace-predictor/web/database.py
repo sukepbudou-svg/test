@@ -56,6 +56,23 @@ def init_db():
                 pass
 
 
+def sync_race_predictions(date: str, venue_name: str, race_no: int, combinations: list):
+    """このレースの最新予想に含まれない、まだ結果が付いていない古い予想行を削除する
+    （オッズ変動等で選出組み合わせが再計算ごとに変わり、買い目が際限なく積み上がるのを防ぐ）"""
+    if not combinations:
+        return
+    init_db()
+    race_no = int(race_no or 0)
+    with get_conn() as conn:
+        placeholders = ",".join("?" for _ in combinations)
+        conn.execute(f"""
+            DELETE FROM predictions
+            WHERE date=? AND venue_name=? AND race_no=?
+              AND result_recorded_at IS NULL
+              AND combination NOT IN ({placeholders})
+        """, (date, venue_name, race_no, *combinations))
+
+
 def save_prediction(rec: dict):
     """予想1件をDBに保存（同じdateのvenue+race+comboが既存なら更新）"""
     init_db()
