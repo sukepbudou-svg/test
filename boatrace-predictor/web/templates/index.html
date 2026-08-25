@@ -214,6 +214,15 @@ nav a.active{
   background:rgba(255,255,255,0.03);
   border:1px solid rgba(255,255,255,0.06);
 }
+.tc-row-shinnetsu{
+  background:rgba(255,204,0,0.08);
+  border:1px solid rgba(255,204,0,0.35);
+  box-shadow:0 0 10px rgba(255,204,0,0.12);
+}
+.tc-freq{
+  font-family:var(--font-mono);font-size:10px;
+  color:var(--dim2);flex-shrink:0;white-space:nowrap;
+}
 .tc-label{font-size:11px;flex:1;}
 .tc-label.lbl-puchun{color:#ff6b6b;}
 .tc-label.lbl-kokusen{color:#ffaa55;}
@@ -638,37 +647,40 @@ footer{
   <span>⟳ 予想追加時に自動更新</span>
 </div>
 
-{% set ns = namespace(skip=0, okuma=0, hit_okuma=0, hit_skip=0) %}
+{% set pt_values = [] %}
 {% for race in race_list %}
-  {% set lbl = race.bets[0].bet_label if race.bets else '見送り' %}
-  {% set hit = namespace(hit_3ren=false) %}
-  {% for b in race.bets %}
-    {% if b.is_hit %}{% set hit.hit_3ren = true %}{% endif %}
+  {% if race.arare_score not in pt_values %}{% set _ = pt_values.append(race.arare_score) %}{% endif %}
+{% endfor %}
+{% set pt_values = pt_values | sort(reverse=true) %}
+
+{% set pt_counts = [] %}
+{% for pt in pt_values %}
+  {% set n = namespace(races=0, hits=0) %}
+  {% for race in race_list %}
+    {% if race.arare_score == pt %}
+      {% set n.races = n.races + 1 %}
+      {% set race_hit = namespace(v=false) %}
+      {% for b in race.bets %}
+        {% if b.is_hit %}{% set race_hit.v = true %}{% endif %}
+      {% endfor %}
+      {% if race_hit.v %}{% set n.hits = n.hits + 1 %}{% endif %}
+    {% endif %}
   {% endfor %}
-  {% if lbl == '神熱' %}
-    {% set ns.okuma = ns.okuma + 1 %}
-    {% if hit.hit_3ren %}{% set ns.hit_okuma = ns.hit_okuma + 1 %}{% endif %}
-  {% else %}
-    {% set ns.skip = ns.skip + 1 %}
-    {% if hit.hit_3ren %}{% set ns.hit_skip = ns.hit_skip + 1 %}{% endif %}
-  {% endif %}
+  {% set _ = pt_counts.append({'pt': pt, 'races': n.races, 'hits': n.hits}) %}
 {% endfor %}
 
 <div class="log-area">
   <div class="activity-log" id="activity-log"></div>
   <div class="today-counts">
-    <div class="tc-row">
-      <span class="tc-label lbl-shinnetsu">神熱</span>
-      <span class="tc-num lbl-shinnetsu">{{ ns.okuma }}</span>
+    {% for s in pt_counts %}
+    <div class="tc-row {% if s.pt >= pt_min_score %}tc-row-shinnetsu{% endif %}">
+      <span class="tc-label {% if s.pt >= pt_min_score %}lbl-shinnetsu{% else %}lbl-skip{% endif %}">PT{{ s.pt }}</span>
+      <span class="tc-num {% if s.pt >= pt_min_score %}lbl-shinnetsu{% else %}lbl-skip{% endif %}">{{ s.races }}</span>
       <span class="tc-sep">|</span>
-      <span class="tc-hit {% if ns.hit_okuma > 0 %}has-hit{% endif %}">◎ {{ ns.hit_okuma }}</span>
+      <span class="tc-hit {% if s.hits > 0 %}has-hit{% endif %}">◎ {{ s.hits }}</span>
+      <span class="tc-freq">{% if s.hits > 0 %}{{ "%.1f" | format(s.races / s.hits) }}回に1回{% else %}—{% endif %}</span>
     </div>
-    <div class="tc-row">
-      <span class="tc-label lbl-skip">見送り</span>
-      <span class="tc-num lbl-skip">{{ ns.skip }}</span>
-      <span class="tc-sep">|</span>
-      <span class="tc-hit {% if ns.hit_skip > 0 %}has-hit{% endif %}">◎ {{ ns.hit_skip }}</span>
-    </div>
+    {% endfor %}
   </div>
 
   {% if venue_list %}

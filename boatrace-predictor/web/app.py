@@ -53,7 +53,8 @@ def create_app():
                 venues[vn] = []
             venues[vn].append(race)
         venue_list = [{"venue_name": k, "races": v} for k, v in venues.items()]
-        return render_template("index.html", date=date, race_list=race_list, venue_list=venue_list)
+        return render_template("index.html", date=date, race_list=race_list, venue_list=venue_list,
+                               pt_min_score=PT_MIN_SCORE)
 
     @app.route("/stats")
     def stats():
