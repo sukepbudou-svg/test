@@ -623,6 +623,7 @@ def _calc_entry_gate(race_row: pd.Series, weather: dict = None, by_prob: "pd.Dat
     return {
         "entry": entry,
         "objective_ok": objective_ok,
+        "rough_water": cond_water,
         "market_ok": market_ok,
         "market_odds": market_odds,
         "reasons": reasons,
@@ -1224,6 +1225,9 @@ def get_recommendations(
                 except (TypeError, ValueError):
                     course = bn
                 course_score = max(0, 7 - course)  # 1コース=6, 2コース=5, ..., 6コース=1
+                # 荒水面・強風会場では内側コースの優位性が薄れるため1〜2コースを減点
+                if _gate["rough_water"] and course <= 2:
+                    course_score = max(0, course_score - 2)
                 st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
                 if st and st > 0:
                     if st <= 0.12:   st_bonus = 4
