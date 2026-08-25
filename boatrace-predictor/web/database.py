@@ -116,7 +116,7 @@ def save_prediction(rec: dict):
             str(rec.get("boat1_risk", "")),
             int(rec.get("okuma_signal_count", 0) or 0),
             str(rec.get("bet_type", "3連単")),
-            "3",
+            str(rec.get("strategy_version", "4")),
         ))
 
 
@@ -619,3 +619,204 @@ def get_all_streaks():
         "venue": _calc_streaks(rows, lambda r: r["venue_name"]),
         "grade": _calc_streaks(rows, lambda r: r["race_grade"]),
     }
+
+
+# ══════════════════════════════════════════════════════════════
+# 新PTスコア方式（strategy_version='4'・2026-08-25〜）の集計
+# 荒れPTスコアが満点29点の加算式に刷新されたため、それ以前のデータ
+# （0〜30点満点の旧スコアや0〜2点の2ゲート方式）とは点数の意味が異なる。
+# strategy_version='4' で厳密に絞り込み、混在させない。
+# ══════════════════════════════════════════════════════════════
+
+def _pt_v4_race_level_sql(select_extra: str = "") -> str:
+    """strategy_version='4'のレース単位集計サブクエリ（共通部分）"""
+    return f"""
+        SELECT date, venue_name, race_no,
+               MAX(bet_label) as label,
+               MAX(arare_score) as pt,
+               COUNT(*) as n_bets,
+               MAX(is_hit) as race_hit,
+               MAX(actual_payout) as actual_payout,
+               SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_return,
+               MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
+               {select_extra}
+        FROM predictions
+        WHERE strategy_version='4' AND bet_type='3連単'
+        GROUP BY date, venue_name, race_no
+    """
+
+
+def get_pt_score_stats():
+    """新PTスコア方式: PT値ごとの成績集計
+    賭け数(1点=100円)・的中率・平均配当率(ROI)・万舟率(実配当≥1万円のレース比率)・現在の連続不的中数
+    """
+    init_db()
+    with get_conn() as conn:
+        bet_rows = conn.execute("""
+            SELECT arare_score as pt,
+                   COUNT(*) as n_bets,
+                   SUM(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as n_resulted,
+                   SUM(is_hit) as n_hits,
+                   SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as total_return
+            FROM predictions
+            WHERE strategy_version='4' AND bet_type='3連単'
+            GROUP BY arare_score
+        """).fetchall()
+
+        race_rows = conn.execute(f"""
+            SELECT pt,
+                   COUNT(*) as n_races,
+                   SUM(has_result) as n_races_resulted,
+                   SUM(CASE WHEN has_result=1 AND actual_payout >= 10000 THEN 1 ELSE 0 END) as n_okuma,
+                   SUM(CASE WHEN has_result=1 THEN race_hit ELSE 0 END) as n_race_hits
+            FROM ({_pt_v4_race_level_sql()})
+            GROUP BY pt
+        """).fetchall()
+
+        streak_rows = conn.execute("""
+            SELECT MAX(arare_score) as pt, MAX(is_hit) as is_hit
+            FROM predictions
+            WHERE strategy_version='4' AND bet_type='3連単' AND result_recorded_at IS NOT NULL
+            GROUP BY date, venue_name, race_no
+            ORDER BY MAX(id) DESC
+        """).fetchall()
+
+    streaks = _calc_streaks([dict(r) for r in streak_rows], lambda r: r["pt"])
+    race_by_pt = {r["pt"]: dict(r) for r in race_rows}
+
+    result = []
+    for row in bet_rows:
+        row = dict(row)
+        pt = row["pt"]
+        rr = race_by_pt.get(pt, {})
+        n_resulted = row["n_resulted"] or 0
+        n_races_resulted = rr.get("n_races_resulted", 0) or 0
+        n_okuma = rr.get("n_okuma", 0) or 0
+        n_race_hits = rr.get("n_race_hits", 0) or 0
+        result.append({
+            "pt": pt,
+            "n_bets": row["n_bets"],
+            "n_resulted": n_resulted,
+            "n_hits": row["n_hits"] or 0,
+            "hit_rate": round(100 * (row["n_hits"] or 0) / n_resulted, 1) if n_resulted else None,
+            "roi_pct": round(100 * (row["total_return"] or 0) / (n_resulted * 100), 1) if n_resulted else None,
+            "n_races": rr.get("n_races", 0) or 0,
+            "n_races_resulted": n_races_resulted,
+            "n_okuma": n_okuma,
+            "okuma_rate": round(100 * n_okuma / n_races_resulted, 1) if n_races_resulted else None,
+            "n_race_hits": n_race_hits,
+            "race_hit_rate": round(100 * n_race_hits / n_races_resulted, 1) if n_races_resulted else None,
+            "current_miss_streak": streaks.get(pt, 0),
+        })
+    result.sort(key=lambda x: -(x["pt"] if x["pt"] is not None else -1))
+    return result
+
+
+def get_pt_daily_entry_stats():
+    """新PTスコア方式: 日付×ラベル(神熱/見送り)別の成績集計"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT date, label,
+                   COUNT(*) as n_races,
+                   SUM(has_result) as n_races_resulted,
+                   SUM(CASE WHEN has_result=1 THEN n_bets ELSE 0 END) as n_bets_resulted,
+                   SUM(CASE WHEN has_result=1 THEN race_hit ELSE 0 END) as n_hits,
+                   SUM(CASE WHEN has_result=1 THEN race_return ELSE 0 END) as total_return,
+                   SUM(CASE WHEN has_result=1 AND actual_payout >= 10000 THEN 1 ELSE 0 END) as n_okuma
+            FROM ({_pt_v4_race_level_sql()})
+            GROUP BY date, label
+            ORDER BY date DESC, label
+        """).fetchall()
+    out = []
+    for row in rows:
+        row = dict(row)
+        n_bets = row["n_bets_resulted"] or 0
+        n_races_resulted = row["n_races_resulted"] or 0
+        out.append({
+            "date": row["date"],
+            "label": row["label"],
+            "n_races": row["n_races"],
+            "n_races_resulted": n_races_resulted,
+            "n_hits": row["n_hits"] or 0,
+            "hit_rate": round(100 * (row["n_hits"] or 0) / n_races_resulted, 1) if n_races_resulted else None,
+            "roi_pct": round(100 * (row["total_return"] or 0) / (n_bets * 100), 1) if n_bets else None,
+            "n_okuma": row["n_okuma"] or 0,
+            "pnl": (row["total_return"] or 0) - n_bets * 100,
+        })
+    return out
+
+
+def get_pt_summary():
+    """新PTスコア方式: 全体サマリー（神熱/見送り/合計）"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT label,
+                   COUNT(*) as n_races,
+                   SUM(has_result) as n_races_resulted,
+                   SUM(CASE WHEN has_result=1 THEN n_bets ELSE 0 END) as n_bets_resulted,
+                   SUM(CASE WHEN has_result=1 THEN race_hit ELSE 0 END) as n_hits,
+                   SUM(CASE WHEN has_result=1 THEN race_return ELSE 0 END) as total_return,
+                   SUM(CASE WHEN has_result=1 AND actual_payout >= 10000 THEN 1 ELSE 0 END) as n_okuma
+            FROM ({_pt_v4_race_level_sql()})
+            GROUP BY label
+        """).fetchall()
+    out = {}
+    total = {"n_races": 0, "n_races_resulted": 0, "n_bets_resulted": 0, "n_hits": 0, "total_return": 0, "n_okuma": 0}
+    for row in rows:
+        row = dict(row)
+        for k in total:
+            total[k] += row.get(k) or 0
+        out[row["label"]] = row
+    out["合計"] = total
+    for label, row in out.items():
+        n_bets = row.get("n_bets_resulted") or 0
+        n_races_resulted = row.get("n_races_resulted") or 0
+        row["hit_rate"] = round(100 * (row.get("n_hits") or 0) / n_races_resulted, 1) if n_races_resulted else None
+        row["roi_pct"] = round(100 * (row.get("total_return") or 0) / (n_bets * 100), 1) if n_bets else None
+        row["okuma_rate"] = round(100 * (row.get("n_okuma") or 0) / n_races_resulted, 1) if n_races_resulted else None
+        row["pnl"] = (row.get("total_return") or 0) - n_bets * 100
+    return out
+
+
+def get_pt_threshold_curve():
+    """新PTスコア方式: 参戦ライン候補ごとの累積成績（PT≥X の場合の的中率・ROI）
+    今後の参戦ライン(PT_MIN_SCORE)調整の参考データ"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT arare_score as pt,
+                   COUNT(*) as n_bets,
+                   SUM(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as n_resulted,
+                   SUM(is_hit) as n_hits,
+                   SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as total_return
+            FROM predictions
+            WHERE strategy_version='4' AND bet_type='3連単'
+            GROUP BY arare_score
+        """).fetchall()
+    rows = [dict(r) for r in rows]
+    if not rows:
+        return []
+    max_pt = max(r["pt"] for r in rows)
+    by_pt = {r["pt"]: r for r in rows}
+    curve = []
+    for threshold in range(max_pt, -1, -1):
+        cum_bets = cum_resulted = cum_hits = cum_return = 0
+        for pt in range(threshold, max_pt + 1):
+            r = by_pt.get(pt)
+            if not r:
+                continue
+            cum_bets += r["n_bets"]
+            cum_resulted += r["n_resulted"] or 0
+            cum_hits += r["n_hits"] or 0
+            cum_return += r["total_return"] or 0
+        curve.append({
+            "threshold": threshold,
+            "n_bets": cum_bets,
+            "n_resulted": cum_resulted,
+            "n_hits": cum_hits,
+            "hit_rate": round(100 * cum_hits / cum_resulted, 1) if cum_resulted else None,
+            "roi_pct": round(100 * cum_return / (cum_resulted * 100), 1) if cum_resulted else None,
+        })
+    return curve

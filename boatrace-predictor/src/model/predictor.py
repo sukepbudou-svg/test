@@ -1286,6 +1286,7 @@ def get_recommendations(
                 "boat1_risk":         _calc_boat1_risk(race_row),
                 "okuma_signal_count": _gate_score,
                 "bet_type":           bet_type,
+                "strategy_version":   "4",
             })
 
         def _pick_strength_based(label_override):
