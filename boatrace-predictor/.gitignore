@@ -6,6 +6,7 @@ credentials.json
 data/raw/
 data/processed/
 data/models/
+data/perry.db
 
 # Python
 __pycache__/
