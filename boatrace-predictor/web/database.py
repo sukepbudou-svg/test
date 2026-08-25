@@ -626,7 +626,13 @@ def get_all_streaks():
 # 荒れPTスコアが満点29点の加算式に刷新されたため、それ以前のデータ
 # （0〜30点満点の旧スコアや0〜2点の2ゲート方式）とは点数の意味が異なる。
 # strategy_version='4' で厳密に絞り込み、混在させない。
+#
+# PT_STATS_START_DATE: この日付以降のデータのみ集計に含める（表示上の絞り込み。
+# データ自体はDBに残したまま、集計を「その日から綺麗に開始」できるようにする）。
 # ══════════════════════════════════════════════════════════════
+
+PT_STATS_START_DATE = "2026-08-26"
+
 
 def _pt_v4_race_level_sql(select_extra: str = "") -> str:
     """strategy_version='4'のレース単位集計サブクエリ（共通部分）"""
@@ -641,7 +647,7 @@ def _pt_v4_race_level_sql(select_extra: str = "") -> str:
                MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
                {select_extra}
         FROM predictions
-        WHERE strategy_version='4' AND bet_type='3連単'
+        WHERE strategy_version='4' AND bet_type='3連単' AND date >= '{PT_STATS_START_DATE}'
         GROUP BY date, venue_name, race_no
     """
 
@@ -652,14 +658,14 @@ def get_pt_score_stats():
     """
     init_db()
     with get_conn() as conn:
-        bet_rows = conn.execute("""
+        bet_rows = conn.execute(f"""
             SELECT arare_score as pt,
                    COUNT(*) as n_bets,
                    SUM(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as n_resulted,
                    SUM(is_hit) as n_hits,
                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as total_return
             FROM predictions
-            WHERE strategy_version='4' AND bet_type='3連単'
+            WHERE strategy_version='4' AND bet_type='3連単' AND date >= '{PT_STATS_START_DATE}'
             GROUP BY arare_score
         """).fetchall()
 
@@ -673,10 +679,11 @@ def get_pt_score_stats():
             GROUP BY pt
         """).fetchall()
 
-        streak_rows = conn.execute("""
+        streak_rows = conn.execute(f"""
             SELECT MAX(arare_score) as pt, MAX(is_hit) as is_hit
             FROM predictions
             WHERE strategy_version='4' AND bet_type='3連単' AND result_recorded_at IS NOT NULL
+              AND date >= '{PT_STATS_START_DATE}'
             GROUP BY date, venue_name, race_no
             ORDER BY MAX(id) DESC
         """).fetchall()
@@ -787,14 +794,14 @@ def get_pt_threshold_curve():
     今後の参戦ライン(PT_MIN_SCORE)調整の参考データ"""
     init_db()
     with get_conn() as conn:
-        rows = conn.execute("""
+        rows = conn.execute(f"""
             SELECT arare_score as pt,
                    COUNT(*) as n_bets,
                    SUM(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as n_resulted,
                    SUM(is_hit) as n_hits,
                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as total_return
             FROM predictions
-            WHERE strategy_version='4' AND bet_type='3連単'
+            WHERE strategy_version='4' AND bet_type='3連単' AND date >= '{PT_STATS_START_DATE}'
             GROUP BY arare_score
         """).fetchall()
     rows = [dict(r) for r in rows]
