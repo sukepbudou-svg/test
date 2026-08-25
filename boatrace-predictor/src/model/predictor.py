@@ -1204,9 +1204,12 @@ def get_recommendations(
             })
 
         def _pick_strength_based(label_override):
-            """コース+STスコアで軸選出
-            3連単: 軸1-軸2-3着 / 軸2-軸1-3着 / 3位-4位-2位(大穴) / 軸1-3位外艇-3着（最大4点）
+            """コース+STスコアで軸選出、オッズ帯5点構成で選出
+            1点目: 軸1-軸2-3着候補（オッズ制限なし）
+            2〜4点目: 100〜160倍 / 161〜230倍 / 231〜300倍（帯ごとに1点）
+            5点目: 301倍以上（上限なし）
             3着候補: 脅威艇 → ST速い外艇(≤0.14) → ETワースト順
+            オッズ帯選出: 脅威艇・軸スコア上位3艇が絡む組み合わせを優先し、その中でEV(確率×オッズ)最大のものを選出
             """
             available = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             if len(available) < 2:
@@ -1310,30 +1313,53 @@ def get_recommendations(
                     return False
 
             seen_3ren = set()
-            for first_boat, second_boat in [(axis1, axis2), (axis2, axis1)]:
-                for tc in all_third_cands:
-                    if _try_add_3ren(first_boat, second_boat, tc):
-                        break
 
-            # 3点目: 大穴狙い → 3位-4位-2位
-            if len(scored) >= 4:
-                rank2_boat = scored[1]
-                rank3_boat = scored[2]
-                rank4_boat = scored[3]
-                added = _try_add_3ren(rank3_boat, rank4_boat, rank2_boat)
-                if added:
-                    print(f"  [3連単3点目] 大穴(3位頭) → {rank3_boat}-{rank4_boat}-{rank2_boat}")
+            # 1点目: 軸1-軸2-3着候補（オッズ制限なし）
+            for tc in all_third_cands:
+                if _try_add_3ren(axis1, axis2, tc):
+                    break
 
-            # 4点目: 軸1-スコア3位(外艇のみ)-3着候補
-            if len(scored) >= 3:
-                rank3_boat = scored[2]
-                if rank3_boat >= 3:  # 外艇のみ
-                    for tc in all_third_cands:
-                        if tc != rank3_boat:
-                            added = _try_add_3ren(axis1, rank3_boat, tc)
-                            if added:
-                                print(f"  [3連単4点目] 軸1-3位外艇-3着 → {axis1}-{rank3_boat}-{tc}")
-                                break
+            def _pick_odds_band(min_odds, max_odds, band_name):
+                """オッズ帯から1点選出: 脅威艇・軸スコア上位3艇が絡む組み合わせを優先し、
+                その中でEV(確率×オッズ)最大のものを選ぶ（なければ帯全体でEV最大にフォールバック）"""
+                pool = _valid[
+                    (_valid["odds_value"] >= min_odds) & (_valid["odds_value"] <= max_odds)
+                ].copy()
+                if pool.empty:
+                    print(f"  [{band_name}] 該当オッズ帯なし→スキップ")
+                    return False
+                pool["boat1"] = pool["boat1"].astype(int)
+                pool["boat2"] = pool["boat2"].astype(int)
+                pool["boat3"] = pool["boat3"].astype(int)
+                not_seen = ~pool.apply(lambda r: (r["boat1"], r["boat2"], r["boat3"]) in seen_3ren, axis=1)
+                pool = pool[not_seen]
+                if pool.empty:
+                    print(f"  [{band_name}] 候補が全て選出済み→スキップ")
+                    return False
+
+                quality_boats = set(threat_boats) | set(scored[:3])
+                quality_mask = (
+                    pool["boat1"].isin(quality_boats)
+                    | pool["boat2"].isin(quality_boats)
+                    | pool["boat3"].isin(quality_boats)
+                )
+                target_pool = pool[quality_mask] if quality_mask.any() else pool
+
+                target_pool = target_pool.copy()
+                target_pool["ev"] = target_pool["prob"].astype(float) * target_pool["odds_value"].astype(float)
+                best = target_pool.sort_values("ev", ascending=False).iloc[0]
+
+                f, s, t = int(best["boat1"]), int(best["boat2"]), int(best["boat3"])
+                seen_3ren.add((f, s, t))
+                _add_rec(best, "神熱", label_override=label_override, bet_type="3連単")
+                print(f"  [{band_name}] {f}-{s}-{t} EV={float(best['ev']):.2f}")
+                return True
+
+            # 2〜5点目: オッズ帯から選出
+            _pick_odds_band(100.0, 160.0, "2点目(100-160倍)")
+            _pick_odds_band(161.0, 230.0, "3点目(161-230倍)")
+            _pick_odds_band(231.0, 300.0, "4点目(231-300倍)")
+            _pick_odds_band(301.0, 999999.0, "5点目(301倍+)")
 
         if not _valid.empty:
             print(f"  {_label_color}[{_okuma_label}]{_C_RESET} {_gate['reason_text']} → ETベース選出")
