@@ -932,11 +932,22 @@ footer{
     }catch(_){}
   };
   es.onerror = function(){
-    // SSE切断時は30秒ポーリングにフォールバック
+    // SSE切断時は30秒ポーリングにフォールバック（新着を検知したらページ全体を更新）
     es.close();
+    let fallbackLastTs = null;
+    let fallbackFirst = true;
     function fallback(){
       const url = '/api/recent_activity' + (DATE_PARAM ? '?date='+encodeURIComponent(DATE_PARAM) : '');
-      fetch(url).then(r=>r.json()).then(renderLog).catch(()=>{});
+      fetch(url).then(r=>r.json()).then(function(rows){
+        renderLog(rows);
+        const newTs = rows && rows.length ? rows[0].created_at : null;
+        if(fallbackFirst){
+          fallbackFirst = false;
+          fallbackLastTs = newTs;
+        } else if(newTs && newTs !== fallbackLastTs){
+          location.reload();
+        }
+      }).catch(()=>{});
     }
     fallback();
     setInterval(fallback, 30000);

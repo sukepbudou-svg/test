@@ -306,7 +306,7 @@ def cmd_auto():
         from web.app import create_app
         flask_app = create_app()
         flask_thread = threading.Thread(
-            target=lambda: flask_app.run(host="0.0.0.0", port=5001, debug=False, use_reloader=False),
+            target=lambda: flask_app.run(host="0.0.0.0", port=5001, debug=False, use_reloader=False, threaded=True),
             daemon=True,
             name="perry-ai-web",
         )
