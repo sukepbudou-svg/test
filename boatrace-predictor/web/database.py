@@ -116,7 +116,7 @@ def save_prediction(rec: dict):
             str(rec.get("boat1_risk", "")),
             int(rec.get("okuma_signal_count", 0) or 0),
             str(rec.get("bet_type", "3連単")),
-            str(rec.get("strategy_version", "4")),
+            str(rec.get("strategy_version", "5")),
         ))
 
 
@@ -622,20 +622,15 @@ def get_all_streaks():
 
 
 # ══════════════════════════════════════════════════════════════
-# 新PTスコア方式（strategy_version='4'・2026-08-25〜）の集計
-# 荒れPTスコアが満点29点の加算式に刷新されたため、それ以前のデータ
-# （0〜30点満点の旧スコアや0〜2点の2ゲート方式）とは点数の意味が異なる。
-# strategy_version='4' で厳密に絞り込み、混在させない。
-#
-# PT_STATS_START_DATE: この日付以降のデータのみ集計に含める（表示上の絞り込み。
-# データ自体はDBに残したまま、集計を「その日から綺麗に開始」できるようにする）。
+# 新PTスコア方式（strategy_version='5'・2026-08-25〜、荒れPT満点20点の簡略版）の集計
+# PTスコアの配点は同じ日のうちに何度か変わっており（2ゲート方式→満点29点→満点20点）、
+# バージョンごとに点数の意味が異なる。日付や時刻ではなく strategy_version='5' で
+# 厳密に絞り込むことで、タイムゾーンのズレに影響されず「最終版のコードで保存された
+# 予想から」を正確に集計対象にできる（次に保存される予想から即座に反映される）。
 # ══════════════════════════════════════════════════════════════
 
-PT_STATS_START_DATE = "2026-08-26"
-
-
 def _pt_v4_race_level_sql(select_extra: str = "") -> str:
-    """strategy_version='4'のレース単位集計サブクエリ（共通部分）"""
+    """strategy_version='5'のレース単位集計サブクエリ（共通部分）"""
     return f"""
         SELECT date, venue_name, race_no,
                MAX(bet_label) as label,
@@ -647,7 +642,7 @@ def _pt_v4_race_level_sql(select_extra: str = "") -> str:
                MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
                {select_extra}
         FROM predictions
-        WHERE strategy_version='4' AND bet_type='3連単' AND date >= '{PT_STATS_START_DATE}'
+        WHERE strategy_version='5' AND bet_type='3連単'
         GROUP BY date, venue_name, race_no
     """
 
@@ -665,7 +660,7 @@ def get_pt_score_stats():
                    SUM(is_hit) as n_hits,
                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as total_return
             FROM predictions
-            WHERE strategy_version='4' AND bet_type='3連単' AND date >= '{PT_STATS_START_DATE}'
+            WHERE strategy_version='5' AND bet_type='3連単'
             GROUP BY arare_score
         """).fetchall()
 
@@ -682,8 +677,7 @@ def get_pt_score_stats():
         streak_rows = conn.execute(f"""
             SELECT MAX(arare_score) as pt, MAX(is_hit) as is_hit
             FROM predictions
-            WHERE strategy_version='4' AND bet_type='3連単' AND result_recorded_at IS NOT NULL
-              AND date >= '{PT_STATS_START_DATE}'
+            WHERE strategy_version='5' AND bet_type='3連単' AND result_recorded_at IS NOT NULL
             GROUP BY date, venue_name, race_no
             ORDER BY MAX(id) DESC
         """).fetchall()
@@ -801,7 +795,7 @@ def get_pt_threshold_curve():
                    SUM(is_hit) as n_hits,
                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as total_return
             FROM predictions
-            WHERE strategy_version='4' AND bet_type='3連単' AND date >= '{PT_STATS_START_DATE}'
+            WHERE strategy_version='5' AND bet_type='3連単'
             GROUP BY arare_score
         """).fetchall()
     rows = [dict(r) for r in rows]
@@ -843,8 +837,8 @@ def get_pt_calibration_stats():
         rows = conn.execute(f"""
             SELECT prob, is_hit
             FROM predictions
-            WHERE strategy_version='4' AND bet_type='3連単'
-              AND result_recorded_at IS NOT NULL AND date >= '{PT_STATS_START_DATE}'
+            WHERE strategy_version='5' AND bet_type='3連単'
+              AND result_recorded_at IS NOT NULL
         """).fetchall()
 
     parsed = []

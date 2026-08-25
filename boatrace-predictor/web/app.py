@@ -80,7 +80,7 @@ def create_app():
         payout_dist = get_payout_distribution()
         daily_label = get_daily_label_stats()
 
-        # 新PTスコア方式（strategy_version='4'）の集計
+        # 新PTスコア方式（strategy_version='5'）の集計
         pt_score_stats = get_pt_score_stats()
         pt_daily_entry = get_pt_daily_entry_stats()
         pt_summary = get_pt_summary()
