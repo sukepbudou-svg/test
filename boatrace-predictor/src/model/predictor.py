@@ -17,10 +17,16 @@ from src.agents.racer_performance import predict_win_probs as racer_win_probs, _
 from src.agents.motor_form import predict_win_probs as motor_win_probs
 
 # エージェントの重み（合計1.0）
-WEIGHT_ML     = 0.40  # AIモデルエージェント
-WEIGHT_COURSE = 0.25  # コース戦略エージェント（競艇では枠番が最重要）
-WEIGHT_RACER  = 0.20  # 選手成績エージェント
-WEIGHT_MOTOR  = 0.15  # モーター状態エージェント
+# MLはコース・選手成績・モーター等57特徴量を学習データから直接フィットした唯一の
+# データ駆動コンポーネント。他3エージェントはMLと同じ生データを人間が決めた
+# 固定係数で近似しているだけで、学習・検証は経ていない。そのためMLの発言力を
+# 主軸に置きつつ、他3エージェントは「MLが薄いデータで見誤りやすい場面（開催初日・
+# 荒れ会場・出走間もない選手等）を下支えする保険」という位置づけに調整した。
+# 2026-08-25: 40/25/20/15 → 50/22/18/10 に変更（要経過観察・再検証）
+WEIGHT_ML     = 0.50  # AIモデルエージェント（学習データにフィットした唯一の要素）
+WEIGHT_COURSE = 0.22  # コース戦略エージェント（会場別コース勝率は実統計ベース）
+WEIGHT_RACER  = 0.18  # 選手成績エージェント
+WEIGHT_MOTOR  = 0.10  # モーター状態エージェント（motor_2rate等はML特徴量と重複度が高い）
 
 MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
 PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"

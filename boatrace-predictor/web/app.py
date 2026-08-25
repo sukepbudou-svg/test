@@ -14,6 +14,7 @@ from web.database import (
     get_recent_activity, get_hero_stats, get_pt_payout_stats, get_signal_stats,
     get_payout_distribution, get_daily_label_stats,
     get_pt_score_stats, get_pt_daily_entry_stats, get_pt_summary, get_pt_threshold_curve,
+    get_pt_calibration_stats,
 )
 from src.model.predictor import PT_MIN_SCORE
 
@@ -83,6 +84,7 @@ def create_app():
         pt_daily_entry = get_pt_daily_entry_stats()
         pt_summary = get_pt_summary()
         pt_threshold_curve = get_pt_threshold_curve()
+        pt_calibration = get_pt_calibration_stats()
 
         return render_template("stats.html",
                                pt_stats=pt_stats,
@@ -102,6 +104,7 @@ def create_app():
                                pt_daily_entry=pt_daily_entry,
                                pt_summary=pt_summary,
                                pt_threshold_curve=pt_threshold_curve,
+                               pt_calibration=pt_calibration,
                                pt_min_score=PT_MIN_SCORE)
 
     @app.route("/api/today")

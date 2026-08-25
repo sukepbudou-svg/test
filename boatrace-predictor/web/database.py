@@ -830,3 +830,52 @@ def get_pt_threshold_curve():
             "roi_pct": round(100 * cum_return / (cum_resulted * 100), 1) if cum_resulted else None,
         })
     return curve
+
+
+def get_pt_calibration_stats():
+    """新PTスコア方式: モデルの確率推定キャリブレーション検証
+    「モデルが確率X%と言った組み合わせが、実際に何%当たっているか」を帯別に集計する。
+    予測確率と実際の的中率が近ければ4エージェント合成確率は信頼でき、乖離が大きい
+    ほど確率推定（エージェント重み・温度スケーリング等）の見直しが必要と判断できる。
+    """
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT prob, is_hit
+            FROM predictions
+            WHERE strategy_version='4' AND bet_type='3連単'
+              AND result_recorded_at IS NOT NULL AND date >= '{PT_STATS_START_DATE}'
+        """).fetchall()
+
+    parsed = []
+    for r in rows:
+        try:
+            p = float(r["prob"])
+        except (TypeError, ValueError):
+            continue
+        parsed.append((p, r["is_hit"] or 0))
+
+    buckets = [
+        (0.00, 0.01, "0〜1%"),
+        (0.01, 0.02, "1〜2%"),
+        (0.02, 0.05, "2〜5%"),
+        (0.05, 0.10, "5〜10%"),
+        (0.10, 1.01, "10%以上"),
+    ]
+    result = []
+    for lo, hi, label in buckets:
+        bucket = [(p, h) for p, h in parsed if lo <= p < hi]
+        n = len(bucket)
+        if n == 0:
+            result.append({"label": label, "n": 0, "avg_pred_pct": None, "n_hits": 0, "actual_hit_pct": None})
+            continue
+        avg_pred = sum(p for p, _ in bucket) / n
+        hits = sum(h for _, h in bucket)
+        result.append({
+            "label": label,
+            "n": n,
+            "avg_pred_pct": round(avg_pred * 100, 2),
+            "n_hits": hits,
+            "actual_hit_pct": round(100 * hits / n, 2),
+        })
+    return result

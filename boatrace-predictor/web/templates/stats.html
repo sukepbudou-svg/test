@@ -362,6 +362,50 @@ footer{
   </div>
 </div>
 
+<!-- ── モデル確率キャリブレーション検証 ── -->
+<div class="section">
+  <h2>モデル確率キャリブレーション検証</h2>
+  <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
+    4エージェント合成確率が信頼できるかの検証。「予測確率」と「実際の的中率」が近ければ確率推定は妥当、
+    大きくズレているほどエージェント重み・温度スケーリングの見直しが必要。
+  </p>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>予測確率帯</th>
+        <th>件数</th>
+        <th>平均予測確率</th>
+        <th>的中数</th>
+        <th>実際の的中率</th>
+        <th>ズレ</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for c in pt_calibration %}
+      <tr>
+        <td>{{ c.label }}</td>
+        <td>{{ c.n }}</td>
+        <td>{% if c.avg_pred_pct is not none %}{{ c.avg_pred_pct }}%{% else %}—{% endif %}</td>
+        <td>{{ c.n_hits }}</td>
+        <td>{% if c.actual_hit_pct is not none %}{{ c.actual_hit_pct }}%{% else %}—{% endif %}</td>
+        {% if c.avg_pred_pct is not none and c.actual_hit_pct is not none %}
+        {% set diff = c.actual_hit_pct - c.avg_pred_pct %}
+        <td class="{% if diff|abs <= 1 %}roi-good{% elif diff|abs <= 3 %}roi-neutral{% else %}roi-bad{% endif %}">
+          {% if diff >= 0 %}+{% endif %}{{ "%.2f" % diff }}pt
+        </td>
+        {% else %}
+        <td>—</td>
+        {% endif %}
+      </tr>
+    {% else %}
+      <tr><td colspan="6" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
 <!-- ── 参戦ライン候補別 累積成績 ── -->
 <div class="section">
   <h2>参戦ライン候補別 累積成績（PT≥X の場合）</h2>
