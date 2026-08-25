@@ -1254,7 +1254,7 @@ def get_recommendations(
         else:
             _okuma_label = "見送り"
             _label_color = ""
-        print(f"  {_label_color}[{_okuma_label}]{_C_RESET} PT{_gate_score}(参戦ライン{PT_MIN_SCORE}) {_gate['reason_text']}")
+        print(f"  {_label_color}[{_okuma_label}]{_C_RESET} 参戦ライン{PT_MIN_SCORE} / {_gate['reason_text']}")
 
         def _add_rec(row, tier, label_override=None, bet_type="3連単"):
             f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
