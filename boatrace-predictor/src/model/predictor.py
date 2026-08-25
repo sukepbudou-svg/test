@@ -1068,7 +1068,6 @@ def get_recommendations(
     all_live_odds: dict = None,
     all_weather: dict = None,
     all_absent: dict = None,
-    all_2ren_live_odds: dict = None,
 ) -> pd.DataFrame:
     """
     本日の全レースから推奨買い目を選出する

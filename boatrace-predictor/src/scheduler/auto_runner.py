@@ -390,12 +390,9 @@ def _catchup_missing_results(today, df_program, db_update_fn, fetch_race_result_
             if result.get("available"):
                 combo  = result["combination"]
                 payout = result["payout"]
-                from src.collector.result_scraper import fetch_nirentan_payout
-                result_2ren = fetch_nirentan_payout(today, venue_code, race_no)
-                payout_2ren = result_2ren.get("payout", 0) if result_2ren.get("available") else 0
-                print(f"  → {combo} ¥{payout:,} / 2連単¥{payout_2ren:,}")
+                print(f"  → {combo} ¥{payout:,}")
                 if db_update_fn:
-                    db_update_fn(date_str, venue_name, race_no, combo, payout, payout_2ren)
+                    db_update_fn(date_str, venue_name, race_no, combo, payout)
             else:
                 print(f"  → 結果未確定（スキップ）")
         except Exception as e:
@@ -461,21 +458,17 @@ def _predict_one_race(
         print(f"  [WARN] 特徴量生成失敗: {venue_name} {race_no}R")
         return
 
-    # リアルタイムオッズ取得（3連単・2連単）
-    from src.collector.odds import fetch_odds, fetch_2ren_odds
+    # リアルタイムオッズ取得（3連単）
+    from src.collector.odds import fetch_odds
     live_odds = fetch_odds(today, venue_code, race_no)
-    live_2ren = fetch_2ren_odds(today, venue_code, race_no)
-    if live_2ren:
-        print(f"  2連単オッズ: {len(live_2ren)}通り取得")
     all_live_odds = {(venue_code, race_no): live_odds} if live_odds else {}
-    all_2ren_live_odds = {(venue_code, race_no): live_2ren} if live_2ren else {}
     all_weather = {(venue_code, race_no): race_weather} if race_weather else {}
     all_absent = {(venue_code, race_no): absent_boats} if absent_boats else {}
 
     # 予想生成
     recs = get_recommendations(model, df_features, payout_lookup=payout_lookup,
                                all_live_odds=all_live_odds, all_weather=all_weather,
-                               all_absent=all_absent, all_2ren_live_odds=all_2ren_live_odds)
+                               all_absent=all_absent)
 
     # 再計算で選出組み合わせが変わった場合、未確定の古い買い目を削除してから保存する
     if db_sync_fn and not recs.empty:
@@ -553,17 +546,10 @@ def _fetch_and_record_result(
     payout = result["payout"]
     print(f"  結果: {combo} 払戻:¥{payout:,}")
 
-    # 2連単払戻も取得
-    from src.collector.result_scraper import fetch_nirentan_payout
-    result_2ren = fetch_nirentan_payout(today, venue_code, race_no)
-    payout_2ren = result_2ren.get("payout", 0) if result_2ren.get("available") else 0
-    if payout_2ren:
-        print(f"  2連単結果: {result_2ren.get('combination','')} 払戻:¥{payout_2ren:,}")
-
     # DB更新（常時）
     if db_update_fn:
         try:
-            db_update_fn(date_str, venue_name, race_no, combo, payout, payout_2ren)
+            db_update_fn(date_str, venue_name, race_no, combo, payout)
         except Exception as _e:
             print(f"  [WARN] DB結果更新失敗: {_e}")
 
