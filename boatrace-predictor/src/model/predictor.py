@@ -573,6 +573,63 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.Da
     return score, reasons
 
 
+def _calc_entry_gate(race_row: pd.Series, weather: dict = None, by_prob: "pd.DataFrame | None" = None) -> dict:
+    """
+    参戦ゲート判定（客観条件 AND 市場条件の2ゲート方式）
+    客観条件: ①1号艇のスタート不安(展示ST≥0.18) OR ②荒水面・強風会場(荒れ会場/風速≥5m/波高≥15cm)
+    市場条件: 1号艇3連単ライブ最安オッズが4〜10倍（市場がまだ気づいていない人気ゾーン）
+    参戦 = 客観条件 AND 市場条件
+    """
+    reasons = []
+
+    st1 = _safe_float(race_row.get("boat1_exhibition_st"))
+    cond_start = st1 is not None and st1 >= 0.18
+    if cond_start:
+        reasons.append(f"1号ST不安({st1:.2f})")
+
+    vc = str(race_row.get("venue_code", "")).zfill(2)
+    venue_pts = ARARE_VENUES.get(vc, 0)
+    wind = _safe_float((weather or {}).get("wind_speed"))
+    wave = _safe_float((weather or {}).get("wave_height"))
+    cond_water = bool(venue_pts) or (wind is not None and wind >= 5) or (wave is not None and wave >= 15)
+    if venue_pts:
+        reasons.append("江戸川" if venue_pts == 2 else "荒れ会場")
+    if wind is not None and wind >= 5:
+        reasons.append(f"強風{wind:.0f}m")
+    if wave is not None and wave >= 15:
+        reasons.append(f"波高{wave:.0f}cm")
+
+    objective_ok = cond_start or cond_water
+
+    market_odds = None
+    if by_prob is not None and not by_prob.empty and "odds_source" in by_prob.columns:
+        b1_live = by_prob[(by_prob["odds_source"] == "live") & (by_prob["boat1"] == 1)]
+        if not b1_live.empty:
+            market_odds = float(b1_live["odds_value"].min())
+
+    if market_odds is None:
+        market_ok = False
+        market_note = "市場: 判定待ち"
+    elif 4.0 <= market_odds <= 10.0:
+        market_ok = True
+        market_note = f"市場: 1号最安{market_odds:.1f}倍(該当)"
+    else:
+        market_ok = False
+        market_note = f"市場: 1号最安{market_odds:.1f}倍(圏外)"
+
+    entry = objective_ok and market_ok
+    reason_text = (" / ".join(reasons) if reasons else "客観条件なし") + f" | {market_note}"
+
+    return {
+        "entry": entry,
+        "objective_ok": objective_ok,
+        "market_ok": market_ok,
+        "market_odds": market_odds,
+        "reasons": reasons,
+        "reason_text": reason_text,
+    }
+
+
 def build_payout_lookup(df_payout: pd.DataFrame, model: lgb.Booster, df_features: pd.DataFrame) -> dict:
     """
     過去データから人気順位ごとの平均払戻金を計算してJSONに保存する
@@ -942,7 +999,6 @@ def get_recommendations(
         live_odds = all_live_odds.get((venue_code, race_no)) if all_live_odds else None
         weather = all_weather.get((venue_code, race_no)) if all_weather else None
         absent_boats = all_absent.get((venue_code, race_no)) if all_absent else None
-        live_2ren_odds = all_2ren_live_odds.get((venue_code, race_no)) if all_2ren_live_odds else None
 
         # 1号艇逃げ推定率（J列表示用）
         nigerate_str = _calc_nigerate(race_row)
@@ -1102,29 +1158,18 @@ def get_recommendations(
             (by_prob["prob"] > 0)
         ].copy()
 
-        # ── 大穴シグナル判定（PT閾値廃止・条件の組み合わせで参戦） ──
-        _sig_text = " ".join(arare_reasons)
-        _sig_count = sum([
-            "M低" in _sig_text,
-            "展示最遅" in _sig_text,
-            "A1選手" in _sig_text,
-            ("荒れ会場" in _sig_text or "江戸川" in _sig_text),
-            "1号ST遅" in _sig_text,
-            "前付け" in _sig_text,
-        ])
-        _super_conc = "超人気集中" in _sig_text
+        # ── 参戦ゲート判定（客観条件 AND 市場条件の2ゲート方式） ──
+        _gate = _calc_entry_gate(race_row, weather, by_prob)
+        _gate_score = int(_gate["objective_ok"]) + int(_gate["market_ok"])
 
-        if _sig_count >= 2 and not _super_conc and arare_score >= 5:
+        if _gate["entry"]:
             _okuma_label = "神熱"
             _label_color = _C_YELLOW
         else:
             _okuma_label = "見送り"
             _label_color = ""
-        _skip_reason = ""
-        if _sig_count >= 2 and not _super_conc and arare_score < 5:
-            _skip_reason = f" ⚠PT{arare_score}<5→見送り"
-        print(f"  {_label_color}[{_okuma_label}]{_C_RESET} 荒れPT={arare_score} シグナル={_sig_count}/6"
-              + (" ⚠超人気集中除外" if _super_conc else "") + _skip_reason)
+        print(f"  {_label_color}[{_okuma_label}]{_C_RESET} 客観条件={'○' if _gate['objective_ok'] else '×'}"
+              f" 市場条件={'○' if _gate['market_ok'] else '×'} ({_gate['reason_text']})")
 
         def _add_rec(row, tier, label_override=None, bet_type="3連単"):
             f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
@@ -1135,7 +1180,7 @@ def get_recommendations(
             odds_str = f"{odds_val:.0f}倍" if src == "live" else f"{odds_val:.0f}倍(履歴)"
             bl       = label_override if label_override is not None else _okuma_label
             _clr = _label_color if bl != "見送り" else ""
-            print(f"  [{tier}] {venue_name_log} {race_no}R {combo} {odds_str} {_clr}PT:{arare_score}={bl}{_C_RESET}")
+            print(f"  [{tier}] {venue_name_log} {race_no}R {combo} {odds_str} {_clr}{bl}{_C_RESET}")
             all_recommendations.append({
                 "date":          race_row.get("date", ""),
                 "venue_name":    race_row.get("venue_name", ""),
@@ -1151,67 +1196,16 @@ def get_recommendations(
                 "tier":          tier,
                 "bet_label":     bl,
                 "edge":          f"{ev_val:.2f}",
-                "arare_score":        arare_score,
-                "arare_reasons":      " / ".join(arare_reasons),
+                "arare_score":        _gate_score,
+                "arare_reasons":      _gate["reason_text"],
                 "boat1_risk":         _calc_boat1_risk(race_row),
-                "okuma_signal_count": _sig_count,
+                "okuma_signal_count": _gate_score,
                 "bet_type":           bet_type,
-            })
-
-        def _add_rec_2ren(b1, b2, tier, label_override=None):
-            """2連単1点: 実オッズがあれば使用、なければ3連単確率合計から推定"""
-            combo = f"{b1}-{b2}"
-            prob_sum = 0.0
-            for b3 in range(1, 7):
-                if b3 in (b1, b2):
-                    continue
-                m = _valid[
-                    (_valid["boat1"].astype(int) == b1) &
-                    (_valid["boat2"].astype(int) == b2) &
-                    (_valid["boat3"].astype(int) == b3)
-                ]
-                if not m.empty:
-                    prob_sum += float(m.iloc[0]["prob"])
-            # 実オッズ優先（live_2ren_oddsはクロージャで参照）
-            if live_2ren_odds and combo in live_2ren_odds:
-                real_odds = live_2ren_odds[combo]
-                odds_str = f"{real_odds:.1f}倍"
-                odds_approx = real_odds
-                odds_src = "live"
-            else:
-                odds_approx = round(1.0 / prob_sum) if prob_sum > 0.005 else 0
-                odds_str = f"{odds_approx:.0f}倍(推定)"
-                odds_src = "2連単"
-            bl = label_override if label_override is not None else _okuma_label
-            _clr = _label_color if bl != "見送り" else ""
-            print(f"  [2連単] {venue_name_log} {race_no}R {combo} {odds_str} {_clr}PT:{arare_score}={bl}{_C_RESET}")
-            all_recommendations.append({
-                "date":          race_row.get("date", ""),
-                "venue_name":    race_row.get("venue_name", ""),
-                "race_no":       race_row.get("race_no", ""),
-                "race_grade":    race_row.get("meet_grade", ""),
-                "combination":   combo,
-                "prob":          f"{prob_sum:.4f}",
-                "odds":          odds_str,
-                "expected_roi":  f"{prob_sum * odds_approx:.2f}",
-                "confidence":    tier,
-                "odds_source":   odds_src,
-                "nigerate_str":  nigerate_str,
-                "tier":          tier,
-                "bet_label":     bl,
-                "edge":          f"{prob_sum * odds_approx:.2f}",
-                "arare_score":        arare_score,
-                "arare_reasons":      " / ".join(arare_reasons),
-                "boat1_risk":         _calc_boat1_risk(race_row),
-                "okuma_signal_count": _sig_count,
-                "bet_type":           "2連単",
             })
 
         def _pick_strength_based(label_override):
             """コース+STスコアで軸選出
-            参戦条件: ライブオッズがある場合、1号艇3連単最安 ≥ 10倍
-            2連単: 軸1-軸2 / 軸2-軸1
-            3連単: 軸1-軸2-3着 / 軸2-軸1-3着（上限250倍）
+            3連単: 軸1-軸2-3着 / 軸2-軸1-3着 / 3位-4位-2位(大穴) / 軸1-3位外艇-3着（最大4点）
             3着候補: 脅威艇 → ST速い外艇(≤0.14) → ETワースト順
             """
             available = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
@@ -1289,10 +1283,6 @@ def get_recommendations(
                 if bn not in (axis1, axis2) and bn not in all_third_cands:
                     all_third_cands.append(bn)
 
-            # 2連単: 軸1-軸2 と 軸2-軸1
-            _add_rec_2ren(axis1, axis2, "神熱", label_override)
-            _add_rec_2ren(axis2, axis1, "神熱", label_override)
-
             if not all_third_cands:
                 return
 
@@ -1346,10 +1336,7 @@ def get_recommendations(
                                 break
 
         if not _valid.empty:
-            _lbl_disp = _okuma_label
-            _rsn_disp = (f"シグナル={_sig_count}/6 超人気集中除外" if _super_conc
-                         else f"シグナル={_sig_count}/6")
-            print(f"  {_label_color}[{_lbl_disp}]{_C_RESET} {_rsn_disp} → ETベース選出")
+            print(f"  {_label_color}[{_okuma_label}]{_C_RESET} {_gate['reason_text']} → ETベース選出")
             _pick_strength_based(_okuma_label)
         else:
             print(f"  [スキップ] {venue_name_log} {race_no}R オッズデータなし")

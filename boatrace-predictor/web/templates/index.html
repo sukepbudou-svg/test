@@ -229,19 +229,6 @@ nav a.active{
 .tc-num.lbl-chuana{color:#40c8e0;text-shadow:0 0 10px rgba(64,200,224,0.5);}
 .tc-num.lbl-shinnetsu{color:#ffcc00;text-shadow:0 0 10px rgba(255,204,0,0.6);}
 .tc-num.lbl-skip{color:#334;}
-.tc-row.tc-ren2{
-  background:rgba(0,200,255,0.04);
-  border-color:rgba(0,200,255,0.12);
-  margin-left:12px;
-  padding:4px 10px;
-}
-.tc-ren2-lbl{color:#00c8ff;font-size:10px;letter-spacing:1px;}
-.tc-ren2-num{
-  font-size:16px;font-weight:700;
-  font-family:var(--font-logo);
-  color:#00c8ff;
-  text-shadow:0 0 8px rgba(0,200,255,0.4);
-}
 .tc-sep{color:rgba(255,255,255,0.12);font-size:13px;flex-shrink:0;}
 .tc-hit{
   font-family:var(--font-mono);font-size:12px;
@@ -522,28 +509,6 @@ nav a.active{
   font-family:var(--font-mono);font-size:9px;color:var(--dim);
 }
 
-/* 2連単バッジ */
-.bet-type-tag{
-  font-family:var(--font-mono);
-  font-size:9px;font-weight:700;letter-spacing:1px;
-  padding:1px 5px;border-radius:3px;
-  background:rgba(0,200,255,0.13);
-  color:#00c8ff;
-  border:1px solid rgba(0,200,255,0.3);
-  margin-left:4px;
-  vertical-align:middle;
-  flex-shrink:0;
-}
-.combo-2ren{
-  color:#00c8ff;
-  text-shadow:0 0 8px #00c8ff,0 0 18px rgba(0,200,255,0.4);
-}
-.bet-type-tag-skip{
-  background:rgba(90,100,128,0.1);
-  color:var(--dim2);
-  border-color:rgba(90,100,128,0.18);
-}
-
 /* 払戻（的中時） */
 .payout-hi{
   font-family:var(--font-logo);font-size:12px;
@@ -634,21 +599,9 @@ footer{
   border:1px solid rgba(0,255,170,0.35);
   color:var(--green);
 }
-.hit-chip-2ren{
-  background:rgba(0,200,255,0.12);
-  border:1px solid rgba(0,200,255,0.35);
-  color:#00c8ff;
-}
-/* 神熱的中チップ（緑/水色→ゴールドグラデーション） */
+/* 神熱的中チップ（緑→ゴールドグラデーション） */
 .hit-chip-3ren-shinnetsu{
   background:linear-gradient(135deg,rgba(0,255,170,0.10),rgba(255,200,0,0.18));
-  border:1px solid rgba(255,200,0,0.50);
-  color:#ffcc00;
-  text-shadow:0 0 8px rgba(255,200,0,0.6);
-  box-shadow:0 0 10px rgba(255,200,0,0.15);
-}
-.hit-chip-2ren-shinnetsu{
-  background:linear-gradient(135deg,rgba(0,200,255,0.10),rgba(255,200,0,0.18));
   border:1px solid rgba(255,200,0,0.50);
   color:#ffcc00;
   text-shadow:0 0 8px rgba(255,200,0,0.6);
@@ -685,26 +638,19 @@ footer{
   <span>⟳ 予想追加時に自動更新</span>
 </div>
 
-{% set ns = namespace(skip=0, okuma=0, hit_okuma=0, hit_skip=0,
-                      ren2_okuma=0, ren2_skip=0, hit_ren2_okuma=0, hit_ren2_skip=0) %}
+{% set ns = namespace(skip=0, okuma=0, hit_okuma=0, hit_skip=0) %}
 {% for race in race_list %}
   {% set lbl = race.bets[0].bet_label if race.bets else '見送り' %}
-  {% set hit = namespace(hit_3ren=false, has_ren2=false, hit_ren2=false) %}
+  {% set hit = namespace(hit_3ren=false) %}
   {% for b in race.bets %}
-    {% if b.is_hit and b.bet_type != '2連単' %}{% set hit.hit_3ren = true %}{% endif %}
-    {% if b.bet_type == '2連単' %}{% set hit.has_ren2 = true %}{% endif %}
-    {% if b.bet_type == '2連単' and b.is_hit %}{% set hit.hit_ren2 = true %}{% endif %}
+    {% if b.is_hit %}{% set hit.hit_3ren = true %}{% endif %}
   {% endfor %}
   {% if lbl == '神熱' %}
     {% set ns.okuma = ns.okuma + 1 %}
     {% if hit.hit_3ren %}{% set ns.hit_okuma = ns.hit_okuma + 1 %}{% endif %}
-    {% if hit.has_ren2 %}{% set ns.ren2_okuma = ns.ren2_okuma + 1 %}{% endif %}
-    {% if hit.hit_ren2 %}{% set ns.hit_ren2_okuma = ns.hit_ren2_okuma + 1 %}{% endif %}
   {% else %}
     {% set ns.skip = ns.skip + 1 %}
     {% if hit.hit_3ren %}{% set ns.hit_skip = ns.hit_skip + 1 %}{% endif %}
-    {% if hit.has_ren2 %}{% set ns.ren2_skip = ns.ren2_skip + 1 %}{% endif %}
-    {% if hit.hit_ren2 %}{% set ns.hit_ren2_skip = ns.hit_ren2_skip + 1 %}{% endif %}
   {% endif %}
 {% endfor %}
 
@@ -712,28 +658,16 @@ footer{
   <div class="activity-log" id="activity-log"></div>
   <div class="today-counts">
     <div class="tc-row">
-      <span class="tc-label lbl-shinnetsu">神熱 3連単</span>
+      <span class="tc-label lbl-shinnetsu">神熱</span>
       <span class="tc-num lbl-shinnetsu">{{ ns.okuma }}</span>
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if ns.hit_okuma > 0 %}has-hit{% endif %}">◎ {{ ns.hit_okuma }}</span>
     </div>
-    <div class="tc-row tc-ren2">
-      <span class="tc-label tc-ren2-lbl">神熱 2連単</span>
-      <span class="tc-num tc-ren2-num">{{ ns.ren2_okuma }}</span>
-      <span class="tc-sep">|</span>
-      <span class="tc-hit {% if ns.hit_ren2_okuma > 0 %}has-hit{% endif %}">◎ {{ ns.hit_ren2_okuma }}</span>
-    </div>
     <div class="tc-row">
-      <span class="tc-label lbl-skip">見送り 3連単</span>
+      <span class="tc-label lbl-skip">見送り</span>
       <span class="tc-num lbl-skip">{{ ns.skip }}</span>
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if ns.hit_skip > 0 %}has-hit{% endif %}">◎ {{ ns.hit_skip }}</span>
-    </div>
-    <div class="tc-row tc-ren2">
-      <span class="tc-label tc-ren2-lbl">見送り 2連単</span>
-      <span class="tc-num tc-ren2-num">{{ ns.ren2_skip }}</span>
-      <span class="tc-sep">|</span>
-      <span class="tc-hit {% if ns.hit_ren2_skip > 0 %}has-hit{% endif %}">◎ {{ ns.hit_ren2_skip }}</span>
     </div>
   </div>
 
@@ -769,7 +703,7 @@ footer{
     {% set _clbl = race.bets[0].bet_label if race.bets else '' %}
     {% for b in race.bets %}
       {% if b.is_hit %}
-      <span class="hit-chip {{ ('hit-chip-2ren-shinnetsu' if _clbl == '神熱' else 'hit-chip-2ren') if b.bet_type == '2連単' else ('hit-chip-3ren-shinnetsu' if _clbl == '神熱' else 'hit-chip-3ren') }}"
+      <span class="hit-chip {{ 'hit-chip-3ren-shinnetsu' if _clbl == '神熱' else 'hit-chip-3ren' }}"
             onclick="scrollToRaceHit('{{ race.venue_name }}', {{ race.race_no }})">
         {{ race.venue_name }} {{ race.race_no }}R
         <b>{{ b.combination }}</b>
@@ -794,7 +728,6 @@ footer{
 
     {% for race in venue.races %}
       {% set lbl = race.bets[0].bet_label if race.bets else '見送り' %}
-      {% set pt = race.arare_score %}
       {% if lbl == '神熱' %}
         {% set pt_cls = "pt-shinnetsu" %}{% set c_cls = "combo-shinnetsu" %}{% set rank_cls = "rank-shinnetsu" %}
       {% else %}
@@ -807,36 +740,22 @@ footer{
         {% if race.race_time %}
           <span class="race-time" data-rt="{{ race.race_time }}">締切 {{ race.race_time }}</span>
         {% endif %}
-        <span class="pt-badge {{ pt_cls }}">PT{{ pt }} {{ lbl }}</span>
+        <span class="pt-badge {{ pt_cls }}">{{ lbl }}</span>
       </div>
 
       {% if race.arare_reasons %}
-      <div class="arare-info" style="{% if lbl != '神熱' %}opacity:0.5{% endif %}"><b>シグナル:</b> {{ race.arare_reasons }}</div>
+      <div class="arare-info" style="{% if lbl != '神熱' %}opacity:0.5{% endif %}"><b>判定:</b> {{ race.arare_reasons }}</div>
       {% endif %}
 
       {% set res_3ren = namespace(found=none, payout=0) %}
-      {% set res_2ren = namespace(found=none, payout=0) %}
       {% for b in race.bets %}
       <div class="bet-row">
-        {% if b.bet_type == '2連単' %}
-          {% if lbl == '神熱' %}
-            <span class="combo combo-2ren">{{ b.combination }}<span class="bet-type-tag">2連</span></span>
-          {% else %}
-            <span class="combo combo-skip">{{ b.combination }}<span class="bet-type-tag bet-type-tag-skip">2連</span></span>
-          {% endif %}
-        {% else %}
-          <span class="combo {{ c_cls }}">{{ b.combination }}</span>
-        {% endif %}
+        <span class="combo {{ c_cls }}">{{ b.combination }}</span>
         <span class="odds-val {% if b.odds_value >= 200 %}odds-hi{% endif %}">{{ b.odds }}</span>
         <span class="bet-result">
           {% if b.result_recorded_at %}
-            {% if b.bet_type == '2連単' %}
-              {% if res_2ren.found is none %}{% set res_2ren.found = b %}{% endif %}
-              {% if b.is_hit %}{% set res_2ren.payout = b.actual_payout %}{% endif %}
-            {% else %}
-              {% if res_3ren.found is none %}{% set res_3ren.found = b %}{% endif %}
-              {% if b.is_hit %}{% set res_3ren.payout = b.actual_payout %}{% endif %}
-            {% endif %}
+            {% if res_3ren.found is none %}{% set res_3ren.found = b %}{% endif %}
+            {% if b.is_hit %}{% set res_3ren.payout = b.actual_payout %}{% endif %}
             {% if b.is_hit %}
               <span class="hit-badge {{ 'hit-yes-shinnetsu' if lbl == '神熱' else 'hit-yes' }}">◎ 的中</span>
             {% else %}
@@ -849,22 +768,12 @@ footer{
       </div>
       {% endfor %}
 
-      {% set any_res = res_3ren.found or res_2ren.found %}
+      {% set any_res = res_3ren.found %}
       {% if any_res %}
       {% set ac = any_res.actual_combination.split('-') %}
-      {% if res_2ren.found %}
-      {% set hit2 = res_2ren.payout > 0 %}
-      <div class="race-actual" style="border-color:{% if hit2 %}rgba(0,200,255,0.35){% else %}rgba(90,100,128,0.25){% endif %}">
-        <span class="actual-label" style="color:{% if hit2 %}#00c8ff{% else %}var(--dim2){% endif %}">2連単</span>
-        <span class="actual-combo" style="color:{% if hit2 %}#00c8ff{% else %}var(--dim2){% endif %};font-size:13px;{% if not hit2 %}text-shadow:none{% endif %}">{{ ac[0] }}-{{ ac[1] }}</span>
-        <span class="actual-pay {% if not hit2 %}actual-pay-miss{% endif %}">
-          {% if res_2ren.payout %}¥{{ "{:,}".format(res_2ren.payout) }}{% else %}¥{{ "{:,}".format(res_2ren.found.actual_payout) }}{% endif %}
-        </span>
-      </div>
-      {% endif %}
       {% set payout3 = res_3ren.found.actual_payout if res_3ren.found else (any_res.actual_payout_3ren if any_res.actual_payout_3ren else 0) %}
       {% set hit3 = res_3ren.payout > 0 %}
-      <div class="race-actual" style="{% if res_2ren.found %}margin-top:4px;{% endif %}{% if not hit3 %}border-color:rgba(90,100,128,0.25);background:rgba(90,100,128,0.04){% endif %}">
+      <div class="race-actual" style="{% if not hit3 %}border-color:rgba(90,100,128,0.25);background:rgba(90,100,128,0.04){% endif %}">
         <span class="actual-label" style="{% if not hit3 %}color:var(--dim2){% endif %}">3連単</span>
         <span class="actual-combo {% if not hit3 %}actual-pay-miss{% endif %}">{{ any_res.actual_combination }}</span>
         <span class="actual-pay {% if not hit3 %}actual-pay-miss{% endif %}">
