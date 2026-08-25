@@ -4,7 +4,6 @@
 """
 
 import json
-import re
 from itertools import permutations
 from pathlib import Path
 
@@ -1289,168 +1288,57 @@ def get_recommendations(
             })
 
         def _pick_strength_based(label_override):
-            """コース+STスコアで軸選出、オッズ帯5点構成で選出
-            1点目: 軸1-軸2-3着候補（オッズ制限なし）
-            2〜4点目: 100〜160倍 / 161〜230倍 / 231〜300倍（帯ごとに1点）
-            5点目: 301倍以上（上限なし）
-            3着候補: 脅威艇 → ST速い外艇(≤0.14) → ETワースト順
-            オッズ帯選出: 脅威艇・軸スコア上位3艇が絡む組み合わせを優先し、その中でEV(確率×オッズ)最大のものを選出
+            """オッズ帯5点構成で選出（4エージェント合成確率をそのままEVに使用）
+            1点目: 30〜99倍から1点
+            2〜3点目: 100〜199倍から2点
+            4点目: 201〜300倍から1点
+            5点目: 301倍以上（上限なし）から1点
+            各帯: EV(モデル確率×オッズ)上位の組み合わせを選出
             """
             available = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
-            if len(available) < 2:
+            if len(available) < 3:
                 print(f"  [スキップ] 出走艇不足")
                 return
 
-            def _axis_score(bn):
-                """軸スコア: コース位置点(内側=高) + 展示STボーナス + 選手等級ボーナス"""
-                ac_raw = race_row.get(f"boat{bn}_actual_course")
-                try:
-                    course = int(ac_raw) if ac_raw is not None else bn
-                except (TypeError, ValueError):
-                    course = bn
-                course_score = max(0, 7 - course)  # 1コース=6, 2コース=5, ..., 6コース=1
-                # 荒水面・強風会場では内側コースの優位性が薄れるため1〜2コースを減点
-                if _gate["rough_water"] and course <= 2:
-                    course_score = max(0, course_score - 2)
-                st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
-                if st and st > 0:
-                    if st <= 0.12:   st_bonus = 4
-                    elif st <= 0.14: st_bonus = 3
-                    elif st <= 0.16: st_bonus = 2
-                    elif st <= 0.17: st_bonus = 1
-                    else:            st_bonus = -2  # 0.18以上は大幅減点
-                else:
-                    st_bonus = 0
-                # 選手等級ボーナス: A1=+3, A2=+2, B1=+1, B2=0
-                gn_raw = race_row.get(f"boat{bn}_grade_num", 2)
-                try:
-                    gn = int(float(gn_raw)) if gn_raw is not None else 2
-                    if gn >= 4:    grade_bonus = 3  # A1
-                    elif gn >= 3:  grade_bonus = 2  # A2
-                    elif gn >= 2:  grade_bonus = 1  # B1
-                    else:          grade_bonus = 0  # B2
-                except (TypeError, ValueError):
-                    grade_bonus = 0
-                # 弱モーター減点: 2連率<0.35 → -2点
-                motor = _safe_float(race_row.get(f"boat{bn}_motor_2rate"))
-                motor_penalty = -2 if (motor is not None and motor < 0.35) else 0
-                return course_score + st_bonus + grade_bonus + motor_penalty
-
-            scored = sorted(available, key=lambda b: _axis_score(b), reverse=True)
-            if len(scored) < 2:
-                print(f"  [スキップ] 軸候補不足")
-                return
-
-            axis1, axis2 = scored[0], scored[1]
-            print(f"  [軸選出] 軸1={axis1}(スコア{_axis_score(axis1)}) 軸2={axis2}(スコア{_axis_score(axis2)})")
-
-            # 脅威艇: A1選手/前付け/ST速 を荒れPTの理由リストから特定
-            _sig_joined = " ".join(_gate["reasons"])
-            threat_boats = []
-            for _tm in re.finditer(r'(\d+)号(?:A1選手|前付け|ST速)', _sig_joined):
-                _tbn = int(_tm.group(1))
-                if _tbn not in threat_boats:
-                    threat_boats.append(_tbn)
-
-            # 3着候補: ①脅威艇 → ②ST速い外艇(3〜6号でST≤0.14) → ③ETワースト順
-            all_third_cands = []
-            for b in threat_boats:
-                if b not in (axis1, axis2) and b not in all_third_cands:
-                    all_third_cands.append(b)
-            fast_outer = sorted(
-                [(bn, _safe_float(race_row.get(f"boat{bn}_exhibition_st")))
-                 for bn in available
-                 if bn >= 3 and bn not in (axis1, axis2) and bn not in all_third_cands
-                 and (_safe_float(race_row.get(f"boat{bn}_exhibition_st")) or 1) <= 0.14],
-                key=lambda x: x[1]
-            )
-            for bn, _ in fast_outer:
-                all_third_cands.append(bn)
-            et_sorted_rev = sorted(et_vals_k.items(), key=lambda x: x[1], reverse=True)
-            for bn, _ in et_sorted_rev:
-                if bn not in (axis1, axis2) and bn not in all_third_cands:
-                    all_third_cands.append(bn)
-            for bn in available:
-                if bn not in (axis1, axis2) and bn not in all_third_cands:
-                    all_third_cands.append(bn)
-
-            if not all_third_cands:
-                return
-
-            print(f"  [3連単候補] 軸1={axis1} 軸2={axis2} 3着候補={all_third_cands} 脅威艇={threat_boats}")
-
-            def _try_add_3ren(f, s, t):
-                if len({f, s, t}) < 3:
-                    return False
-                key = (f, s, t)
-                if key in seen_3ren:
-                    return False
-                seen_3ren.add(key)
-                m = _valid[
-                    (_valid["boat1"].astype(int) == f) &
-                    (_valid["boat2"].astype(int) == s) &
-                    (_valid["boat3"].astype(int) == t)
-                ]
-                if not m.empty:
-                    r = m.iloc[0].copy()
-                    r["ev"] = float(r["prob"]) * float(r["odds_value"])
-                    _add_rec(r, "神熱", label_override=label_override, bet_type="3連単")
-                    return True
-                else:
-                    print(f"  [3連単] {f}-{s}-{t} オッズデータなし→スキップ")
-                    return False
-
             seen_3ren = set()
 
-            # 1点目: 軸1-軸2-3着候補（オッズ制限なし）
-            for tc in all_third_cands:
-                if _try_add_3ren(axis1, axis2, tc):
-                    break
-
-            def _pick_odds_band(min_odds, max_odds, band_name):
-                """オッズ帯から1点選出: 脅威艇・軸スコア上位3艇が絡む組み合わせを優先し、
-                その中でEV(確率×オッズ)最大のものを選ぶ（なければ帯全体でEV最大にフォールバック）"""
+            def _pick_odds_band(min_odds, max_odds, band_name, n_points=1):
+                """オッズ帯からEV(確率×オッズ)上位n_points点を選出"""
                 pool = _valid[
                     (_valid["odds_value"] >= min_odds) & (_valid["odds_value"] <= max_odds)
                 ].copy()
                 if pool.empty:
                     print(f"  [{band_name}] 該当オッズ帯なし→スキップ")
-                    return False
+                    return 0
                 pool["boat1"] = pool["boat1"].astype(int)
                 pool["boat2"] = pool["boat2"].astype(int)
                 pool["boat3"] = pool["boat3"].astype(int)
-                not_seen = ~pool.apply(lambda r: (r["boat1"], r["boat2"], r["boat3"]) in seen_3ren, axis=1)
-                pool = pool[not_seen]
-                if pool.empty:
+                pool["ev"] = pool["prob"].astype(float) * pool["odds_value"].astype(float)
+                pool = pool.sort_values("ev", ascending=False)
+
+                picked = 0
+                for _, row in pool.iterrows():
+                    f, s, t = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
+                    key = (f, s, t)
+                    if key in seen_3ren:
+                        continue
+                    seen_3ren.add(key)
+                    _add_rec(row, "神熱", label_override=label_override, bet_type="3連単")
+                    print(f"  [{band_name}] {f}-{s}-{t} EV={float(row['ev']):.2f}")
+                    picked += 1
+                    if picked >= n_points:
+                        break
+                if picked == 0:
                     print(f"  [{band_name}] 候補が全て選出済み→スキップ")
-                    return False
+                return picked
 
-                quality_boats = set(threat_boats) | set(scored[:3])
-                quality_mask = (
-                    pool["boat1"].isin(quality_boats)
-                    | pool["boat2"].isin(quality_boats)
-                    | pool["boat3"].isin(quality_boats)
-                )
-                target_pool = pool[quality_mask] if quality_mask.any() else pool
-
-                target_pool = target_pool.copy()
-                target_pool["ev"] = target_pool["prob"].astype(float) * target_pool["odds_value"].astype(float)
-                best = target_pool.sort_values("ev", ascending=False).iloc[0]
-
-                f, s, t = int(best["boat1"]), int(best["boat2"]), int(best["boat3"])
-                seen_3ren.add((f, s, t))
-                _add_rec(best, "神熱", label_override=label_override, bet_type="3連単")
-                print(f"  [{band_name}] {f}-{s}-{t} EV={float(best['ev']):.2f}")
-                return True
-
-            # 2〜5点目: オッズ帯から選出
-            _pick_odds_band(100.0, 160.0, "2点目(100-160倍)")
-            _pick_odds_band(161.0, 230.0, "3点目(161-230倍)")
-            _pick_odds_band(231.0, 300.0, "4点目(231-300倍)")
-            _pick_odds_band(301.0, 999999.0, "5点目(301倍+)")
+            _pick_odds_band(30.0, 99.0, "1点目(30-99倍)", n_points=1)
+            _pick_odds_band(100.0, 199.0, "2-3点目(100-199倍)", n_points=2)
+            _pick_odds_band(201.0, 300.0, "4点目(201-300倍)", n_points=1)
+            _pick_odds_band(301.0, 999999.0, "5点目(301倍+)", n_points=1)
 
         if not _valid.empty:
-            print(f"  {_label_color}[{_okuma_label}]{_C_RESET} {_gate['reason_text']} → ETベース選出")
+            print(f"  {_label_color}[{_okuma_label}]{_C_RESET} {_gate['reason_text']} → オッズ帯EV選出")
             _pick_strength_based(_okuma_label)
         else:
             print(f"  [スキップ] {venue_name_log} {race_no}R オッズデータなし")
