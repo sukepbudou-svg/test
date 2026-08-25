@@ -706,6 +706,7 @@ def get_pt_score_stats():
             "okuma_rate": round(100 * n_okuma / n_races_resulted, 1) if n_races_resulted else None,
             "n_race_hits": n_race_hits,
             "race_hit_rate": round(100 * n_race_hits / n_races_resulted, 1) if n_races_resulted else None,
+            "race_hits_per": round(n_races_resulted / n_race_hits, 1) if n_race_hits else None,
             "current_miss_streak": streaks.get(pt, 0),
         })
     result.sort(key=lambda x: -(x["pt"] if x["pt"] is not None else -1))
@@ -740,6 +741,7 @@ def get_pt_daily_entry_stats():
             "n_races_resulted": n_races_resulted,
             "n_hits": row["n_hits"] or 0,
             "hit_rate": round(100 * (row["n_hits"] or 0) / n_races_resulted, 1) if n_races_resulted else None,
+            "hits_per": round(n_races_resulted / row["n_hits"], 1) if row["n_hits"] else None,
             "roi_pct": round(100 * (row["total_return"] or 0) / (n_bets * 100), 1) if n_bets else None,
             "n_okuma": row["n_okuma"] or 0,
             "pnl": (row["total_return"] or 0) - n_bets * 100,
@@ -817,6 +819,7 @@ def get_pt_threshold_curve():
             "n_resulted": cum_resulted,
             "n_hits": cum_hits,
             "hit_rate": round(100 * cum_hits / cum_resulted, 1) if cum_resulted else None,
+            "hits_per": round(cum_resulted / cum_hits, 1) if cum_hits else None,
             "roi_pct": round(100 * cum_return / (cum_resulted * 100), 1) if cum_resulted else None,
         })
     return curve

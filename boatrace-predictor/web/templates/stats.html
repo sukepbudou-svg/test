@@ -328,6 +328,7 @@ footer{
         <th>結果済</th>
         <th>的中</th>
         <th>的中率</th>
+        <th>何回に1回</th>
         <th>回収率</th>
         <th>万舟率</th>
         <th>現在の連外</th>
@@ -342,6 +343,7 @@ footer{
         <td>{{ s.n_resulted }}</td>
         <td>{{ s.n_hits }}</td>
         <td>{% if s.hit_rate is not none %}{{ s.hit_rate }}%{% else %}—{% endif %}</td>
+        <td>{% if s.race_hits_per is not none %}{{ s.race_hits_per }}回に1回{% else %}—{% endif %}</td>
         <td class="{% if s.roi_pct is none %}{% elif s.roi_pct >= 100 %}roi-good{% elif s.roi_pct >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
           {% if s.roi_pct is not none %}{{ s.roi_pct }}%{% else %}—{% endif %}
         </td>
@@ -353,7 +355,7 @@ footer{
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="9" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
+      <tr><td colspan="10" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -375,6 +377,7 @@ footer{
         <th>結果済</th>
         <th>的中</th>
         <th>的中率</th>
+        <th>何回に1回</th>
         <th>回収率</th>
       </tr>
     </thead>
@@ -386,12 +389,13 @@ footer{
         <td>{{ c.n_resulted }}</td>
         <td>{{ c.n_hits }}</td>
         <td>{% if c.hit_rate is not none %}{{ c.hit_rate }}%{% else %}—{% endif %}</td>
+        <td>{% if c.hits_per is not none %}{{ c.hits_per }}回に1回{% else %}—{% endif %}</td>
         <td class="{% if c.roi_pct is none %}{% elif c.roi_pct >= 100 %}roi-good{% elif c.roi_pct >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
           {% if c.roi_pct is not none %}{{ c.roi_pct }}%{% else %}—{% endif %}
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="6" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
+      <tr><td colspan="7" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -411,6 +415,7 @@ footer{
         <th>結果済</th>
         <th>的中</th>
         <th>的中率</th>
+        <th>何回に1回</th>
         <th>回収率</th>
         <th>万舟数</th>
         <th>収支</th>
@@ -425,6 +430,7 @@ footer{
         <td>{{ d.n_races_resulted }}</td>
         <td>{{ d.n_hits }}</td>
         <td>{% if d.hit_rate is not none %}{{ d.hit_rate }}%{% else %}—{% endif %}</td>
+        <td>{% if d.hits_per is not none %}{{ d.hits_per }}回に1回{% else %}—{% endif %}</td>
         <td class="{% if d.roi_pct is none %}{% elif d.roi_pct >= 100 %}roi-good{% elif d.roi_pct >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
           {% if d.roi_pct is not none %}{{ d.roi_pct }}%{% else %}—{% endif %}
         </td>
@@ -434,7 +440,7 @@ footer{
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="9" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
+      <tr><td colspan="10" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
     {% endfor %}
     </tbody>
   </table>
