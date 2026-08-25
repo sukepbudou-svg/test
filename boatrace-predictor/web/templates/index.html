@@ -728,6 +728,7 @@ footer{
 
     {% for race in venue.races %}
       {% set lbl = race.bets[0].bet_label if race.bets else '見送り' %}
+      {% set pt = race.arare_score %}
       {% if lbl == '神熱' %}
         {% set pt_cls = "pt-shinnetsu" %}{% set c_cls = "combo-shinnetsu" %}{% set rank_cls = "rank-shinnetsu" %}
       {% else %}
@@ -740,7 +741,7 @@ footer{
         {% if race.race_time %}
           <span class="race-time" data-rt="{{ race.race_time }}">締切 {{ race.race_time }}</span>
         {% endif %}
-        <span class="pt-badge {{ pt_cls }}">{{ lbl }}</span>
+        <span class="pt-badge {{ pt_cls }}">PT{{ pt }} {{ lbl }}</span>
       </div>
 
       {% if race.arare_reasons %}

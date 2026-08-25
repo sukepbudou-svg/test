@@ -573,59 +573,148 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.Da
     return score, reasons
 
 
-def _calc_entry_gate(race_row: pd.Series, weather: dict = None, by_prob: "pd.DataFrame | None" = None) -> dict:
+# 参戦ライン（暫定値）: 実データのPT分布・実際の配当を見ながら調整する
+PT_MIN_SCORE = 13
+
+
+def _calc_race_pt(race_row: pd.Series, weather: dict = None, by_prob: "pd.DataFrame | None" = None) -> dict:
     """
-    参戦ゲート判定（客観条件 AND 市場条件の2ゲート方式）
-    客観条件: ①1号艇のスタート不安(展示ST≥0.18) OR ②荒水面・強風会場(荒れ会場/風速≥5m/波高≥15cm)
-    市場条件: 1号艇3連単ライブ最安オッズが4〜10倍（市場がまだ気づいていない人気ゾーン）
-    参戦 = 客観条件 AND 市場条件
+    レースの荒れPTを計算する（新版・満点29点）
+    「配当サイズに直結する要素」を重く、「荒れる確率だけの要素」を軽く配点している。
+    A. 市場のミスプライシング（最大4点）: 1号艇ライブ最安オッズが4〜6倍+4/7〜10倍+3/11〜15倍+1
+    B. 外艇の脅威の複数性（最大11点）: 前付け+3/外A1+2/外ST速+2/複数外艇ST速+3/外艇展示最速+1
+    C. 1号艇・2号艇の弱さ（最大9点）: 1号ST不安+3/1号M低+2/1号B級+2/2号ST不安+1/2号M低+1
+    D. 環境・条件（最大5点）: 荒れ会場+1〜2/強風+1/波高+1/一般戦+1
+    参戦 = PT合計 ≥ PT_MIN_SCORE
     """
+    score = 0
     reasons = []
 
-    st1 = _safe_float(race_row.get("boat1_exhibition_st"))
-    cond_start = st1 is not None and st1 >= 0.18
-    if cond_start:
-        reasons.append(f"1号ST不安({st1:.2f})")
-
-    vc = str(race_row.get("venue_code", "")).zfill(2)
-    venue_pts = ARARE_VENUES.get(vc, 0)
-    wind = _safe_float((weather or {}).get("wind_speed"))
-    wave = _safe_float((weather or {}).get("wave_height"))
-    cond_water = bool(venue_pts) or (wind is not None and wind >= 5) or (wave is not None and wave >= 15)
-    if venue_pts:
-        reasons.append("江戸川" if venue_pts == 2 else "荒れ会場")
-    if wind is not None and wind >= 5:
-        reasons.append(f"強風{wind:.0f}m")
-    if wave is not None and wave >= 15:
-        reasons.append(f"波高{wave:.0f}cm")
-
-    objective_ok = cond_start or cond_water
-
+    # ── A. 市場のミスプライシング（最大4点・ライブオッズ取得時のみ） ──
     market_odds = None
     if by_prob is not None and not by_prob.empty and "odds_source" in by_prob.columns:
         b1_live = by_prob[(by_prob["odds_source"] == "live") & (by_prob["boat1"] == 1)]
         if not b1_live.empty:
             market_odds = float(b1_live["odds_value"].min())
+    if market_odds is not None:
+        if 4.0 <= market_odds <= 6.0:
+            score += 4
+            reasons.append(f"市場ミスプライス({market_odds:.1f}倍)")
+        elif 7.0 <= market_odds <= 10.0:
+            score += 3
+            reasons.append(f"市場やや人気({market_odds:.1f}倍)")
+        elif 11.0 <= market_odds <= 15.0:
+            score += 1
+            reasons.append(f"市場圏外気味({market_odds:.1f}倍)")
 
-    if market_odds is None:
-        market_ok = False
-        market_note = "市場: 判定待ち"
-    elif 4.0 <= market_odds <= 10.0:
-        market_ok = True
-        market_note = f"市場: 1号最安{market_odds:.1f}倍(該当)"
-    else:
-        market_ok = False
-        market_note = f"市場: 1号最安{market_odds:.1f}倍(圏外)"
+    # ── B. 外艇の脅威の複数性（最大11点） ──
+    g1 = _safe_float(race_row.get("boat1_grade_num"))
+    g1_is_a1 = g1 is not None and g1 >= 4
 
-    entry = objective_ok and market_ok
-    reason_text = (" / ".join(reasons) if reasons else "客観条件なし") + f" | {market_note}"
+    for bn in [4, 5, 6]:
+        ac_raw = race_row.get(f"boat{bn}_actual_course")
+        try:
+            ac = int(ac_raw) if ac_raw is not None else bn
+        except (TypeError, ValueError):
+            ac = bn
+        if ac <= 2 and ac != bn:
+            score += 3
+            reasons.append(f"{bn}号前付け(→{ac}C)")
+            break
+
+    if not g1_is_a1:
+        for bn in [4, 5, 6]:
+            g = _safe_float(race_row.get(f"boat{bn}_grade_num"))
+            if g is not None and g >= 4:
+                score += 2
+                reasons.append(f"{bn}号A1選手")
+                break
+
+    best_outer_st, best_outer_st_bn = 9.99, None
+    for bn in [3, 4, 5, 6]:
+        st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+        if st and st > 0 and st < best_outer_st:
+            best_outer_st, best_outer_st_bn = st, bn
+    if best_outer_st_bn is not None and best_outer_st <= 0.12:
+        score += 2
+        reasons.append(f"{best_outer_st_bn}号ST速({best_outer_st:.2f})")
+
+    fast_outer_count = sum(
+        1 for bn in [3, 4, 5, 6]
+        if (_ost := _safe_float(race_row.get(f"boat{bn}_exhibition_st"))) and _ost > 0 and _ost <= 0.13
+    )
+    if fast_outer_count >= 2:
+        score += 3
+        reasons.append(f"外艇ST速({fast_outer_count}艇≤0.13)")
+
+    et_vals = {}
+    for bn in range(1, 7):
+        v = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
+        if v and v > 0:
+            et_vals[bn] = v
+    if len(et_vals) >= 4:
+        fastest_boat = min(et_vals, key=lambda b: et_vals[b])
+        if fastest_boat in {3, 4, 5, 6}:
+            score += 1
+            reasons.append(f"{fastest_boat}号展示最速({et_vals[fastest_boat]:.2f}s)")
+
+    # ── C. 1号艇・2号艇の弱さ（最大9点） ──
+    st1 = _safe_float(race_row.get("boat1_exhibition_st"))
+    if st1 is not None and st1 >= 0.18:
+        score += 3
+        reasons.append(f"1号ST不安({st1:.2f})")
+
+    m1 = _safe_float(race_row.get("boat1_motor_2rate"))
+    if m1 is not None and m1 < 0.30:
+        score += 2
+        reasons.append(f"1号M低({m1:.0%})")
+
+    if g1 is not None and g1 <= 2:
+        score += 2
+        reasons.append("1号B級")
+
+    st2 = _safe_float(race_row.get("boat2_exhibition_st"))
+    if st2 is not None and st2 >= 0.17:
+        score += 1
+        reasons.append(f"2号ST不安({st2:.2f})")
+
+    m2 = _safe_float(race_row.get("boat2_motor_2rate"))
+    if m2 is not None and m2 < 0.35:
+        score += 1
+        reasons.append("2号M低")
+
+    # ── D. 環境・条件（最大5点） ──
+    vc = str(race_row.get("venue_code", "")).zfill(2)
+    venue_pts = ARARE_VENUES.get(vc, 0)
+    rough_water = bool(venue_pts)
+    if venue_pts:
+        score += venue_pts
+        reasons.append("江戸川" if venue_pts == 2 else "荒れ会場")
+
+    wind = _safe_float((weather or {}).get("wind_speed"))
+    if wind is not None and wind >= 5:
+        score += 1
+        reasons.append(f"強風{wind:.0f}m")
+        rough_water = True
+
+    wave = _safe_float((weather or {}).get("wave_height"))
+    if wave is not None and wave >= 15:
+        score += 1
+        reasons.append(f"波高{wave:.0f}cm")
+        rough_water = True
+
+    mg = _safe_float(race_row.get("meet_grade_num"))
+    if mg is not None and mg <= 1:
+        score += 1
+        reasons.append("一般戦")
+
+    entry = score >= PT_MIN_SCORE
+    reason_text = f"PT{score}" + (" [" + " / ".join(reasons) + "]" if reasons else "")
 
     return {
         "entry": entry,
-        "objective_ok": objective_ok,
-        "rough_water": cond_water,
-        "market_ok": market_ok,
-        "market_odds": market_odds,
+        "score": score,
+        "rough_water": rough_water,
         "reasons": reasons,
         "reason_text": reason_text,
     }
@@ -1008,11 +1097,7 @@ def get_recommendations(
         predictions = predict_race(model, race_row, payout_lookup, live_odds, weather, absent_boats)
         by_prob = predictions.sort_values("prob", ascending=False).reset_index(drop=True)
 
-        # 荒れ条件スコアリング
-        arare_score, arare_reasons = _calc_arare_score(race_row, weather, by_prob)
         venue_name_log = race_row.get("venue_name", "")
-        print(f"  [スコア] {venue_name_log} {race_no}R PT={arare_score}"
-              + (f" [{', '.join(arare_reasons)}]" if arare_reasons else ""))
 
         # 1号艇弱体チェック（荒れPTと独立した弱イン判定）
         boat1_weak_count, boat1_weak_flags = _calc_boat1_weakness(race_row, weather)
@@ -1159,9 +1244,9 @@ def get_recommendations(
             (by_prob["prob"] > 0)
         ].copy()
 
-        # ── 参戦ゲート判定（客観条件 AND 市場条件の2ゲート方式） ──
-        _gate = _calc_entry_gate(race_row, weather, by_prob)
-        _gate_score = int(_gate["objective_ok"]) + int(_gate["market_ok"])
+        # ── 参戦ライン判定（荒れPTスコア方式） ──
+        _gate = _calc_race_pt(race_row, weather, by_prob)
+        _gate_score = _gate["score"]
 
         if _gate["entry"]:
             _okuma_label = "神熱"
@@ -1169,8 +1254,7 @@ def get_recommendations(
         else:
             _okuma_label = "見送り"
             _label_color = ""
-        print(f"  {_label_color}[{_okuma_label}]{_C_RESET} 客観条件={'○' if _gate['objective_ok'] else '×'}"
-              f" 市場条件={'○' if _gate['market_ok'] else '×'} ({_gate['reason_text']})")
+        print(f"  {_label_color}[{_okuma_label}]{_C_RESET} PT{_gate_score}(参戦ライン{PT_MIN_SCORE}) {_gate['reason_text']}")
 
         def _add_rec(row, tier, label_override=None, bet_type="3連単"):
             f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
@@ -1260,8 +1344,8 @@ def get_recommendations(
             axis1, axis2 = scored[0], scored[1]
             print(f"  [軸選出] 軸1={axis1}(スコア{_axis_score(axis1)}) 軸2={axis2}(スコア{_axis_score(axis2)})")
 
-            # 脅威艇: A1選手/前付け/ST速 を arare_reasons から特定
-            _sig_joined = " ".join(arare_reasons)
+            # 脅威艇: A1選手/前付け/ST速 を荒れPTの理由リストから特定
+            _sig_joined = " ".join(_gate["reasons"])
             threat_boats = []
             for _tm in re.finditer(r'(\d+)号(?:A1選手|前付け|ST速)', _sig_joined):
                 _tbn = int(_tm.group(1))
