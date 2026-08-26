@@ -223,6 +223,37 @@ nav a.active{
   font-family:var(--font-mono);font-size:10px;
   color:var(--dim2);flex-shrink:0;white-space:nowrap;
 }
+.tc-detail{
+  display:flex;flex-direction:column;gap:3px;
+  padding:2px 4px 8px 14px;
+}
+.tc-detail-row{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  font-family:var(--font-mono);font-size:10px;
+  padding:4px 8px;border-radius:4px;
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.06);
+  cursor:pointer;
+}
+.tc-detail-row:hover{background:rgba(255,255,255,0.07);}
+.tc-detail-race{color:var(--dim2);flex-shrink:0;}
+.tc-detail-result{color:var(--dim);}
+.tc-detail-result.tc-detail-pending{color:var(--dim);}
+.tc-detail-result.tc-detail-miss{color:#ff4466;}
+.tc-detail-hit{
+  background:rgba(0,255,170,0.10);
+  border-color:rgba(0,255,170,0.35);
+}
+.tc-detail-hit .tc-detail-result{
+  color:var(--green);text-shadow:0 0 6px rgba(0,255,170,0.5);
+}
+.tc-detail-hit-shinnetsu{
+  background:linear-gradient(135deg,rgba(0,255,170,0.08),rgba(255,200,0,0.16));
+  border-color:rgba(255,200,0,0.5);
+}
+.tc-detail-hit-shinnetsu .tc-detail-result{
+  color:#ffcc00;text-shadow:0 0 6px rgba(255,200,0,0.6);
+}
 .tc-label{font-size:11px;flex:1;}
 .tc-label.lbl-puchun{color:#ff6b6b;}
 .tc-label.lbl-kokusen{color:#ffaa55;}
@@ -707,12 +738,38 @@ footer{
   <div class="activity-log" id="activity-log"></div>
   <div class="today-counts">
     {% for s in pt_counts %}
-    <div class="tc-row {% if s.pt >= pt_min_score %}tc-row-shinnetsu{% endif %}">
-      <span class="tc-label {% if s.pt >= pt_min_score %}lbl-shinnetsu{% else %}lbl-skip{% endif %}">PT{{ s.pt }}</span>
-      <span class="tc-num {% if s.pt >= pt_min_score %}lbl-shinnetsu{% else %}lbl-skip{% endif %}">{{ s.races }}</span>
+    {% set is_shinnetsu = s.pt >= pt_min_score %}
+    <div class="tc-row {% if is_shinnetsu %}tc-row-shinnetsu{% endif %}" style="cursor:pointer;" onclick="togglePtDetail({{ s.pt }})">
+      <span class="tc-label {% if is_shinnetsu %}lbl-shinnetsu{% else %}lbl-skip{% endif %}">PT{{ s.pt }}</span>
+      <span class="tc-num {% if is_shinnetsu %}lbl-shinnetsu{% else %}lbl-skip{% endif %}">{{ s.races }}</span>
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if s.hits > 0 %}has-hit{% endif %}">◎ {{ s.hits }}</span>
       <span class="tc-freq">{% if s.hits > 0 %}{{ "%.1f" | format(s.races / s.hits) }}回に1回{% else %}—{% endif %}</span>
+    </div>
+    <div class="tc-detail" id="pt-detail-{{ s.pt }}" style="display:none;">
+      {% for race in race_list %}
+        {% if race.arare_score == s.pt %}
+        {% set rr = namespace(found=none, hit=false, payout=0, combo='') %}
+        {% for b in race.bets %}
+          {% if b.result_recorded_at and rr.found is none %}
+            {% set rr.found = b %}
+            {% set rr.combo = b.actual_combination %}
+          {% endif %}
+          {% if b.is_hit %}{% set rr.hit = true %}{% set rr.payout = b.actual_payout %}{% endif %}
+        {% endfor %}
+        <div class="tc-detail-row {% if rr.hit %}{% if is_shinnetsu %}tc-detail-hit-shinnetsu{% else %}tc-detail-hit{% endif %}{% endif %}"
+             onclick="event.stopPropagation(); scrollToRace('{{ race.venue_name }}', {{ race.race_no }})">
+          <span class="tc-detail-race">{{ race.venue_name }} {{ race.race_no }}R</span>
+          {% if rr.found is none %}
+            <span class="tc-detail-result tc-detail-pending">待機中</span>
+          {% elif rr.hit %}
+            <span class="tc-detail-result">◎ {{ rr.combo }} ¥{{ "{:,}".format(rr.payout) }}</span>
+          {% else %}
+            <span class="tc-detail-result tc-detail-miss">✗ {{ rr.combo }}</span>
+          {% endif %}
+        </div>
+        {% endif %}
+      {% endfor %}
     </div>
     {% endfor %}
   </div>
@@ -958,6 +1015,12 @@ footer{
 
     observer.observe(el);
     el.scrollIntoView({behavior:'smooth', block:'center'});
+  };
+
+  window.togglePtDetail = function(pt){
+    const el = document.getElementById('pt-detail-' + pt);
+    if(!el) return;
+    el.style.display = (el.style.display === 'none') ? 'flex' : 'none';
   };
 
   window.toggleConfirm = function(key, el){
