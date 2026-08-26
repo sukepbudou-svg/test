@@ -343,8 +343,10 @@ def get_venue_detail(venue_name: str):
 
 
 def get_venue_okuma_ranking():
-    """会場別・全期間の万舟(実配当≥1万円)回数・確率ランキング（レース単位・全バージョン対象）
-    予想システムのバージョンに関係なく、実際のレース結果そのものの傾向を見るための集計。"""
+    """会場別の万舟(実配当≥1万円)回数・確率ランキング（レース単位）
+    strategy_version='5'（今の予想コードでの保存分）以降のみを対象にする。日付ではなく
+    バージョンで区切ることで、実行環境とローカルPCのタイムゾーンのズレに影響されず
+    「今から」を正確に区切れる。今後レースが記録されるたびに集計対象が増えていく。"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute("""
@@ -354,7 +356,7 @@ def get_venue_okuma_ranking():
             FROM (
                 SELECT date, venue_name, race_no, MAX(actual_payout) as actual_payout
                 FROM predictions
-                WHERE bet_type='3連単' AND result_recorded_at IS NOT NULL
+                WHERE bet_type='3連単' AND result_recorded_at IS NOT NULL AND strategy_version='5'
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY venue_name
