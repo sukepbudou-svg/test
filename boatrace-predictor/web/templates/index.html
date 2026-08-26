@@ -785,9 +785,35 @@ footer{
           {% if rl == '神熱' and vlbl.top == '見送り' %}{% set vlbl.top = '神熱' %}{% endif %}
         {% endfor %}
         <span class="vjl-tag vjl-{{ 'shinnetsu' if vlbl.top == '神熱' else 'skip' }}"
-              onclick="scrollToVenue('{{ venue.venue_name }}')">{{ venue.venue_name }}</span>
+              onclick="toggleVenueDetail('{{ venue.venue_name }}')">{{ venue.venue_name }}</span>
       {% endfor %}
     </div>
+    {% for venue in venue_list %}
+    <div class="tc-detail" id="venue-detail-{{ venue.venue_name }}" style="display:none;">
+      {% for race in venue.races %}
+        {% set rlbl = race.bets[0].bet_label if race.bets else '見送り' %}
+        {% set rr = namespace(found=none, hit=false, payout=0, combo='') %}
+        {% for b in race.bets %}
+          {% if b.result_recorded_at and rr.found is none %}
+            {% set rr.found = b %}
+            {% set rr.combo = b.actual_combination %}
+          {% endif %}
+          {% if b.is_hit %}{% set rr.hit = true %}{% set rr.payout = b.actual_payout %}{% endif %}
+        {% endfor %}
+        <div class="tc-detail-row {% if rr.hit %}{% if rlbl == '神熱' %}tc-detail-hit-shinnetsu{% else %}tc-detail-hit{% endif %}{% endif %}"
+             onclick="event.stopPropagation(); scrollToRace('{{ race.venue_name }}', {{ race.race_no }})">
+          <span class="tc-detail-race">{{ race.venue_name }} {{ race.race_no }}R</span>
+          {% if rr.found is none %}
+            <span class="tc-detail-result tc-detail-pending">待機中</span>
+          {% elif rr.hit %}
+            <span class="tc-detail-result">◎ {{ rr.combo }} ¥{{ "{:,}".format(rr.payout) }}</span>
+          {% else %}
+            <span class="tc-detail-result tc-detail-miss">✗ {{ rr.combo }}</span>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
   </div>
   {% endif %}
 
@@ -1019,6 +1045,12 @@ footer{
 
   window.togglePtDetail = function(pt){
     const el = document.getElementById('pt-detail-' + pt);
+    if(!el) return;
+    el.style.display = (el.style.display === 'none') ? 'flex' : 'none';
+  };
+
+  window.toggleVenueDetail = function(venue){
+    const el = document.getElementById('venue-detail-' + venue);
     if(!el) return;
     el.style.display = (el.style.display === 'none') ? 'flex' : 'none';
   };
