@@ -765,7 +765,7 @@ footer{
           {% elif rr.hit %}
             <span class="tc-detail-result">◎ {{ rr.combo }} ¥{{ "{:,}".format(rr.payout) }}</span>
           {% else %}
-            <span class="tc-detail-result tc-detail-miss">✗ {{ rr.combo }}</span>
+            <span class="tc-detail-result tc-detail-miss">✗ {{ rr.combo }} ¥{{ "{:,}".format(rr.found.actual_payout) }}</span>
           {% endif %}
         </div>
         {% endif %}
@@ -808,7 +808,7 @@ footer{
           {% elif rr.hit %}
             <span class="tc-detail-result">◎ {{ rr.combo }} ¥{{ "{:,}".format(rr.payout) }}</span>
           {% else %}
-            <span class="tc-detail-result tc-detail-miss">✗ {{ rr.combo }}</span>
+            <span class="tc-detail-result tc-detail-miss">✗ {{ rr.combo }} ¥{{ "{:,}".format(rr.found.actual_payout) }}</span>
           {% endif %}
         </div>
       {% endfor %}
