@@ -318,6 +318,10 @@ footer{
 <!-- ── PT値別集計 ── -->
 <div class="section">
   <h2>PT値別集計（1点=100円換算）</h2>
+  <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
+    「平均実配当額(全レース)」は的中・外れに関わらずそのPT帯の実際のレース結果の平均配当。
+    PTが機能していればPTが高いほどこの金額も上がるはず。
+  </p>
   <div class="table-wrap">
   <table class="data-table">
     <thead>
@@ -330,7 +334,8 @@ footer{
         <th>的中率</th>
         <th>何回に1回</th>
         <th>回収率</th>
-        <th>平均配当額</th>
+        <th>平均配当額<br>(的中時)</th>
+        <th>平均実配当額<br>(全レース)</th>
         <th>万舟率</th>
         <th>現在の連外</th>
       </tr>
@@ -349,6 +354,7 @@ footer{
           {% if s.roi_pct is not none %}{{ s.roi_pct }}%{% else %}—{% endif %}
         </td>
         <td>{% if s.avg_payout is not none %}¥{{ "{:,}".format(s.avg_payout) }}{% else %}—{% endif %}</td>
+        <td>{% if s.avg_actual_payout is not none %}¥{{ "{:,}".format(s.avg_actual_payout) }}{% else %}—{% endif %}</td>
         <td class="{% if s.okuma_rate is none %}{% elif s.okuma_rate >= 25 %}roi-good{% elif s.okuma_rate >= 10 %}roi-neutral{% else %}roi-bad{% endif %}">
           {% if s.okuma_rate is not none %}{{ s.okuma_rate }}%{% else %}—{% endif %}
         </td>
@@ -357,7 +363,7 @@ footer{
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="11" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
+      <tr><td colspan="12" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
     {% endfor %}
     </tbody>
   </table>

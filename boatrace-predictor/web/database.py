@@ -703,7 +703,8 @@ def get_pt_score_stats():
                    COUNT(*) as n_races,
                    SUM(has_result) as n_races_resulted,
                    SUM(CASE WHEN has_result=1 AND actual_payout >= 10000 THEN 1 ELSE 0 END) as n_okuma,
-                   SUM(CASE WHEN has_result=1 THEN race_hit ELSE 0 END) as n_race_hits
+                   SUM(CASE WHEN has_result=1 THEN race_hit ELSE 0 END) as n_race_hits,
+                   SUM(CASE WHEN has_result=1 THEN actual_payout ELSE 0 END) as total_actual_payout
             FROM ({_pt_v4_race_level_sql()})
             GROUP BY pt
         """).fetchall()
@@ -728,6 +729,7 @@ def get_pt_score_stats():
         n_races_resulted = rr.get("n_races_resulted", 0) or 0
         n_okuma = rr.get("n_okuma", 0) or 0
         n_race_hits = rr.get("n_race_hits", 0) or 0
+        total_actual_payout = rr.get("total_actual_payout", 0) or 0
         result.append({
             "pt": pt,
             "n_bets": row["n_bets"],
@@ -736,6 +738,7 @@ def get_pt_score_stats():
             "hit_rate": round(100 * (row["n_hits"] or 0) / n_resulted, 1) if n_resulted else None,
             "roi_pct": round(100 * (row["total_return"] or 0) / (n_resulted * 100), 1) if n_resulted else None,
             "avg_payout": round((row["total_return"] or 0) / row["n_hits"]) if row["n_hits"] else None,
+            "avg_actual_payout": round(total_actual_payout / n_races_resulted) if n_races_resulted else None,
             "n_races": rr.get("n_races", 0) or 0,
             "n_races_resulted": n_races_resulted,
             "n_okuma": n_okuma,
