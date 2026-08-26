@@ -735,6 +735,7 @@ def get_pt_score_stats():
             "n_hits": row["n_hits"] or 0,
             "hit_rate": round(100 * (row["n_hits"] or 0) / n_resulted, 1) if n_resulted else None,
             "roi_pct": round(100 * (row["total_return"] or 0) / (n_resulted * 100), 1) if n_resulted else None,
+            "avg_payout": round((row["total_return"] or 0) / row["n_hits"]) if row["n_hits"] else None,
             "n_races": rr.get("n_races", 0) or 0,
             "n_races_resulted": n_races_resulted,
             "n_okuma": n_okuma,

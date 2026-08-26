@@ -330,6 +330,7 @@ footer{
         <th>的中率</th>
         <th>何回に1回</th>
         <th>回収率</th>
+        <th>平均配当額</th>
         <th>万舟率</th>
         <th>現在の連外</th>
       </tr>
@@ -347,6 +348,7 @@ footer{
         <td class="{% if s.roi_pct is none %}{% elif s.roi_pct >= 100 %}roi-good{% elif s.roi_pct >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
           {% if s.roi_pct is not none %}{{ s.roi_pct }}%{% else %}—{% endif %}
         </td>
+        <td>{% if s.avg_payout is not none %}¥{{ "{:,}".format(s.avg_payout) }}{% else %}—{% endif %}</td>
         <td class="{% if s.okuma_rate is none %}{% elif s.okuma_rate >= 25 %}roi-good{% elif s.okuma_rate >= 10 %}roi-neutral{% else %}roi-bad{% endif %}">
           {% if s.okuma_rate is not none %}{{ s.okuma_rate }}%{% else %}—{% endif %}
         </td>
@@ -355,7 +357,7 @@ footer{
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="10" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
+      <tr><td colspan="11" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
     {% endfor %}
     </tbody>
   </table>
