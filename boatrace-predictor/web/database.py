@@ -342,6 +342,38 @@ def get_venue_detail(venue_name: str):
     }
 
 
+def get_venue_okuma_ranking():
+    """会場別・全期間の万舟(実配当≥1万円)回数・確率ランキング（レース単位・全バージョン対象）
+    予想システムのバージョンに関係なく、実際のレース結果そのものの傾向を見るための集計。"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT venue_name,
+                   COUNT(*) as n_races,
+                   SUM(CASE WHEN actual_payout >= 10000 THEN 1 ELSE 0 END) as n_okuma
+            FROM (
+                SELECT date, venue_name, race_no, MAX(actual_payout) as actual_payout
+                FROM predictions
+                WHERE bet_type='3連単' AND result_recorded_at IS NOT NULL
+                GROUP BY date, venue_name, race_no
+            )
+            GROUP BY venue_name
+        """).fetchall()
+    result = []
+    for r in rows:
+        r = dict(r)
+        n_races = r["n_races"] or 0
+        n_okuma = r["n_okuma"] or 0
+        result.append({
+            "venue_name": r["venue_name"],
+            "n_races": n_races,
+            "n_okuma": n_okuma,
+            "okuma_rate": round(100 * n_okuma / n_races, 1) if n_races else 0.0,
+        })
+    result.sort(key=lambda x: (-x["okuma_rate"], -x["n_okuma"]))
+    return result
+
+
 def get_venue_stats():
     """会場別集計（全期間・レース単位）"""
     init_db()

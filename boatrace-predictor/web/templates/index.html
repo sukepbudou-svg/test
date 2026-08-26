@@ -305,6 +305,40 @@ nav a.active{
 }
 .vjl-skip:hover{background:rgba(255,255,255,0.07);color:var(--white);border-color:rgba(255,255,255,0.18);}
 
+/* ══════════════ VENUE OKUMA RANKING ══════════════ */
+.venue-okuma-ranking{
+  font-family:var(--font-mono);
+  flex:1;min-width:280px;
+}
+.vor-title{
+  font-size:9px;letter-spacing:2px;
+  color:#ffcc00;
+  text-shadow:0 0 8px rgba(255,204,0,0.5);
+  padding:0 4px 4px;
+  border-bottom:1px solid rgba(255,204,0,0.2);
+  margin-bottom:5px;
+}
+.vor-grid{
+  display:grid;
+  grid-template-rows:repeat(8, auto);
+  grid-auto-flow:column;
+  grid-auto-columns:min-content;
+  gap:3px 14px;
+  align-items:start;
+}
+.vor-item{
+  display:flex;align-items:center;gap:6px;
+  font-size:11px;white-space:nowrap;
+  padding:2px 4px;
+}
+.vor-rank{
+  color:var(--dim);font-size:9px;
+  min-width:14px;text-align:right;flex-shrink:0;
+}
+.vor-name{color:var(--white);min-width:52px;flex-shrink:0;}
+.vor-stat{color:#ffcc00;flex-shrink:0;}
+.vor-rate{color:var(--dim2);font-size:10px;margin-left:2px;}
+
 /* ══════════════ VENUE COLUMNS CONTAINER ══════════════ */
 .venues-wrap{
   display:grid;
@@ -695,6 +729,21 @@ footer{
         {% endfor %}
         <span class="vjl-tag vjl-{{ 'shinnetsu' if vlbl.top == '神熱' else 'skip' }}"
               onclick="scrollToVenue('{{ venue.venue_name }}')">{{ venue.venue_name }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if venue_okuma_ranking %}
+  <div class="venue-okuma-ranking">
+    <div class="vor-title">会場別 万舟ランキング（全期間）</div>
+    <div class="vor-grid">
+      {% for v in venue_okuma_ranking %}
+      <div class="vor-item">
+        <span class="vor-rank">{{ loop.index }}</span>
+        <span class="vor-name">{{ v.venue_name }}</span>
+        <span class="vor-stat">{{ v.n_okuma }}回<span class="vor-rate">({{ v.okuma_rate }}%)</span></span>
+      </div>
       {% endfor %}
     </div>
   </div>
