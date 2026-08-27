@@ -14,15 +14,23 @@ from web.database import (
     get_recent_activity, get_hero_stats, get_pt_payout_stats, get_signal_stats,
     get_payout_distribution, get_daily_label_stats,
     get_pt_score_stats, get_pt_daily_entry_stats, get_pt_summary, get_pt_threshold_curve,
+    get_pt_all_time_streaks,
     get_pt_calibration_stats, get_venue_okuma_ranking, get_race_position_distribution,
 )
 from src.model.predictor import PT_MIN_SCORE
 
 
-def _build_pt_counts(race_list):
-    """TODAY画面のPT別集計を計算する（1点=100円換算・的中控除後の収支・当日の連続不的中数）
+def _build_pt_counts(race_list, all_time_streaks=None):
+    """TODAY画面のPT別集計を計算する（1点=100円換算・的中控除後の収支は当日分、
+    連続不的中数は前日以前も込みの全期間分）
+    Args:
+        all_time_streaks: get_pt_all_time_streaks()の戻り値
+            {"by_pt": {pt: streak}, "overall": streak}。指定なければ連続不的中数は0扱い。
     Returns: (pt_counts: list[dict], pt_total: dict)
     """
+    all_time_streaks = all_time_streaks or {"by_pt": {}, "overall": 0}
+    by_pt_streak = all_time_streaks.get("by_pt", {})
+
     groups = {}
     for race in race_list:
         pt = race["arare_score"]
@@ -48,38 +56,20 @@ def _build_pt_counts(race_list):
                 n_hits += 1
         pnl = ret - cost
 
-        # 当日の連続不的中数: 結果が出ているレースだけを対象に、直近（race_time降順）から
-        # 的中が出るまで遡ってカウント。1度も的中していなければ結果済み全レース分。
-        resulted = [r for r in races if any(b.get("result_recorded_at") for b in r["bets"])]
-        resulted.sort(key=lambda r: r.get("race_time") or "", reverse=True)
-        miss_streak = 0
-        for race in resulted:
-            if any(b.get("is_hit") for b in race["bets"]):
-                break
-            miss_streak += 1
-
         pt_counts.append({
             "pt": pt, "races": n_races, "hits": n_hits,
             "cost": cost, "return": ret, "pnl": pnl,
-            "miss_streak": miss_streak,
+            "miss_streak": by_pt_streak.get(pt, 0),
         })
         total_races += n_races
         total_hits += n_hits
         total_cost += cost
         total_return += ret
 
-    all_resulted = [r for r in race_list if any(b.get("result_recorded_at") for b in r["bets"])]
-    all_resulted.sort(key=lambda r: r.get("race_time") or "", reverse=True)
-    total_miss_streak = 0
-    for race in all_resulted:
-        if any(b.get("is_hit") for b in race["bets"]):
-            break
-        total_miss_streak += 1
-
     pt_total = {
         "races": total_races, "hits": total_hits,
         "cost": total_cost, "return": total_return, "pnl": total_return - total_cost,
-        "miss_streak": total_miss_streak,
+        "miss_streak": all_time_streaks.get("overall", 0),
     }
     return pt_counts, pt_total
 
@@ -120,7 +110,7 @@ def create_app():
             venues[vn].append(race)
         venue_list = [{"venue_name": k, "races": v} for k, v in venues.items()]
         venue_okuma_ranking = get_venue_okuma_ranking()
-        pt_counts, pt_total = _build_pt_counts(race_list)
+        pt_counts, pt_total = _build_pt_counts(race_list, get_pt_all_time_streaks())
         race_position_distribution = get_race_position_distribution()
         # 「現在何R目か」は記録済みレース数(race_list|length)ではなく、本日の全番組表
         # から算出したday_race_noの最大値を使う。途中再起動・日中からの起動でも

@@ -754,6 +754,24 @@ def get_pt_score_stats():
     return result
 
 
+def get_pt_all_time_streaks():
+    """PT値ごと・全体の、日付をまたいだ全期間での現在の連続不的中数（strategy_version='5'限定）
+    TODAY画面のPT別集計で「当日分だけ」ではなく前日以前も込みで連続不的中を数えるために使う。"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT MAX(arare_score) as pt, MAX(is_hit) as is_hit
+            FROM predictions
+            WHERE strategy_version='5' AND bet_type='3連単' AND result_recorded_at IS NOT NULL
+            GROUP BY date, venue_name, race_no
+            ORDER BY MAX(id) DESC
+        """).fetchall()
+    rows = [dict(r) for r in rows]
+    by_pt = _calc_streaks(rows, lambda r: r["pt"])
+    overall = _calc_streaks(rows, lambda r: True)
+    return {"by_pt": by_pt, "overall": overall.get(True, 0)}
+
+
 def get_pt_daily_entry_stats():
     """新PTスコア方式: 日付×ラベル(神熱/見送り)別の成績集計"""
     init_db()
