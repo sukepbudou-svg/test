@@ -214,7 +214,9 @@ nav a.active{
   font-family:var(--font-mono);
 }
 .tc-row{
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  display:grid;
+  grid-template-columns:46px 42px 12px 38px 84px 12px 54px 1fr;
+  align-items:center;column-gap:4px;
   padding:6px 12px;border-radius:6px;
   background:rgba(255,255,255,0.03);
   border:1px solid rgba(255,255,255,0.06);
@@ -231,19 +233,19 @@ nav a.active{
 }
 .tc-total-label{color:var(--white)!important;text-shadow:none!important;}
 .tc-streak{
-  font-size:10px;color:var(--dim2);flex-shrink:0;white-space:nowrap;
+  font-size:10px;color:var(--dim2);white-space:nowrap;
 }
 .tc-streak-warn{color:#ffaa55;}
 .tc-streak-hot{color:#ff4466;font-weight:700;}
 .tc-pnl{
-  font-size:11px;font-weight:700;flex-shrink:0;white-space:nowrap;
-  margin-left:auto;
+  font-size:11px;font-weight:700;white-space:nowrap;
+  text-align:right;
 }
 .tc-pnl-pos{color:var(--green);text-shadow:0 0 6px rgba(0,255,170,0.4);}
 .tc-pnl-neg{color:#ff4466;text-shadow:0 0 6px rgba(255,68,102,0.4);}
 .tc-freq{
   font-family:var(--font-mono);font-size:10px;
-  color:var(--dim2);flex-shrink:0;white-space:nowrap;
+  color:var(--dim2);white-space:nowrap;
 }
 .tc-detail{
   display:flex;flex-direction:column;gap:3px;
@@ -276,14 +278,14 @@ nav a.active{
 .tc-detail-hit-shinnetsu .tc-detail-result{
   color:#ffcc00;text-shadow:0 0 6px rgba(255,200,0,0.6);
 }
-.tc-label{font-size:11px;flex:1;}
+.tc-label{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .tc-label.lbl-puchun{color:#ff6b6b;}
 .tc-label.lbl-kokusen{color:#ffaa55;}
 .tc-label.lbl-chuana{color:#40c8e0;}
 .tc-label.lbl-shinnetsu{color:#ffcc00;}
 .tc-label.lbl-skip{color:#556;}
 .tc-num{
-  font-size:20px;font-weight:700;
+  font-size:20px;font-weight:700;text-align:right;
   font-family:var(--font-logo);letter-spacing:1px;
 }
 .tc-num.lbl-puchun{color:#ff6b6b;text-shadow:0 0 10px rgba(255,107,107,0.5);}
@@ -291,10 +293,10 @@ nav a.active{
 .tc-num.lbl-chuana{color:#40c8e0;text-shadow:0 0 10px rgba(64,200,224,0.5);}
 .tc-num.lbl-shinnetsu{color:#ffcc00;text-shadow:0 0 10px rgba(255,204,0,0.6);}
 .tc-num.lbl-skip{color:#334;}
-.tc-sep{color:rgba(255,255,255,0.12);font-size:13px;flex-shrink:0;}
+.tc-sep{color:rgba(255,255,255,0.12);font-size:13px;text-align:center;}
 .tc-hit{
   font-family:var(--font-mono);font-size:12px;
-  color:var(--dim);min-width:38px;text-align:right;flex-shrink:0;
+  color:var(--dim);text-align:right;
 }
 .tc-hit.has-hit{
   color:var(--green);
