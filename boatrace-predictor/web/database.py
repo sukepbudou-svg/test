@@ -911,3 +911,50 @@ def get_pt_calibration_stats():
             "actual_hit_pct": round(100 * hits / n, 2),
         })
     return result
+
+
+def get_race_position_distribution():
+    """その日の何レース目（全会場通しの順番）で的中しているかを10レース刻みで集計。
+    日付をまたいで全期間累積する（strategy_version='5'以降）。
+    「50〜59レース目で的中が多い＝狙い目」のような目安を作るための集計。"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            WITH race_level AS (
+                SELECT date, venue_name, race_no,
+                       MAX(race_time) as race_time,
+                       MAX(is_hit) as race_hit,
+                       MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
+                FROM predictions
+                WHERE bet_type='3連単' AND strategy_version='5'
+                GROUP BY date, venue_name, race_no
+            ),
+            ranked AS (
+                SELECT *,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY date ORDER BY race_time, venue_name, race_no
+                       ) AS day_race_no
+                FROM race_level
+                WHERE has_result = 1
+            )
+            SELECT (day_race_no - 1) / 10 AS bucket,
+                   COUNT(*) as n_races,
+                   SUM(race_hit) as n_hits
+            FROM ranked
+            GROUP BY bucket
+            ORDER BY bucket
+        """).fetchall()
+    result = []
+    for r in rows:
+        r = dict(r)
+        bucket = r["bucket"]
+        n_races = r["n_races"] or 0
+        n_hits = r["n_hits"] or 0
+        result.append({
+            "bucket": bucket,
+            "label": f"{bucket * 10}〜{bucket * 10 + 9}R目",
+            "n_races": n_races,
+            "n_hits": n_hits,
+            "hit_rate": round(100 * n_hits / n_races, 1) if n_races else None,
+        })
+    return result

@@ -14,7 +14,7 @@ from web.database import (
     get_recent_activity, get_hero_stats, get_pt_payout_stats, get_signal_stats,
     get_payout_distribution, get_daily_label_stats,
     get_pt_score_stats, get_pt_daily_entry_stats, get_pt_summary, get_pt_threshold_curve,
-    get_pt_calibration_stats, get_venue_okuma_ranking,
+    get_pt_calibration_stats, get_venue_okuma_ranking, get_race_position_distribution,
 )
 from src.model.predictor import PT_MIN_SCORE
 
@@ -120,9 +120,11 @@ def create_app():
         venue_list = [{"venue_name": k, "races": v} for k, v in venues.items()]
         venue_okuma_ranking = get_venue_okuma_ranking()
         pt_counts, pt_total = _build_pt_counts(race_list)
+        race_position_distribution = get_race_position_distribution()
         return render_template("index.html", date=date, race_list=race_list, venue_list=venue_list,
                                pt_min_score=PT_MIN_SCORE, venue_okuma_ranking=venue_okuma_ranking,
-                               pt_counts=pt_counts, pt_total=pt_total)
+                               pt_counts=pt_counts, pt_total=pt_total,
+                               race_position_distribution=race_position_distribution)
 
     @app.route("/stats")
     def stats():
