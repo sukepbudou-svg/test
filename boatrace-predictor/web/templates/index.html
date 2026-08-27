@@ -832,7 +832,7 @@ footer{
       <span class="tc-num {% if is_shinnetsu %}lbl-shinnetsu{% else %}lbl-skip{% endif %}">{{ s.races }}</span>
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if s.hits > 0 %}has-hit{% endif %}">◎ {{ s.hits }}</span>
-      <span class="tc-freq">{% if s.hits > 0 %}{{ "%.1f" | format(s.races / s.hits) }}回に1回{% else %}—{% endif %}</span>
+      <span class="tc-freq">{% if s.hits_per is not none %}{{ s.hits_per }}回に1回{% else %}—{% endif %}</span>
       <span class="tc-sep">|</span>
       <span class="tc-streak {% if s.miss_streak >= 5 %}tc-streak-hot{% elif s.miss_streak >= 1 %}tc-streak-warn{% endif %}">
         {% if s.miss_streak == 0 %}0連{% else %}{{ s.miss_streak }}連外{% endif %}
@@ -873,7 +873,7 @@ footer{
       <span class="tc-num tc-total-label">{{ pt_total.races }}</span>
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if pt_total.hits > 0 %}has-hit{% endif %}">◎ {{ pt_total.hits }}</span>
-      <span class="tc-freq">{% if pt_total.hits > 0 %}{{ "%.1f" | format(pt_total.races / pt_total.hits) }}回に1回{% else %}—{% endif %}</span>
+      <span class="tc-freq">{% if pt_total.hits_per is not none %}{{ pt_total.hits_per }}回に1回{% else %}—{% endif %}</span>
       <span class="tc-sep">|</span>
       <span class="tc-streak {% if pt_total.miss_streak >= 5 %}tc-streak-hot{% elif pt_total.miss_streak >= 1 %}tc-streak-warn{% endif %}">
         {% if pt_total.miss_streak == 0 %}0連{% else %}{{ pt_total.miss_streak }}連外{% endif %}

@@ -20,16 +20,22 @@ from web.database import (
 from src.model.predictor import PT_MIN_SCORE
 
 
-def _build_pt_counts(race_list, all_time_streaks=None):
+def _build_pt_counts(race_list, all_time_streaks=None, all_time_pt_stats=None):
     """TODAY画面のPT別集計を計算する（1点=100円換算・的中控除後の収支は当日分、
-    連続不的中数は前日以前も込みの全期間分）
+    連続不的中数・何回に1回は前日以前も込みの全期間分）
     Args:
         all_time_streaks: get_pt_all_time_streaks()の戻り値
             {"by_pt": {pt: streak}, "overall": streak}。指定なければ連続不的中数は0扱い。
+        all_time_pt_stats: get_pt_score_stats()の戻り値（PT毎のn_races_resulted/n_race_hits
+            から「何回に1回」を全期間ベースで算出するために使う）。指定なければ計算不可扱い。
     Returns: (pt_counts: list[dict], pt_total: dict)
     """
     all_time_streaks = all_time_streaks or {"by_pt": {}, "overall": 0}
     by_pt_streak = all_time_streaks.get("by_pt", {})
+    all_time_pt_stats = all_time_pt_stats or []
+    by_pt_alltime = {s["pt"]: s for s in all_time_pt_stats}
+    total_alltime_races = sum(s.get("n_races_resulted") or 0 for s in all_time_pt_stats)
+    total_alltime_hits = sum(s.get("n_race_hits") or 0 for s in all_time_pt_stats)
 
     groups = {}
     for race in race_list:
@@ -60,6 +66,7 @@ def _build_pt_counts(race_list, all_time_streaks=None):
             "pt": pt, "races": n_races, "hits": n_hits,
             "cost": cost, "return": ret, "pnl": pnl,
             "miss_streak": by_pt_streak.get(pt, 0),
+            "hits_per": by_pt_alltime.get(pt, {}).get("race_hits_per"),
         })
         total_races += n_races
         total_hits += n_hits
@@ -70,6 +77,7 @@ def _build_pt_counts(race_list, all_time_streaks=None):
         "races": total_races, "hits": total_hits,
         "cost": total_cost, "return": total_return, "pnl": total_return - total_cost,
         "miss_streak": all_time_streaks.get("overall", 0),
+        "hits_per": round(total_alltime_races / total_alltime_hits, 1) if total_alltime_hits else None,
     }
     return pt_counts, pt_total
 
@@ -110,7 +118,7 @@ def create_app():
             venues[vn].append(race)
         venue_list = [{"venue_name": k, "races": v} for k, v in venues.items()]
         venue_okuma_ranking = get_venue_okuma_ranking()
-        pt_counts, pt_total = _build_pt_counts(race_list, get_pt_all_time_streaks())
+        pt_counts, pt_total = _build_pt_counts(race_list, get_pt_all_time_streaks(), get_pt_score_stats())
         race_position_distribution = get_race_position_distribution()
         # 「現在何R目か」は記録済みレース数(race_list|length)ではなく、本日の全番組表
         # から算出したday_race_noの最大値を使う。途中再起動・日中からの起動でも
