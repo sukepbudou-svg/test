@@ -19,6 +19,71 @@ from web.database import (
 from src.model.predictor import PT_MIN_SCORE
 
 
+def _build_pt_counts(race_list):
+    """TODAY画面のPT別集計を計算する（1点=100円換算・的中控除後の収支・当日の連続不的中数）
+    Returns: (pt_counts: list[dict], pt_total: dict)
+    """
+    groups = {}
+    for race in race_list:
+        pt = race["arare_score"]
+        groups.setdefault(pt, []).append(race)
+
+    pt_counts = []
+    total_races = total_hits = total_cost = total_return = 0
+
+    for pt in sorted(groups.keys(), reverse=True):
+        races = groups[pt]
+        n_races = len(races)
+        n_hits = 0
+        cost = 0
+        ret = 0
+        for race in races:
+            race_hit = False
+            for b in race["bets"]:
+                cost += 100
+                if b.get("is_hit"):
+                    race_hit = True
+                    ret += b.get("actual_payout") or 0
+            if race_hit:
+                n_hits += 1
+        pnl = ret - cost
+
+        # 当日の連続不的中数: 結果が出ているレースだけを対象に、直近（race_time降順）から
+        # 的中が出るまで遡ってカウント。1度も的中していなければ結果済み全レース分。
+        resulted = [r for r in races if any(b.get("result_recorded_at") for b in r["bets"])]
+        resulted.sort(key=lambda r: r.get("race_time") or "", reverse=True)
+        miss_streak = 0
+        for race in resulted:
+            if any(b.get("is_hit") for b in race["bets"]):
+                break
+            miss_streak += 1
+
+        pt_counts.append({
+            "pt": pt, "races": n_races, "hits": n_hits,
+            "cost": cost, "return": ret, "pnl": pnl,
+            "miss_streak": miss_streak,
+        })
+        total_races += n_races
+        total_hits += n_hits
+        total_cost += cost
+        total_return += ret
+
+    all_resulted = [r for r in race_list if any(b.get("result_recorded_at") for b in r["bets"])]
+    all_resulted.sort(key=lambda r: r.get("race_time") or "", reverse=True)
+    total_miss_streak = 0
+    for race in all_resulted:
+        if any(b.get("is_hit") for b in race["bets"]):
+            break
+        total_miss_streak += 1
+
+    pt_total = {
+        "races": total_races, "hits": total_hits,
+        "cost": total_cost, "return": total_return, "pnl": total_return - total_cost,
+        "miss_streak": total_miss_streak,
+    }
+    return pt_counts, pt_total
+
+
 def create_app():
     app = Flask(__name__, template_folder="templates", static_folder="static")
 
@@ -54,8 +119,10 @@ def create_app():
             venues[vn].append(race)
         venue_list = [{"venue_name": k, "races": v} for k, v in venues.items()]
         venue_okuma_ranking = get_venue_okuma_ranking()
+        pt_counts, pt_total = _build_pt_counts(race_list)
         return render_template("index.html", date=date, race_list=race_list, venue_list=venue_list,
-                               pt_min_score=PT_MIN_SCORE, venue_okuma_ranking=venue_okuma_ranking)
+                               pt_min_score=PT_MIN_SCORE, venue_okuma_ranking=venue_okuma_ranking,
+                               pt_counts=pt_counts, pt_total=pt_total)
 
     @app.route("/stats")
     def stats():

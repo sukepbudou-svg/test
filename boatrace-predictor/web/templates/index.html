@@ -219,6 +219,23 @@ nav a.active{
   border:1px solid rgba(255,204,0,0.35);
   box-shadow:0 0 10px rgba(255,204,0,0.12);
 }
+.tc-row-total{
+  background:rgba(79,143,255,0.06);
+  border:1px solid rgba(79,143,255,0.25);
+  cursor:default;
+}
+.tc-total-label{color:var(--white)!important;text-shadow:none!important;}
+.tc-row-sub{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:2px 12px 6px;
+  font-family:var(--font-mono);font-size:10px;
+}
+.tc-streak{color:var(--dim2);}
+.tc-streak-warn{color:#ffaa55;}
+.tc-streak-hot{color:#ff4466;font-weight:700;}
+.tc-pnl{font-weight:700;}
+.tc-pnl-pos{color:var(--green);text-shadow:0 0 6px rgba(0,255,170,0.4);}
+.tc-pnl-neg{color:#ff4466;text-shadow:0 0 6px rgba(255,68,102,0.4);}
 .tc-freq{
   font-family:var(--font-mono);font-size:10px;
   color:var(--dim2);flex-shrink:0;white-space:nowrap;
@@ -712,28 +729,6 @@ footer{
   <span>⟳ 予想追加時に自動更新</span>
 </div>
 
-{% set pt_values = [] %}
-{% for race in race_list %}
-  {% if race.arare_score not in pt_values %}{% set _ = pt_values.append(race.arare_score) %}{% endif %}
-{% endfor %}
-{% set pt_values = pt_values | sort(reverse=true) %}
-
-{% set pt_counts = [] %}
-{% for pt in pt_values %}
-  {% set n = namespace(races=0, hits=0) %}
-  {% for race in race_list %}
-    {% if race.arare_score == pt %}
-      {% set n.races = n.races + 1 %}
-      {% set race_hit = namespace(v=false) %}
-      {% for b in race.bets %}
-        {% if b.is_hit %}{% set race_hit.v = true %}{% endif %}
-      {% endfor %}
-      {% if race_hit.v %}{% set n.hits = n.hits + 1 %}{% endif %}
-    {% endif %}
-  {% endfor %}
-  {% set _ = pt_counts.append({'pt': pt, 'races': n.races, 'hits': n.hits}) %}
-{% endfor %}
-
 <div class="log-area">
   <div class="activity-log" id="activity-log"></div>
   <div class="today-counts">
@@ -745,6 +740,14 @@ footer{
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if s.hits > 0 %}has-hit{% endif %}">◎ {{ s.hits }}</span>
       <span class="tc-freq">{% if s.hits > 0 %}{{ "%.1f" | format(s.races / s.hits) }}回に1回{% else %}—{% endif %}</span>
+    </div>
+    <div class="tc-row-sub">
+      <span class="tc-streak {% if s.miss_streak >= 5 %}tc-streak-hot{% elif s.miss_streak >= 1 %}tc-streak-warn{% endif %}">
+        {% if s.miss_streak == 0 %}0連{% else %}{{ s.miss_streak }}連外{% endif %}
+      </span>
+      <span class="tc-pnl {% if s.pnl >= 0 %}tc-pnl-pos{% else %}tc-pnl-neg{% endif %}">
+        {% if s.pnl >= 0 %}+{% endif %}¥{{ "{:,}".format(s.pnl) }}
+      </span>
     </div>
     <div class="tc-detail" id="pt-detail-{{ s.pt }}" style="display:none;">
       {% for race in race_list %}
@@ -772,6 +775,23 @@ footer{
       {% endfor %}
     </div>
     {% endfor %}
+    {% if pt_total %}
+    <div class="tc-row tc-row-total">
+      <span class="tc-label tc-total-label">本日合計</span>
+      <span class="tc-num tc-total-label">{{ pt_total.races }}</span>
+      <span class="tc-sep">|</span>
+      <span class="tc-hit {% if pt_total.hits > 0 %}has-hit{% endif %}">◎ {{ pt_total.hits }}</span>
+      <span class="tc-freq">{% if pt_total.hits > 0 %}{{ "%.1f" | format(pt_total.races / pt_total.hits) }}回に1回{% else %}—{% endif %}</span>
+    </div>
+    <div class="tc-row-sub">
+      <span class="tc-streak {% if pt_total.miss_streak >= 5 %}tc-streak-hot{% elif pt_total.miss_streak >= 1 %}tc-streak-warn{% endif %}">
+        {% if pt_total.miss_streak == 0 %}0連{% else %}{{ pt_total.miss_streak }}連外{% endif %}
+      </span>
+      <span class="tc-pnl {% if pt_total.pnl >= 0 %}tc-pnl-pos{% else %}tc-pnl-neg{% endif %}">
+        {% if pt_total.pnl >= 0 %}+{% endif %}¥{{ "{:,}".format(pt_total.pnl) }}
+      </span>
+    </div>
+    {% endif %}
   </div>
 
   {% if venue_list %}
