@@ -952,7 +952,7 @@ def get_race_position_distribution():
         n_hits = r["n_hits"] or 0
         result.append({
             "bucket": bucket,
-            "label": f"{bucket * 10}〜{bucket * 10 + 9}R目",
+            "label": f"{bucket * 10 + 1}〜{bucket * 10 + 10}R目",
             "n_races": n_races,
             "n_hits": n_hits,
             "hit_rate": round(100 * n_hits / n_races, 1) if n_races else None,
