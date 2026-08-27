@@ -885,8 +885,8 @@ footer{
     {% endif %}
   </div>
 
-  {% if venue_okuma_ranking %}
   <div class="venue-okuma-ranking">
+    {% if venue_okuma_ranking %}
     <div class="vor-title">会場別 万舟ランキング（集計中）</div>
     <div class="vor-grid">
       {% for v in venue_okuma_ranking %}
@@ -897,11 +897,12 @@ footer{
       </div>
       {% endfor %}
     </div>
+    {% endif %}
 
     <div class="vor-progress">
       <div class="vor-title">本日の進行状況（全会場通し）</div>
       <div class="vor-progress-row">
-        <span class="vor-progress-num">{{ race_list|length }}</span>
+        <span class="vor-progress-num">{{ today_progress }}</span>
         <span class="vor-progress-unit">R目</span>
       </div>
     </div>
@@ -920,7 +921,6 @@ footer{
     </div>
     {% endif %}
   </div>
-  {% endif %}
 </div>
 
 {% set any_hit = namespace(v=false) %}

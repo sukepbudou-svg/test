@@ -249,6 +249,10 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                     predict_at = scheduled_dt - timedelta(minutes=PREDICT_BEFORE_MIN)
                     if not race["predicted"] and now >= predict_at:
                         daily_race_count += 1
+                        # 全会場・本日の通し番号: 記録済みレース数ではなく本日の全番組表
+                        # (schedule)から算出するため、途中再起動・遅延起動でも
+                        # 正しい「当日何レース目か」を維持できる
+                        day_race_no = sum(1 for r in schedule if r["scheduled_dt"] <= scheduled_dt)
                         pred_rows = _predict_one_race(
                             race, df_program, model, payout_lookup,
                             today, spreadsheet_id, credentials_path,
@@ -260,6 +264,7 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                             border_lookup=border_lookup,
                             db_save_fn=save_prediction,
                             db_sync_fn=sync_race_predictions,
+                            day_race_no=day_race_no,
                         )
                         race["pred_rows"] = pred_rows or []
                         race["daily_race_count"] = daily_race_count
@@ -412,6 +417,7 @@ def _predict_one_race(
     border_lookup: dict = None,
     db_save_fn=None,
     db_sync_fn=None,
+    day_race_no: int = None,
 ) -> list:
     """1レース分の予想を実行してDB(+オプションでSheets)に書き込む。予想行リストを返す"""
     import pandas as pd
@@ -485,6 +491,7 @@ def _predict_one_race(
     for _, rec in recs.iterrows():
         row_dict = rec.to_dict()
         row_dict["race_time"] = race_time_str
+        row_dict["day_race_no"] = day_race_no
         # DBに保存（常時）
         if db_save_fn:
             try:

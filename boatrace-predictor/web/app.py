@@ -106,6 +106,7 @@ def create_app():
                     "arare_reasons": p["arare_reasons"],
                     "nigerate_str": p["nigerate_str"],
                     "boat1_risk": p["boat1_risk"],
+                    "day_race_no": p.get("day_race_no"),
                     "bets": [],
                 }
             races[key]["bets"].append(p)
@@ -121,10 +122,16 @@ def create_app():
         venue_okuma_ranking = get_venue_okuma_ranking()
         pt_counts, pt_total = _build_pt_counts(race_list)
         race_position_distribution = get_race_position_distribution()
+        # 「現在何R目か」は記録済みレース数(race_list|length)ではなく、本日の全番組表
+        # から算出したday_race_noの最大値を使う。途中再起動・日中からの起動でも
+        # 正しい「当日何レース目か」を維持できる。day_race_no未設定の日は件数で代替。
+        day_race_nos = [r["day_race_no"] for r in race_list if r.get("day_race_no") is not None]
+        today_progress = max(day_race_nos) if day_race_nos else len(race_list)
         return render_template("index.html", date=date, race_list=race_list, venue_list=venue_list,
                                pt_min_score=PT_MIN_SCORE, venue_okuma_ranking=venue_okuma_ranking,
                                pt_counts=pt_counts, pt_total=pt_total,
-                               race_position_distribution=race_position_distribution)
+                               race_position_distribution=race_position_distribution,
+                               today_progress=today_progress)
 
     @app.route("/stats")
     def stats():

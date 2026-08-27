@@ -49,7 +49,8 @@ def init_db():
         for col in ["race_time TEXT", "race_grade TEXT", "okuma_signal_count INTEGER DEFAULT 0",
                     "bet_type TEXT DEFAULT '3連単'",
                     "strategy_version TEXT",
-                    "actual_payout_3ren INTEGER DEFAULT 0"]:
+                    "actual_payout_3ren INTEGER DEFAULT 0",
+                    "day_race_no INTEGER"]:
             try:
                 conn.execute(f"ALTER TABLE predictions ADD COLUMN {col}")
             except Exception:
@@ -99,8 +100,8 @@ def save_prediction(rec: dict):
               (date, venue_name, race_no, race_time, race_grade, combination, odds, odds_value,
                arare_score, arare_reasons, bet_label, tier,
                prob, expected_roi, nigerate_str, boat1_risk, okuma_signal_count, bet_type,
-               strategy_version)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               strategy_version, day_race_no)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             date, venue, race_no,
             str(rec.get("race_time", "")),
@@ -117,6 +118,7 @@ def save_prediction(rec: dict):
             int(rec.get("okuma_signal_count", 0) or 0),
             str(rec.get("bet_type", "3連単")),
             str(rec.get("strategy_version", "5")),
+            rec.get("day_race_no"),
         ))
 
 
@@ -916,31 +918,29 @@ def get_pt_calibration_stats():
 def get_race_position_distribution():
     """その日の何レース目（全会場通しの順番）で的中しているかを10レース刻みで集計。
     日付をまたいで全期間累積する（strategy_version='5'以降）。
-    「50〜59レース目で的中が多い＝狙い目」のような目安を作るための集計。"""
+    「50〜59レース目で的中が多い＝狙い目」のような目安を作るための集計。
+
+    day_race_noは予想保存時に本日の全番組表(schedule)から算出した値を使う
+    （記録済みレース数からの逆算ではない）ため、ツールの途中再起動や
+    日中からの起動でも正しい「当日何レース目か」を維持できる。
+    day_race_noが未設定の古いレコード(この仕組み導入前)は対象外。"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute("""
             WITH race_level AS (
                 SELECT date, venue_name, race_no,
-                       MAX(race_time) as race_time,
+                       MAX(day_race_no) as day_race_no,
                        MAX(is_hit) as race_hit,
                        MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
                 FROM predictions
-                WHERE bet_type='3連単' AND strategy_version='5'
+                WHERE bet_type='3連単' AND strategy_version='5' AND day_race_no IS NOT NULL
                 GROUP BY date, venue_name, race_no
-            ),
-            ranked AS (
-                SELECT *,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY date ORDER BY race_time, venue_name, race_no
-                       ) AS day_race_no
-                FROM race_level
-                WHERE has_result = 1
             )
             SELECT (day_race_no - 1) / 10 AS bucket,
                    COUNT(*) as n_races,
                    SUM(race_hit) as n_hits
-            FROM ranked
+            FROM race_level
+            WHERE has_result = 1
             GROUP BY bucket
             ORDER BY bucket
         """).fetchall()
