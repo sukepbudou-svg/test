@@ -123,10 +123,15 @@ nav a.active{
   flex-wrap:wrap;
 }
 
+/* ══════════════ LOG + VENUES COLUMN ══════════════ */
+.log-and-venues{
+  display:flex;flex-direction:column;gap:14px;
+  width:300px;flex-shrink:0;
+}
+
 /* ══════════════ ACTIVITY LOG ══════════════ */
 .activity-log{
   display:flex;flex-direction:column;gap:4px;
-  width:300px;flex-shrink:0;
 }
 .act-row{
   display:flex;align-items:center;gap:10px;
@@ -205,11 +210,11 @@ nav a.active{
 /* ══════════════ TODAY COUNTS ══════════════ */
 .today-counts{
   display:flex;flex-direction:column;gap:6px;
-  min-width:180px;
+  min-width:340px;flex:1;
   font-family:var(--font-mono);
 }
 .tc-row{
-  display:flex;align-items:center;gap:8px;
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
   padding:6px 12px;border-radius:6px;
   background:rgba(255,255,255,0.03);
   border:1px solid rgba(255,255,255,0.06);
@@ -225,15 +230,15 @@ nav a.active{
   cursor:default;
 }
 .tc-total-label{color:var(--white)!important;text-shadow:none!important;}
-.tc-row-sub{
-  display:flex;align-items:center;justify-content:space-between;gap:8px;
-  padding:2px 12px 6px;
-  font-family:var(--font-mono);font-size:10px;
+.tc-streak{
+  font-size:10px;color:var(--dim2);flex-shrink:0;white-space:nowrap;
 }
-.tc-streak{color:var(--dim2);}
 .tc-streak-warn{color:#ffaa55;}
 .tc-streak-hot{color:#ff4466;font-weight:700;}
-.tc-pnl{font-weight:700;}
+.tc-pnl{
+  font-size:11px;font-weight:700;flex-shrink:0;white-space:nowrap;
+  margin-left:auto;
+}
 .tc-pnl-pos{color:var(--green);text-shadow:0 0 6px rgba(0,255,170,0.4);}
 .tc-pnl-neg{color:#ff4466;text-shadow:0 0 6px rgba(255,68,102,0.4);}
 .tc-freq{
@@ -730,69 +735,8 @@ footer{
 </div>
 
 <div class="log-area">
+  <div class="log-and-venues">
   <div class="activity-log" id="activity-log"></div>
-  <div class="today-counts">
-    {% for s in pt_counts %}
-    {% set is_shinnetsu = s.pt >= pt_min_score %}
-    <div class="tc-row {% if is_shinnetsu %}tc-row-shinnetsu{% endif %}" style="cursor:pointer;" onclick="togglePtDetail({{ s.pt }})">
-      <span class="tc-label {% if is_shinnetsu %}lbl-shinnetsu{% else %}lbl-skip{% endif %}">PT{{ s.pt }}</span>
-      <span class="tc-num {% if is_shinnetsu %}lbl-shinnetsu{% else %}lbl-skip{% endif %}">{{ s.races }}</span>
-      <span class="tc-sep">|</span>
-      <span class="tc-hit {% if s.hits > 0 %}has-hit{% endif %}">◎ {{ s.hits }}</span>
-      <span class="tc-freq">{% if s.hits > 0 %}{{ "%.1f" | format(s.races / s.hits) }}回に1回{% else %}—{% endif %}</span>
-    </div>
-    <div class="tc-row-sub">
-      <span class="tc-streak {% if s.miss_streak >= 5 %}tc-streak-hot{% elif s.miss_streak >= 1 %}tc-streak-warn{% endif %}">
-        {% if s.miss_streak == 0 %}0連{% else %}{{ s.miss_streak }}連外{% endif %}
-      </span>
-      <span class="tc-pnl {% if s.pnl >= 0 %}tc-pnl-pos{% else %}tc-pnl-neg{% endif %}">
-        {% if s.pnl >= 0 %}+{% endif %}¥{{ "{:,}".format(s.pnl) }}
-      </span>
-    </div>
-    <div class="tc-detail" id="pt-detail-{{ s.pt }}" style="display:none;">
-      {% for race in race_list %}
-        {% if race.arare_score == s.pt %}
-        {% set rr = namespace(found=none, hit=false, payout=0, combo='') %}
-        {% for b in race.bets %}
-          {% if b.result_recorded_at and rr.found is none %}
-            {% set rr.found = b %}
-            {% set rr.combo = b.actual_combination %}
-          {% endif %}
-          {% if b.is_hit %}{% set rr.hit = true %}{% set rr.payout = b.actual_payout %}{% endif %}
-        {% endfor %}
-        <div class="tc-detail-row {% if rr.hit %}{% if is_shinnetsu %}tc-detail-hit-shinnetsu{% else %}tc-detail-hit{% endif %}{% endif %}"
-             onclick="event.stopPropagation(); scrollToRace('{{ race.venue_name }}', {{ race.race_no }})">
-          <span class="tc-detail-race">{{ race.venue_name }} {{ race.race_no }}R</span>
-          {% if rr.found is none %}
-            <span class="tc-detail-result tc-detail-pending">待機中</span>
-          {% elif rr.hit %}
-            <span class="tc-detail-result">◎ {{ rr.combo }} ¥{{ "{:,}".format(rr.payout) }}</span>
-          {% else %}
-            <span class="tc-detail-result tc-detail-miss">✗ {{ rr.combo }} ¥{{ "{:,}".format(rr.found.actual_payout) }}</span>
-          {% endif %}
-        </div>
-        {% endif %}
-      {% endfor %}
-    </div>
-    {% endfor %}
-    {% if pt_total %}
-    <div class="tc-row tc-row-total">
-      <span class="tc-label tc-total-label">本日合計</span>
-      <span class="tc-num tc-total-label">{{ pt_total.races }}</span>
-      <span class="tc-sep">|</span>
-      <span class="tc-hit {% if pt_total.hits > 0 %}has-hit{% endif %}">◎ {{ pt_total.hits }}</span>
-      <span class="tc-freq">{% if pt_total.hits > 0 %}{{ "%.1f" | format(pt_total.races / pt_total.hits) }}回に1回{% else %}—{% endif %}</span>
-    </div>
-    <div class="tc-row-sub">
-      <span class="tc-streak {% if pt_total.miss_streak >= 5 %}tc-streak-hot{% elif pt_total.miss_streak >= 1 %}tc-streak-warn{% endif %}">
-        {% if pt_total.miss_streak == 0 %}0連{% else %}{{ pt_total.miss_streak }}連外{% endif %}
-      </span>
-      <span class="tc-pnl {% if pt_total.pnl >= 0 %}tc-pnl-pos{% else %}tc-pnl-neg{% endif %}">
-        {% if pt_total.pnl >= 0 %}+{% endif %}¥{{ "{:,}".format(pt_total.pnl) }}
-      </span>
-    </div>
-    {% endif %}
-  </div>
 
   {% if venue_list %}
   <div class="venue-jump-list">
@@ -836,6 +780,68 @@ footer{
     {% endfor %}
   </div>
   {% endif %}
+  </div>
+
+  <div class="today-counts">
+    {% for s in pt_counts %}
+    {% set is_shinnetsu = s.pt >= pt_min_score %}
+    <div class="tc-row {% if is_shinnetsu %}tc-row-shinnetsu{% endif %}" style="cursor:pointer;" onclick="togglePtDetail({{ s.pt }})">
+      <span class="tc-label {% if is_shinnetsu %}lbl-shinnetsu{% else %}lbl-skip{% endif %}">PT{{ s.pt }}</span>
+      <span class="tc-num {% if is_shinnetsu %}lbl-shinnetsu{% else %}lbl-skip{% endif %}">{{ s.races }}</span>
+      <span class="tc-sep">|</span>
+      <span class="tc-hit {% if s.hits > 0 %}has-hit{% endif %}">◎ {{ s.hits }}</span>
+      <span class="tc-freq">{% if s.hits > 0 %}{{ "%.1f" | format(s.races / s.hits) }}回に1回{% else %}—{% endif %}</span>
+      <span class="tc-sep">|</span>
+      <span class="tc-streak {% if s.miss_streak >= 5 %}tc-streak-hot{% elif s.miss_streak >= 1 %}tc-streak-warn{% endif %}">
+        {% if s.miss_streak == 0 %}0連{% else %}{{ s.miss_streak }}連外{% endif %}
+      </span>
+      <span class="tc-pnl {% if s.pnl >= 0 %}tc-pnl-pos{% else %}tc-pnl-neg{% endif %}">
+        {% if s.pnl >= 0 %}+{% endif %}¥{{ "{:,}".format(s.pnl) }}
+      </span>
+    </div>
+    <div class="tc-detail" id="pt-detail-{{ s.pt }}" style="display:none;">
+      {% for race in race_list %}
+        {% if race.arare_score == s.pt %}
+        {% set rr = namespace(found=none, hit=false, payout=0, combo='') %}
+        {% for b in race.bets %}
+          {% if b.result_recorded_at and rr.found is none %}
+            {% set rr.found = b %}
+            {% set rr.combo = b.actual_combination %}
+          {% endif %}
+          {% if b.is_hit %}{% set rr.hit = true %}{% set rr.payout = b.actual_payout %}{% endif %}
+        {% endfor %}
+        <div class="tc-detail-row {% if rr.hit %}{% if is_shinnetsu %}tc-detail-hit-shinnetsu{% else %}tc-detail-hit{% endif %}{% endif %}"
+             onclick="event.stopPropagation(); scrollToRace('{{ race.venue_name }}', {{ race.race_no }})">
+          <span class="tc-detail-race">{{ race.venue_name }} {{ race.race_no }}R</span>
+          {% if rr.found is none %}
+            <span class="tc-detail-result tc-detail-pending">待機中</span>
+          {% elif rr.hit %}
+            <span class="tc-detail-result">◎ {{ rr.combo }} ¥{{ "{:,}".format(rr.payout) }}</span>
+          {% else %}
+            <span class="tc-detail-result tc-detail-miss">✗ {{ rr.combo }} ¥{{ "{:,}".format(rr.found.actual_payout) }}</span>
+          {% endif %}
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+    {% if pt_total %}
+    <div class="tc-row tc-row-total">
+      <span class="tc-label tc-total-label">本日合計</span>
+      <span class="tc-num tc-total-label">{{ pt_total.races }}</span>
+      <span class="tc-sep">|</span>
+      <span class="tc-hit {% if pt_total.hits > 0 %}has-hit{% endif %}">◎ {{ pt_total.hits }}</span>
+      <span class="tc-freq">{% if pt_total.hits > 0 %}{{ "%.1f" | format(pt_total.races / pt_total.hits) }}回に1回{% else %}—{% endif %}</span>
+      <span class="tc-sep">|</span>
+      <span class="tc-streak {% if pt_total.miss_streak >= 5 %}tc-streak-hot{% elif pt_total.miss_streak >= 1 %}tc-streak-warn{% endif %}">
+        {% if pt_total.miss_streak == 0 %}0連{% else %}{{ pt_total.miss_streak }}連外{% endif %}
+      </span>
+      <span class="tc-pnl {% if pt_total.pnl >= 0 %}tc-pnl-pos{% else %}tc-pnl-neg{% endif %}">
+        {% if pt_total.pnl >= 0 %}+{% endif %}¥{{ "{:,}".format(pt_total.pnl) }}
+      </span>
+    </div>
+    {% endif %}
+  </div>
 
   {% if venue_okuma_ranking %}
   <div class="venue-okuma-ranking">

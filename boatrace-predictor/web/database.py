@@ -149,7 +149,7 @@ def update_result(date: str, venue_name: str, race_no: int,
             """, (actual_combination, pay, actual_payout, is_hit, now, row["id"]))
 
 
-def get_recent_activity(date: str = None, limit: int = 5):
+def get_recent_activity(date: str = None, limit: int = 8):
     """当日の最新更新レース一覧（会場・レース単位、更新が新しい順）"""
     init_db()
     if date is None:
