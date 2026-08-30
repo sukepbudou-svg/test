@@ -1187,7 +1187,7 @@ footer{
       const url = '/api/recent_activity' + (DATE_PARAM ? '?date='+encodeURIComponent(DATE_PARAM) : '');
       fetch(url).then(r=>r.json()).then(function(rows){
         renderLog(rows);
-        const newTs = rows && rows.length ? rows[0].created_at : null;
+        const newTs = rows && rows.length ? rows[0].last_touched : null;
         if(fallbackFirst){
           fallbackFirst = false;
           fallbackLastTs = newTs;

@@ -204,7 +204,9 @@ def create_app():
             last_ts = None
             while True:
                 rows = get_recent_activity(date)
-                new_ts = rows[0]["created_at"] if rows else None
+                # created_atだけだと結果記録(新規予想を伴わない更新)を検知できないため、
+                # last_touched(結果記録があればそちらを優先)で新着判定する
+                new_ts = rows[0]["last_touched"] if rows else None
                 if new_ts != last_ts:
                     last_ts = new_ts
                     yield f"data: {json.dumps(rows, ensure_ascii=False)}\n\n"
