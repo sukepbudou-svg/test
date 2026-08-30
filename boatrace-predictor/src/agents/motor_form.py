@@ -68,14 +68,14 @@ def predict_win_probs(race_row: pd.Series) -> np.ndarray:
         exh_rel = np.ones(6)
 
     # 合成スコア（極端な差は抑制）
+    # コース基本確率の乗算は行わない（コース戦略エージェントの役割と重複するため）。
+    # 2026-08-28: このエージェント自身にコース優位性(COURSE_BASE)を掛けていたため、
+    # コース戦略エージェントと合わせて2つのエージェントが独立に「1号艇有利」を主張する形になり、
+    # レース間の個別差（今日のモーター・展示タイム差）が埋もれて予想が似通う一因になっていた。
+    # モーターエージェントは純粋にモーター・ボート・展示タイムの相対比較のみを返す。
     scores = W_MOTOR * motor_rel + W_BOAT * boat_rel + W_EXH * exh_rel
     scores = np.clip(scores, SCORE_MIN, SCORE_MAX)
     scores = np.maximum(scores, 0.001)
-
-    # コース基本確率を乗算（モーター差はコース有利を前提に作用する）
-    # 1コースで良いモーターなら特に有利、6コースで良くても限界がある
-    COURSE_BASE = np.array([0.550, 0.170, 0.110, 0.080, 0.055, 0.035])
-    scores = scores * COURSE_BASE
     scores /= scores.sum()
 
     return scores

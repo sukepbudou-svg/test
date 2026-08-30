@@ -236,7 +236,11 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                 now = datetime.now()
                 all_done = all(r["predicted"] and r["result_fetched"] for r in schedule)
                 if all_done:
-                    print("\n=== 本日の全レース処理完了 ===")
+                    print("\n" + "=" * 50)
+                    print("  === 本日の全レース処理完了 ===")
+                    print("  ✓ 最終レースの結果取得まで含めて全て完了しました")
+                    print("  このウィンドウを閉じても問題ありません")
+                    print("=" * 50)
                     if _sheets_ok:
                         apply_colors_to_results_sheet(spreadsheet_id, credentials_path)
                         update_summary_sheet(spreadsheet_id, credentials_path)
@@ -269,6 +273,17 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                         race["pred_rows"] = pred_rows or []
                         race["daily_race_count"] = daily_race_count
                         race["predicted"] = True
+
+                        # 本日最終レースの予想が完了した場合、結果取得がまだ残っている旨を
+                        # はっきり表示する（予想完了=終了、と誤解して早く閉じてしまうのを防ぐ）
+                        if scheduled_dt == max(r["scheduled_dt"] for r in schedule):
+                            _eta = scheduled_dt + timedelta(minutes=RESULT_AFTER_MIN)
+                            print("\n" + "=" * 50)
+                            print("  ⚠ 本日最終レースの予想が完了しました")
+                            print(f"  結果の取得はまだ終わっていません（最短で{_eta.strftime('%H:%M')}頃、")
+                            print(f"  最大で{(scheduled_dt + timedelta(minutes=RESULT_AFTER_MIN + 2*MAX_RESULT_RETRIES)).strftime('%H:%M')}頃まで結果取得を試行します）")
+                            print("  「=== 本日の全レース処理完了 ===」と表示されるまでこのウィンドウを閉じないでください")
+                            print("=" * 50 + "\n")
 
                     # ── 結果取得タイミング: 発走12分後（2分間隔でリトライ、最大10回）──
                     result_at = scheduled_dt + timedelta(minutes=RESULT_AFTER_MIN)
