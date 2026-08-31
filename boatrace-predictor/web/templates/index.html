@@ -1173,6 +1173,26 @@ footer{
     }
   };
 
+  // レース会場が多く発走時刻も近いと、数十秒おきに次々と予想が生成されることが
+  // あり、そのたびに即座にページ全体をreloadすると短時間に何度もページが
+  // 再読み込みされ、ログ全行がその都度作り直されて「同じログが何度も流れてくる」
+  // ように見えてしまう。ログ自体は常にrenderLog()で即座に（reloadなしで）更新し、
+  // ページ全体の再読み込み（レースカード等の反映用）は最短60秒間隔に間引く。
+  const RELOAD_COOLDOWN_MS = 60000;
+  let lastReloadAt = 0;
+  let reloadPending = false;
+  function requestPageRefresh(){
+    const now = Date.now();
+    const elapsed = now - lastReloadAt;
+    if(elapsed >= RELOAD_COOLDOWN_MS){
+      lastReloadAt = now;
+      location.reload();
+    } else if(!reloadPending){
+      reloadPending = true;
+      setTimeout(()=>location.reload(), RELOAD_COOLDOWN_MS - elapsed);
+    }
+  }
+
   // SSEで予想追加を即座に受信
   const streamUrl = '/api/activity_stream' + (DATE_PARAM ? '?date='+encodeURIComponent(DATE_PARAM) : '');
   const es = new EventSource(streamUrl);
@@ -1180,18 +1200,18 @@ footer{
   es.onmessage = function(e){
     try{
       const rows = JSON.parse(e.data);
+      renderLog(rows);
       if(isFirst){
-        // 初回はログ表示のみ（現在の状態を表示するだけ）
+        // 初回は現在の状態を表示するだけ
         isFirst = false;
-        renderLog(rows);
       } else {
-        // 新しい予想が追加されたのでページ全体を更新
-        location.reload();
+        // 新しい予想・結果が追加されたのでページ全体もいずれ更新する
+        requestPageRefresh();
       }
     }catch(_){}
   };
   es.onerror = function(){
-    // SSE切断時は30秒ポーリングにフォールバック（新着を検知したらページ全体を更新）
+    // SSE切断時は30秒ポーリングにフォールバック
     es.close();
     let fallbackLastTs = null;
     let fallbackFirst = true;
@@ -1204,7 +1224,8 @@ footer{
           fallbackFirst = false;
           fallbackLastTs = newTs;
         } else if(newTs && newTs !== fallbackLastTs){
-          location.reload();
+          fallbackLastTs = newTs;
+          requestPageRefresh();
         }
       }).catch(()=>{});
     }
