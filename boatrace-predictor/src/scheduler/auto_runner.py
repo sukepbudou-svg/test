@@ -209,23 +209,39 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
         )
         return
 
-    # 起動時点で既に発走済みのレースは「予想不要」としてスキップするが、
-    # 結果取得済みかどうかはDBの実際の記録状況で判定する。無条件でTrueにすると、
-    # 前回の実行が結果取得の途中で止まった（更新のための再起動・エラーなど）レースが
-    # このプロセスでは二度と結果を取得しなくなってしまうため。
+    # 起動時点での予想・結果取得状況をDBの実際の記録から判定する。
+    # 「発走時刻を過ぎているか」だけで判定すると、発走10分前〜発走前（予想は
+    # 既に出したがレースはまだ発走していない）の状態で再起動した場合に、
+    # そのレースがDB上は予想済みなのに真っさらな未予想状態から始まってしまい、
+    # 直後のループでもう一度予想を出してしまう（買い目の重複）。
+    # 同様に、結果取得を無条件でTrueにすると、前回の実行が結果取得の途中で
+    # 止まった（更新のための再起動・エラーなど）レースが二度と結果を取得
+    # しなくなってしまう。そのため両方ともDBの実際の記録状況で判定する。
     now_start = datetime.now()
     from web.database import get_conn as _get_conn
     with _get_conn() as _conn:
+        _predicted_rows = _conn.execute(
+            "SELECT DISTINCT venue_name, race_no FROM predictions WHERE date=?",
+            (today.strftime("%Y-%m-%d"),)
+        ).fetchall()
         _recorded_rows = _conn.execute(
             "SELECT DISTINCT venue_name, race_no FROM predictions "
             "WHERE date=? AND result_recorded_at IS NOT NULL",
             (today.strftime("%Y-%m-%d"),)
         ).fetchall()
+    _predicted_keys = {(r["venue_name"], r["race_no"]) for r in _predicted_rows}
     _recorded_keys = {(r["venue_name"], r["race_no"]) for r in _recorded_rows}
     for race in schedule:
-        if race["scheduled_dt"] <= now_start:
+        key = (race["venue_name"], race["race_no"])
+        if key in _predicted_keys:
+            # 既に予想済み（発走前後を問わない）→ 再予想しない。結果はDBの記録状況で判定
             race["predicted"] = True
-            race["result_fetched"] = (race["venue_name"], race["race_no"]) in _recorded_keys
+            race["result_fetched"] = key in _recorded_keys
+        elif race["scheduled_dt"] <= now_start:
+            # 一度も予想していないまま発走時刻を過ぎた（起動時に発走済みだった等）
+            # → 今から予想しても意味がないのでスキップ扱いにする
+            race["predicted"] = True
+            race["result_fetched"] = True
 
     upcoming = [r for r in schedule if not r["predicted"]]
     total = len(schedule)
