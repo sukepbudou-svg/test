@@ -16,8 +16,12 @@ import pandas as pd
 PREDICT_BEFORE_MIN = 10
 # 発走後何分後に結果を取得するか
 RESULT_AFTER_MIN = 12
-# 結果取得の最大リトライ回数（超えたら諦めてスキップ）
-MAX_RESULT_RETRIES = 10  # 12分後から2分おき×10回 = 最大32分後まで試行
+# 結果取得の通常リトライ回数（超えたら間隔を延ばして粘る。完全に諦めるわけではない）
+MAX_RESULT_RETRIES = 10  # 12分後から2分おき×10回 = 最大32分後まで通常間隔で試行
+# 通常リトライを使い切った後の再試行間隔（分）
+RESULT_RETRY_SLOW_INTERVAL_MIN = 15
+# 結果取得を完全に諦めるまでの時間（発走から何時間）
+RESULT_GIVEUP_HOURS = 3
 # ループの確認間隔（秒）
 LOOP_INTERVAL_SEC = 30
 
@@ -206,17 +210,23 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
         )
         return
 
-    # 起動時点で既に発走済みのレースはスキップ
+    # 起動時点で既に発走済みのレースは「予想不要」としてスキップするが、
+    # 結果取得済みかどうかはDBの実際の記録状況で判定する。無条件でTrueにすると、
+    # 前回の実行が結果取得の途中で止まった（更新のための再起動・エラーなど）レースが
+    # このプロセスでは二度と結果を取得しなくなってしまうため。
     now_start = datetime.now()
+    from web.database import get_conn as _get_conn
+    with _get_conn() as _conn:
+        _recorded_rows = _conn.execute(
+            "SELECT DISTINCT venue_name, race_no FROM predictions "
+            "WHERE date=? AND result_recorded_at IS NOT NULL",
+            (today.strftime("%Y-%m-%d"),)
+        ).fetchall()
+    _recorded_keys = {(r["venue_name"], r["race_no"]) for r in _recorded_rows}
     for race in schedule:
         if race["scheduled_dt"] <= now_start:
             race["predicted"] = True
-            race["result_fetched"] = True
-
-    # ── 再起動補完: 予想済みで結果未取得のレースを一括チェック ──
-    _catchup_missing_results(
-        today, df_program, db_update_result, fetch_race_result
-    )
+            race["result_fetched"] = (race["venue_name"], race["race_no"]) in _recorded_keys
 
     upcoming = [r for r in schedule if not r["predicted"]]
     total = len(schedule)
@@ -281,20 +291,23 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                             print("\n" + "=" * 50)
                             print("  ⚠ 本日最終レースの予想が完了しました")
                             print(f"  結果の取得はまだ終わっていません（最短で{_eta.strftime('%H:%M')}頃、")
-                            print(f"  最大で{(scheduled_dt + timedelta(minutes=RESULT_AFTER_MIN + 2*MAX_RESULT_RETRIES)).strftime('%H:%M')}頃まで結果取得を試行します）")
+                            print(f"  取得できない場合は間隔を延ばしながら{(scheduled_dt + timedelta(hours=RESULT_GIVEUP_HOURS)).strftime('%H:%M')}頃まで試行し続けます）")
                             print("  「=== 本日の全レース処理完了 ===」と表示されるまでこのウィンドウを閉じないでください")
                             print("=" * 50 + "\n")
 
-                    # ── 結果取得タイミング: 発走12分後（2分間隔でリトライ、最大10回）──
+                    # ── 結果取得タイミング: 発走12分後（2分間隔で最大10回リトライ、
+                    #    それでも取れなければ15分間隔に切り替えて発走から3時間まで粘る）──
                     result_at = scheduled_dt + timedelta(minutes=RESULT_AFTER_MIN)
+                    give_up_at = scheduled_dt + timedelta(hours=RESULT_GIVEUP_HOURS)
                     last_attempt = race.get("last_result_attempt")
-                    retry_ok = (last_attempt is None or
-                                now >= last_attempt + timedelta(minutes=2))
                     attempts = race.get("result_fetch_attempts", 0)
+                    retry_interval = (timedelta(minutes=2) if attempts < MAX_RESULT_RETRIES
+                                      else timedelta(minutes=RESULT_RETRY_SLOW_INTERVAL_MIN))
+                    retry_ok = (last_attempt is None or now >= last_attempt + retry_interval)
                     if race["predicted"] and not race["result_fetched"] and now >= result_at and retry_ok:
-                        if attempts >= MAX_RESULT_RETRIES:
+                        if now >= give_up_at:
                             print(f"\n  [SKIP] {race['venue_name']} {race['race_no']}R: "
-                                  f"結果取得{MAX_RESULT_RETRIES}回失敗のためスキップ")
+                                  f"発走から{RESULT_GIVEUP_HOURS}時間経っても結果取得できずスキップ")
                             race["result_fetched"] = True
                         else:
                             race["last_result_attempt"] = now
@@ -332,94 +345,6 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
         if _sheets_ok:
             apply_colors_to_results_sheet(spreadsheet_id, credentials_path)
             update_summary_sheet(spreadsheet_id, credentials_path)
-
-
-def _catchup_missing_results(today, df_program, db_update_fn, fetch_race_result_fn):
-    """
-    起動時補完: 今日の予想済みレースで結果未取得のものを一括チェックして記録する。
-    発走時刻を過ぎているレースだけを対象にする。
-    """
-    from web.database import get_conn
-
-    date_str = today.strftime("%Y-%m-%d")
-    now = datetime.now()
-
-    # venue_name → venue_code マッピング
-    vc_map = {}
-    for _, row in df_program.iterrows():
-        vn = str(row.get("venue_name", ""))
-        vc = str(row.get("venue_code", "")).zfill(2)
-        if vn and vc:
-            vc_map[vn] = vc
-
-    # 結果未取得の予想レースを取得
-    with get_conn() as conn:
-        rows = conn.execute("""
-            SELECT DISTINCT venue_name, race_no,
-                   MIN(race_time) as race_time,
-                   MIN(created_at) as created_at
-            FROM predictions
-            WHERE date=? AND result_recorded_at IS NULL
-            GROUP BY venue_name, race_no
-        """, (date_str,)).fetchall()
-
-    if not rows:
-        return
-
-    targets = []
-    for row in rows:
-        venue_name = row["venue_name"]
-        race_no    = row["race_no"]
-        race_time_str = row["race_time"] or ""
-        created_at    = row["created_at"] or ""
-
-        # 発走済み判定: race_timeがあればそれ基準、なければcreated_at+20分
-        should_fetch = False
-        if race_time_str:
-            try:
-                hh, mm = map(int, race_time_str.split(":"))
-                scheduled_dt = datetime(now.year, now.month, now.day, hh, mm)
-                if now >= scheduled_dt + timedelta(minutes=RESULT_AFTER_MIN):
-                    should_fetch = True
-            except Exception:
-                should_fetch = True
-        elif created_at:
-            try:
-                ct = datetime.strptime(created_at[:19], "%Y-%m-%d %H:%M:%S")
-                if now >= ct + timedelta(minutes=20):
-                    should_fetch = True
-            except Exception:
-                should_fetch = True
-
-        if should_fetch:
-            targets.append((venue_name, race_no))
-
-    if not targets:
-        return
-
-    print(f"\n[補完] 結果未取得レース {len(targets)}件 → 取得開始")
-    for venue_name, race_no in targets:
-        venue_code = vc_map.get(venue_name, "")
-        if not venue_code:
-            print(f"  [SKIP] {venue_name} {race_no}R: 会場コード不明")
-            continue
-
-        print(f"  [{datetime.now().strftime('%H:%M:%S')}] {venue_name} {race_no}R 結果取得中...")
-        try:
-            result = fetch_race_result_fn(today, venue_code, race_no)
-            if result.get("available"):
-                combo  = result["combination"]
-                payout = result["payout"]
-                print(f"  → {combo} ¥{payout:,}")
-                if db_update_fn:
-                    db_update_fn(date_str, venue_name, race_no, combo, payout)
-            else:
-                print(f"  → 結果未確定（スキップ）")
-        except Exception as e:
-            print(f"  [WARN] {venue_name} {race_no}R 結果取得失敗: {e}")
-        time.sleep(1.0)  # 連続アクセス防止
-
-    print("[補完] 完了\n")
 
 
 def _predict_one_race(
