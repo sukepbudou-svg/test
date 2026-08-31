@@ -1053,16 +1053,31 @@ footer{
     return 'lbl-skip';
   }
 
+  // ページ読み込みやSSE再接続のたびに毎回「新着」演出が出ないよう、
+  // このブラウザで最後に見た先頭行の更新時刻をlocalStorageに覚えておき、
+  // それと実際に変わった時だけ光らせる（データが変わっていないのに
+  // 再読み込みしただけで新着っぽく見えてしまう問題への対処）
+  const LAST_SEEN_TOUCH_KEY = 'perry_last_seen_touch_' + TODAY;
+  function getLastSeenTouch(){
+    try{ return localStorage.getItem(LAST_SEEN_TOUCH_KEY); }
+    catch(e){ return null; }
+  }
+  function setLastSeenTouch(ts){
+    try{ localStorage.setItem(LAST_SEEN_TOUCH_KEY, ts); }catch(e){}
+  }
+
   function renderLog(rows){
     const log = document.getElementById('activity-log');
     if(!log) return;
     const confirmed = getConfirmed();
+    const topTouch = rows.length ? (rows[0].last_touched || null) : null;
+    const isGenuinelyNew = topTouch && topTouch !== getLastSeenTouch();
     log.innerHTML = rows.map((r, i)=>{
       const key = rowKey(r);
       const isDone = confirmed.includes(key);
       const t = r.created_at ? r.created_at.slice(11,16) : '';
       const lc = labelClass(r.bet_label);
-      const newCls = i===0 ? ' act-new' : '';
+      const newCls = (i===0 && isGenuinelyNew) ? ' act-new' : '';
       const doneCls = isDone ? ' confirmed' : '';
       return `<div class="act-row${newCls}${doneCls}" data-key="${key}">
         <span class="act-time">${t}</span>
@@ -1072,6 +1087,7 @@ footer{
         <span class="act-check" onclick="toggleConfirm('${key}',this)">${isDone?'✓':''}</span>
       </div>`;
     }).join('');
+    if(topTouch) setLastSeenTouch(topTouch);
   }
 
   window.scrollToVenue = function(venue){
