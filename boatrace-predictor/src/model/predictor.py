@@ -1250,9 +1250,11 @@ def get_recommendations(
             """オッズ帯5点構成で選出（4エージェント合成確率をそのままEVに使用）
             1点目: 30〜99倍から1点
             2〜3点目: 100〜199倍から2点
-            4点目: 201〜300倍から1点
-            5点目: 301倍以上（上限なし）から1点
+            4点目: 201〜300倍から1点（1号艇を除外）
+            5点目: 301倍以上（上限なし）から1点（1号艇を除外）
             各帯: EV(モデル確率×オッズ)上位の組み合わせを選出
+            4・5点目は1着・2着・3着のいずれにも1号艇が入らない組み合わせに限定し、
+            「1号艇が完全に不在の大荒れ」パターンを狙い撃つ
             """
             available = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             if len(available) < 3:
@@ -1261,8 +1263,11 @@ def get_recommendations(
 
             seen_3ren = set()
 
-            def _pick_odds_band(min_odds, max_odds, band_name, n_points=1):
-                """オッズ帯からEV(確率×オッズ)上位n_points点を選出"""
+            def _pick_odds_band(min_odds, max_odds, band_name, n_points=1, exclude_boat1=False):
+                """オッズ帯からEV(確率×オッズ)上位n_points点を選出
+                exclude_boat1=True の場合、1着・2着・3着のいずれにも1号艇が入らない
+                組み合わせのみを対象にする（高オッズ帯なのに1号艇が絡み続ける矛盾を避け、
+                「1号艇が完全に不在の大荒れ」パターンを狙い撃つための限定）"""
                 pool = _valid[
                     (_valid["odds_value"] >= min_odds) & (_valid["odds_value"] <= max_odds)
                 ].copy()
@@ -1272,6 +1277,11 @@ def get_recommendations(
                 pool["boat1"] = pool["boat1"].astype(int)
                 pool["boat2"] = pool["boat2"].astype(int)
                 pool["boat3"] = pool["boat3"].astype(int)
+                if exclude_boat1:
+                    pool = pool[(pool["boat1"] != 1) & (pool["boat2"] != 1) & (pool["boat3"] != 1)]
+                    if pool.empty:
+                        print(f"  [{band_name}] 1号艇除外後に該当なし→スキップ")
+                        return 0
                 pool["ev"] = pool["prob"].astype(float) * pool["odds_value"].astype(float)
                 pool = pool.sort_values("ev", ascending=False)
 
@@ -1293,8 +1303,8 @@ def get_recommendations(
 
             _pick_odds_band(30.0, 99.0, "1点目(30-99倍)", n_points=1)
             _pick_odds_band(100.0, 199.0, "2-3点目(100-199倍)", n_points=2)
-            _pick_odds_band(201.0, 300.0, "4点目(201-300倍)", n_points=1)
-            _pick_odds_band(301.0, 999999.0, "5点目(301倍+)", n_points=1)
+            _pick_odds_band(201.0, 300.0, "4点目(201-300倍・1号艇除外)", n_points=1, exclude_boat1=True)
+            _pick_odds_band(301.0, 999999.0, "5点目(301倍+・1号艇除外)", n_points=1, exclude_boat1=True)
 
         if not _valid.empty:
             print(f"  {_label_color}[{_okuma_label}]{_C_RESET} {_gate['reason_text']} → オッズ帯EV選出")
