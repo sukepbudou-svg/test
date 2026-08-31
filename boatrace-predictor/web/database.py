@@ -152,11 +152,10 @@ def update_result(date: str, venue_name: str, race_no: int,
 
 
 def get_recent_activity(date: str = None, limit: int = 8):
-    """当日の最新更新レース一覧（会場・レース単位、更新が新しい順）
-    「更新」は新規予想の保存だけでなく、既存予想への結果記録も含む
-    （result_recorded_atがcreated_atより後ならそちらを最終更新時刻として扱う）。
-    こうしないと、最終レースの予想後は新規保存が発生しないため、その結果が
-    記録されてもページの自動更新（SSE）が反応しないという不具合になる。"""
+    """当日の最新予想レース一覧（会場・レース単位、予想を出した順）
+    表示・並び順は予想を出した時刻（created_at）だけで決まる。結果が後から
+    記録されても、そのレースが再びリストの先頭に浮上することはない
+    （結果取得はログには流れない。ログに流れるのは予想のタイミングのみ）。"""
     init_db()
     if date is None:
         date = datetime.now().strftime("%Y-%m-%d")
@@ -164,15 +163,32 @@ def get_recent_activity(date: str = None, limit: int = 8):
         rows = conn.execute("""
             SELECT venue_name, race_no, arare_score,
                    MAX(bet_label) as bet_label,
-                   MAX(created_at) as created_at,
-                   MAX(COALESCE(result_recorded_at, created_at)) as last_touched
+                   MAX(created_at) as created_at
             FROM predictions
             WHERE date = ?
             GROUP BY venue_name, race_no
-            ORDER BY last_touched DESC
+            ORDER BY created_at DESC
             LIMIT ?
         """, (date, limit)).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_activity_watermark(date: str = None):
+    """当日の予想・結果記録のうち最も新しい更新時刻（結果記録も含む）。
+    ページ全体の自動更新（SSE）が「何か変わった」を検知するためだけに使う値で、
+    ログの表示内容・並び順（get_recent_activity）には一切影響しない。
+    これが無いと、最終レースの予想後は新規保存が発生しないため、その結果が
+    記録されてもページの自動更新（SSE）が反応しないという不具合になる。"""
+    init_db()
+    if date is None:
+        date = datetime.now().strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT MAX(COALESCE(result_recorded_at, created_at)) as watermark
+            FROM predictions
+            WHERE date = ?
+        """, (date,)).fetchone()
+    return row["watermark"] if row else None
 
 
 def get_today_predictions(date: str = None):

@@ -11,7 +11,7 @@ from web.database import (
     get_today_predictions, get_pt_stats, get_label_stats,
     get_daily_summary, get_consecutive_misses, init_db, update_result,
     get_venue_stats, get_grade_stats, get_venue_detail, get_all_streaks,
-    get_recent_activity, get_hero_stats, get_pt_payout_stats, get_signal_stats,
+    get_recent_activity, get_activity_watermark, get_hero_stats, get_pt_payout_stats, get_signal_stats,
     get_payout_distribution, get_daily_label_stats,
     get_pt_score_stats, get_pt_daily_entry_stats, get_pt_summary, get_pt_threshold_curve,
     get_pt_all_time_streaks,
@@ -195,21 +195,26 @@ def create_app():
     @app.route("/api/recent_activity")
     def api_recent_activity():
         date = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
-        return jsonify(get_recent_activity(date))
+        return jsonify({
+            "rows": get_recent_activity(date),
+            "watermark": get_activity_watermark(date),
+        })
 
     @app.route("/api/activity_stream")
     def api_activity_stream():
         date = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
         def generate():
-            last_ts = None
+            last_wm = None
             while True:
-                rows = get_recent_activity(date)
-                # created_atだけだと結果記録(新規予想を伴わない更新)を検知できないため、
-                # last_touched(結果記録があればそちらを優先)で新着判定する
-                new_ts = rows[0]["last_touched"] if rows else None
-                if new_ts != last_ts:
-                    last_ts = new_ts
-                    yield f"data: {json.dumps(rows, ensure_ascii=False)}\n\n"
+                # ログの表示内容(get_recent_activity)は予想のタイミングだけで決まるが、
+                # ページ全体を更新すべきタイミングの検知には結果記録も含める必要がある
+                # （最終レースの結果が記録されてもページの自動更新が反応しなくなるため）。
+                # そのため、この2つは別々の値（watermark）で管理する。
+                wm = get_activity_watermark(date)
+                if wm != last_wm:
+                    last_wm = wm
+                    payload = {"rows": get_recent_activity(date), "watermark": wm}
+                    yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
                 time.sleep(3)
         return Response(
             stream_with_context(generate()),

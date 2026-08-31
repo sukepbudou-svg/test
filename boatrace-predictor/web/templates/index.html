@@ -1067,7 +1067,7 @@ footer{
     const log = document.getElementById('activity-log');
     if(!log) return;
     const confirmed = getConfirmed();
-    const topTouch = rows.length ? (rows[0].last_touched || null) : null;
+    const topTouch = rows.length ? (rows[0].created_at || null) : null;
     const isGenuinelyNew = isRecentTouch(topTouch);
     log.innerHTML = rows.map((r, i)=>{
       const key = rowKey(r);
@@ -1199,13 +1199,15 @@ footer{
   let isFirst = true;
   es.onmessage = function(e){
     try{
-      const rows = JSON.parse(e.data);
-      renderLog(rows);
+      const payload = JSON.parse(e.data);
+      renderLog(payload.rows || []);
       if(isFirst){
         // 初回は現在の状態を表示するだけ
         isFirst = false;
       } else {
-        // 新しい予想・結果が追加されたのでページ全体もいずれ更新する
+        // 何か変わった（新しい予想 or 結果記録）のでページ全体もいずれ更新する
+        // ※ ログの表示内容(renderLog)は予想のタイミングだけで決まり、結果記録では
+        //   再表示されない。ページ全体の更新だけ結果記録にも反応する。
         requestPageRefresh();
       }
     }catch(_){}
@@ -1213,18 +1215,18 @@ footer{
   es.onerror = function(){
     // SSE切断時は30秒ポーリングにフォールバック
     es.close();
-    let fallbackLastTs = null;
+    let fallbackLastWm = null;
     let fallbackFirst = true;
     function fallback(){
       const url = '/api/recent_activity' + (DATE_PARAM ? '?date='+encodeURIComponent(DATE_PARAM) : '');
-      fetch(url).then(r=>r.json()).then(function(rows){
-        renderLog(rows);
-        const newTs = rows && rows.length ? rows[0].last_touched : null;
+      fetch(url).then(r=>r.json()).then(function(payload){
+        renderLog(payload.rows || []);
+        const wm = payload.watermark || null;
         if(fallbackFirst){
           fallbackFirst = false;
-          fallbackLastTs = newTs;
-        } else if(newTs && newTs !== fallbackLastTs){
-          fallbackLastTs = newTs;
+          fallbackLastWm = wm;
+        } else if(wm && wm !== fallbackLastWm){
+          fallbackLastWm = wm;
           requestPageRefresh();
         }
       }).catch(()=>{});
