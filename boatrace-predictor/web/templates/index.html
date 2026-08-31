@@ -1053,17 +1053,15 @@ footer{
     return 'lbl-skip';
   }
 
-  // ページ読み込みやSSE再接続のたびに毎回「新着」演出が出ないよう、
-  // このブラウザで最後に見た先頭行の更新時刻をlocalStorageに覚えておき、
-  // それと実際に変わった時だけ光らせる（データが変わっていないのに
-  // 再読み込みしただけで新着っぽく見えてしまう問題への対処）
-  const LAST_SEEN_TOUCH_KEY = 'perry_last_seen_touch_' + TODAY;
-  function getLastSeenTouch(){
-    try{ return localStorage.getItem(LAST_SEEN_TOUCH_KEY); }
-    catch(e){ return null; }
-  }
-  function setLastSeenTouch(ts){
-    try{ localStorage.setItem(LAST_SEEN_TOUCH_KEY, ts); }catch(e){}
+  // ページ読み込みやSSE再接続のたびに毎回「新着」演出が出ないよう、先頭行の
+  // 更新時刻が「実際に今から数分以内かどうか」で新着判定する（localStorageのように
+  // ブラウザ設定で保存が失敗すると常に新着扱いになってしまう方式は避ける）
+  const NEW_THRESHOLD_MS = 2 * 60 * 1000; // 2分以内なら「たった今」とみなす
+  function isRecentTouch(ts){
+    if(!ts) return false;
+    const t = new Date(ts.replace(' ', 'T'));
+    if(isNaN(t.getTime())) return false;
+    return (Date.now() - t.getTime()) < NEW_THRESHOLD_MS;
   }
 
   function renderLog(rows){
@@ -1071,7 +1069,7 @@ footer{
     if(!log) return;
     const confirmed = getConfirmed();
     const topTouch = rows.length ? (rows[0].last_touched || null) : null;
-    const isGenuinelyNew = topTouch && topTouch !== getLastSeenTouch();
+    const isGenuinelyNew = isRecentTouch(topTouch);
     log.innerHTML = rows.map((r, i)=>{
       const key = rowKey(r);
       const isDone = confirmed.includes(key);
@@ -1087,7 +1085,6 @@ footer{
         <span class="act-check" onclick="toggleConfirm('${key}',this)">${isDone?'✓':''}</span>
       </div>`;
     }).join('');
-    if(topTouch) setLastSeenTouch(topTouch);
   }
 
   window.scrollToVenue = function(venue){
