@@ -16,12 +16,11 @@ import pandas as pd
 PREDICT_BEFORE_MIN = 10
 # 発走後何分後に結果を取得するか
 RESULT_AFTER_MIN = 12
-# 結果取得の通常リトライ回数（超えたら間隔を延ばして粘る。完全に諦めるわけではない）
-MAX_RESULT_RETRIES = 10  # 12分後から2分おき×10回 = 最大32分後まで通常間隔で試行
-# 通常リトライを使い切った後の再試行間隔（分）
-RESULT_RETRY_SLOW_INTERVAL_MIN = 15
-# 結果取得を完全に諦めるまでの時間（発走から何時間）
-RESULT_GIVEUP_HOURS = 3
+# 結果取得の通常リトライ回数（超えたら間隔を延ばして粘る。完全に諦めることはない）
+MAX_RESULT_RETRIES = 5  # 12分後から2分おき×5回 = 最大22分後まで通常間隔で試行
+# 通常リトライを使い切った後の再試行間隔（時間）。ここで取れないのは大抵ページ未確定
+# などの短時間では解消しない理由のため、短い間隔で粘らず数時間おきの見回りに切り替える
+RESULT_RETRY_SWEEP_HOURS = 3
 # ループの確認間隔（秒）
 LOOP_INTERVAL_SEC = 30
 
@@ -291,39 +290,33 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                             print("\n" + "=" * 50)
                             print("  ⚠ 本日最終レースの予想が完了しました")
                             print(f"  結果の取得はまだ終わっていません（最短で{_eta.strftime('%H:%M')}頃、")
-                            print(f"  取得できない場合は間隔を延ばしながら{(scheduled_dt + timedelta(hours=RESULT_GIVEUP_HOURS)).strftime('%H:%M')}頃まで試行し続けます）")
+                            print(f"  取得できない場合は以後{RESULT_RETRY_SWEEP_HOURS}時間おきに再試行し続けます）")
                             print("  「=== 本日の全レース処理完了 ===」と表示されるまでこのウィンドウを閉じないでください")
                             print("=" * 50 + "\n")
 
-                    # ── 結果取得タイミング: 発走12分後（2分間隔で最大10回リトライ、
-                    #    それでも取れなければ15分間隔に切り替えて発走から3時間まで粘る）──
+                    # ── 結果取得タイミング: 発走12分後（2分間隔で最大5回リトライ、
+                    #    それでも取れなければ以後は3時間おきに見回って再試行し続ける）──
                     result_at = scheduled_dt + timedelta(minutes=RESULT_AFTER_MIN)
-                    give_up_at = scheduled_dt + timedelta(hours=RESULT_GIVEUP_HOURS)
                     last_attempt = race.get("last_result_attempt")
                     attempts = race.get("result_fetch_attempts", 0)
                     retry_interval = (timedelta(minutes=2) if attempts < MAX_RESULT_RETRIES
-                                      else timedelta(minutes=RESULT_RETRY_SLOW_INTERVAL_MIN))
+                                      else timedelta(hours=RESULT_RETRY_SWEEP_HOURS))
                     retry_ok = (last_attempt is None or now >= last_attempt + retry_interval)
                     if race["predicted"] and not race["result_fetched"] and now >= result_at and retry_ok:
-                        if now >= give_up_at:
-                            print(f"\n  [SKIP] {race['venue_name']} {race['race_no']}R: "
-                                  f"発走から{RESULT_GIVEUP_HOURS}時間経っても結果取得できずスキップ")
+                        race["last_result_attempt"] = now
+                        race["result_fetch_attempts"] = attempts + 1
+                        success = _fetch_and_record_result(
+                            race, today, spreadsheet_id, credentials_path,
+                            fetch_race_result,
+                            update_result_row if _sheets_ok else None,
+                            pred_rows_override=race.get("pred_rows", []),
+                            race_count=race.get("daily_race_count"),
+                            db_update_fn=db_update_result,
+                        )
+                        if success:
                             race["result_fetched"] = True
-                        else:
-                            race["last_result_attempt"] = now
-                            race["result_fetch_attempts"] = attempts + 1
-                            success = _fetch_and_record_result(
-                                race, today, spreadsheet_id, credentials_path,
-                                fetch_race_result,
-                                update_result_row if _sheets_ok else None,
-                                pred_rows_override=race.get("pred_rows", []),
-                                race_count=race.get("daily_race_count"),
-                                db_update_fn=db_update_result,
-                            )
-                            if success:
-                                race["result_fetched"] = True
-                                if _sheets_ok:
-                                    update_summary_sheet(spreadsheet_id, credentials_path)
+                            if _sheets_ok:
+                                update_summary_sheet(spreadsheet_id, credentials_path)
 
                 # 次の予想・結果取得までの待機時間を表示
                 next_action = _next_action_time(schedule, now)
