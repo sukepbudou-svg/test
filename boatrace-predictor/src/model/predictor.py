@@ -1248,13 +1248,15 @@ def get_recommendations(
 
         def _pick_strength_based(label_override):
             """オッズ帯5点構成で選出（4エージェント合成確率をそのままEVに使用）
-            1点目: 30〜99倍から1点
-            2〜3点目: 100〜199倍から2点
+            1〜2点目: 100〜199倍から2点
+            3点目: 100〜199倍から1点（1号艇を除外）
             4点目: 201〜300倍から1点（1号艇を除外）
             5点目: 301倍以上（上限なし）から1点（1号艇を除外）
             各帯: EV(モデル確率×オッズ)上位の組み合わせを選出
-            4・5点目は1着・2着・3着のいずれにも1号艇が入らない組み合わせに限定し、
-            「1号艇が完全に不在の大荒れ」パターンを狙い撃つ
+            3〜5点目は1着・2着・3着のいずれにも1号艇が入らない組み合わせに限定し、
+            「1号艇が完全に不在の大荒れ」パターンを狙い撃つ（オッズが上がるほど
+            1号艇不在の比重を高める設計。大穴狙いのコンセプトのため最も配当の
+            小さい30-99倍帯は廃止した）
             """
             available = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             if len(available) < 3:
@@ -1301,8 +1303,8 @@ def get_recommendations(
                     print(f"  [{band_name}] 候補が全て選出済み→スキップ")
                 return picked
 
-            _pick_odds_band(30.0, 99.0, "1点目(30-99倍)", n_points=1)
-            _pick_odds_band(100.0, 199.0, "2-3点目(100-199倍)", n_points=2)
+            _pick_odds_band(100.0, 199.0, "1-2点目(100-199倍)", n_points=2)
+            _pick_odds_band(100.0, 199.0, "3点目(100-199倍・1号艇除外)", n_points=1, exclude_boat1=True)
             _pick_odds_band(201.0, 300.0, "4点目(201-300倍・1号艇除外)", n_points=1, exclude_boat1=True)
             _pick_odds_band(301.0, 999999.0, "5点目(301倍+・1号艇除外)", n_points=1, exclude_boat1=True)
 
