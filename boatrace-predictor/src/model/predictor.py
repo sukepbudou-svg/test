@@ -34,7 +34,9 @@ PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
 # 荒れ条件: 参戦ベースラインスコア（PT5〜9 AND 1号艇ライブ5〜9倍で参戦）
 ARARE_MIN_SCORE = 5
 
-# 荒れやすい会場の加点（江戸川のみ2点、他は1点）
+# 荒れやすい会場の加点（固定リスト）。旧・荒れPTスコアリング（_calc_arare_score、
+# バックテストモード専用）でのみ使用。現在の予想フロー（_calc_race_pt）は下の
+# _get_venue_okuma_points() による動的ランキングを使う。
 ARARE_VENUES = {
     "03": 2,  # 江戸川（河川・最難関）
     "02": 1,  # 戸田
@@ -43,6 +45,49 @@ ARARE_VENUES = {
     "10": 1,  # 三国
     "19": 1,  # 下関
 }
+
+# 荒れやすい会場の加点は、固定リストではなく実際の万舟率（3連単配当≥1万円の割合）
+# ランキングから動的に算出する（2026-09-02〜）。以前は「江戸川+2/戸田・平和島・
+# 鳴門・三国・下関+1」という一般的な荒れ会場イメージに基づく固定リストだったが、
+# 実データと突き合わせると下関・鳴門は下位、逆に児島・芦屋・びわこ・蒲郡などが
+# 無加点なのに上位という乖離が見つかったため、実データに基づくランキングに
+# 差し替えた。詳細は _get_venue_okuma_points() を参照。
+VENUE_OKUMA_MIN_SAMPLE = 15  # このレース数未満の会場はサンプル不足として無加点扱い
+VENUE_OKUMA_TIER2_POINTS = 2  # 万舟率が上位の会場（VENUE_OKUMA_TIER2_TOPに入る会場）
+VENUE_OKUMA_TIER1_POINTS = 1  # 次点の会場（VENUE_OKUMA_TIER1_TOPまでに入る会場）
+VENUE_OKUMA_TIER2_TOP = 3   # 万舟率ランキング上位何会場が+2点になるか
+VENUE_OKUMA_TIER1_TOP = 9   # 万舟率ランキング上位何会場までが+1点以上になるか（tier2含む）
+VENUE_OKUMA_CACHE_TTL_SEC = 1800  # ランキング再計算の間隔（30分）
+
+_venue_okuma_cache = {"points": {}, "computed_at": None}
+
+
+def _get_venue_okuma_points() -> dict:
+    """会場名 → 荒れPTのD区分加点、を実際の万舟率ランキングから動的に算出する。
+    strategy_version='5'以降のデータのみ対象（web.database.get_venue_okuma_rankingと
+    同じ集計）。DB未接続・データ不足時は空dict（=全会場無加点）を返す。
+    結果はVENUE_OKUMA_CACHE_TTL_SEC秒キャッシュし、予想のたびにDBへ問い合わせない。"""
+    import time as _time
+    now = _time.time()
+    if (_venue_okuma_cache["computed_at"] is not None
+            and now - _venue_okuma_cache["computed_at"] < VENUE_OKUMA_CACHE_TTL_SEC):
+        return _venue_okuma_cache["points"]
+
+    points = {}
+    try:
+        from web.database import get_venue_okuma_ranking
+        ranking = [r for r in get_venue_okuma_ranking() if r["n_races"] >= VENUE_OKUMA_MIN_SAMPLE]
+        for i, r in enumerate(ranking):
+            if i < VENUE_OKUMA_TIER2_TOP:
+                points[r["venue_name"]] = VENUE_OKUMA_TIER2_POINTS
+            elif i < VENUE_OKUMA_TIER1_TOP:
+                points[r["venue_name"]] = VENUE_OKUMA_TIER1_POINTS
+    except Exception:
+        points = {}
+
+    _venue_okuma_cache["points"] = points
+    _venue_okuma_cache["computed_at"] = now
+    return points
 
 
 def _safe_float(v) -> float | None:
@@ -653,12 +698,12 @@ def _calc_race_pt(race_row: pd.Series, weather: dict = None, by_prob: "pd.DataFr
         reasons.append(f"1号M低({m1:.0%})")
 
     # ── D. 環境・条件（最大3点） ──
-    vc = str(race_row.get("venue_code", "")).zfill(2)
-    venue_pts = ARARE_VENUES.get(vc, 0)
+    venue_name = str(race_row.get("venue_name", ""))
+    venue_pts = _get_venue_okuma_points().get(venue_name, 0)
     rough_water = bool(venue_pts)
     if venue_pts:
         score += venue_pts
-        reasons.append("江戸川" if venue_pts == 2 else "荒れ会場")
+        reasons.append(f"荒れ会場({venue_name})")
 
     wind = _safe_float((weather or {}).get("wind_speed"))
     if wind is not None and wind >= 5:
