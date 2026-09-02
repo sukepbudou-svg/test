@@ -954,6 +954,64 @@ def get_pt_calibration_stats():
     return result
 
 
+def get_pt_condition_breakdown():
+    """荒れPT(A:市場ミスプライシング/B:外艇の脅威/C:1号艇の弱さ/D:環境条件)のうち、
+    どの区分が実際に加点へ寄与したかの組み合わせパターン別に、レース数・的中率・
+    平均実配当額を集計する（レース単位・strategy_version='5'限定・全期間）。
+    同じPT合計値でも、単純加算の結果どの条件から積み上がったかが違うレース同士を
+    一括りにしてよいのか（例: A条件単独のPT4とB+C条件のPT4は同じ意味を持つか）を
+    検証するための機能。arare_reasons（レース単位の加点理由テキスト）の文言から
+    区分を判定する（DBに区分ごとのフラグを持たせていないため）。
+    """
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT date, venue_name, race_no,
+                   MAX(arare_score) as pt,
+                   MAX(arare_reasons) as reasons,
+                   MAX(actual_payout) as actual_payout,
+                   MAX(is_hit) as is_hit
+            FROM predictions
+            WHERE strategy_version='5' AND bet_type='3連単' AND result_recorded_at IS NOT NULL
+            GROUP BY date, venue_name, race_no
+        """).fetchall()
+
+    groups = {}
+    for r in rows:
+        r = dict(r)
+        reasons = r["reasons"] or ""
+        cats = []
+        if "市場ミスプライス" in reasons or "市場圏外気味" in reasons:
+            cats.append("A")
+        if "前付け" in reasons or "A1選手" in reasons or "外艇ST速" in reasons:
+            cats.append("B")
+        if "ST不安" in reasons or "M低" in reasons:
+            cats.append("C")
+        if "荒れ会場" in reasons or "強風" in reasons:
+            cats.append("D")
+        pattern = "+".join(cats) if cats else "(該当なし)"
+
+        g = groups.setdefault(pattern, {"n_races": 0, "n_hits": 0, "payout_sum": 0, "pt_sum": 0})
+        g["n_races"] += 1
+        g["n_hits"] += int(r["is_hit"] or 0)
+        g["payout_sum"] += int(r["actual_payout"] or 0)
+        g["pt_sum"] += int(r["pt"] or 0)
+
+    result = []
+    for pattern, g in groups.items():
+        n = g["n_races"]
+        result.append({
+            "pattern": pattern,
+            "n_races": n,
+            "n_hits": g["n_hits"],
+            "hit_rate": round(100 * g["n_hits"] / n, 2) if n else 0.0,
+            "avg_pt": round(g["pt_sum"] / n, 1) if n else 0.0,
+            "avg_actual_payout": round(g["payout_sum"] / n) if n else 0,
+        })
+    result.sort(key=lambda x: -x["n_races"])
+    return result
+
+
 def get_race_position_distribution():
     """その日の何レース目（全会場通しの順番）で的中しているかを10レース刻みで集計。
     日付をまたいで全期間累積する（strategy_version='5'以降）。

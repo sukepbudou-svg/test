@@ -423,6 +423,44 @@ footer{
   </div>
 </div>
 
+<!-- ── PT条件パターン別 内訳 ── -->
+<div class="section">
+  <h2>PT条件パターン別 内訳</h2>
+  <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
+    荒れPTはA(市場ミスプライシング)/B(外艇の脅威)/C(1号艇の弱さ)/D(環境条件)の単純加算のため、
+    同じPT合計値でもどの区分から積み上がったかが異なる場合がある。区分の組み合わせパターン別に
+    的中率・平均実配当額を見ることで、どの条件が本当に効いているかを検証する。
+  </p>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>該当区分</th>
+        <th>レース数</th>
+        <th>平均PT</th>
+        <th>的中数</th>
+        <th>的中率</th>
+        <th>平均実配当額(全レース)</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for b in pt_condition_breakdown %}
+      <tr>
+        <td>{{ b.pattern }}</td>
+        <td>{{ b.n_races }}</td>
+        <td>{{ b.avg_pt }}</td>
+        <td>{{ b.n_hits }}</td>
+        <td>{{ b.hit_rate }}%</td>
+        <td>¥{{ "{:,}".format(b.avg_actual_payout) }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
 <!-- ── 参戦ライン候補別 累積成績 ── -->
 <div class="section">
   <h2>参戦ライン候補別 累積成績（PT≥X の場合）</h2>
