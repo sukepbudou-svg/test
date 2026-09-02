@@ -28,6 +28,14 @@ WEIGHT_COURSE = 0.20  # コース戦略エージェント
 WEIGHT_RACER  = 0.20  # 選手成績エージェント
 WEIGHT_MOTOR  = 0.15  # モーター状態エージェント
 
+# 3連単確率のキャリブレーション補正係数（2026-09-02）: corrected = SCALE * raw^EXPONENT
+# モデル確率キャリブレーション検証（/statsページ）の実績データ
+# （予測確率0〜1%→実際0.22%、1〜2%→0.5%、2〜5%→0.58%）にべき乗回帰でフィットした値。
+# predict_race内でHarville式算出直後の3連単確率にのみ適用する（詳細はpredict_race参照）。
+# 3点のみのフィットなので暫定値。データが増えたら再フィットする前提。
+CALIBRATION_SCALE = 0.111
+CALIBRATION_EXPONENT = 0.76
+
 MODEL_DIR = Path(__file__).parent.parent.parent / "data" / "models"
 PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
 
@@ -954,6 +962,14 @@ def predict_race(
         rem2 = np.array([win_probs[i] for i in range(6) if i not in (b1 - 1, b2 - 1)])
         p3 = win_probs[b3 - 1] / rem2.sum() if rem2.sum() > 0 else 0
         prob = p1 * p2 * p3
+        # 3連単確率のキャリブレーション補正（2026-09-02）: モデル確率キャリブレーション
+        # 検証（/statsページ）で、Harville式で算出した3連単確率が実際の的中率より
+        # 常に3〜4倍高いことが判明した。エージェント内部・Harville計算自体には
+        # 手を加えず、最後に出てくる3連単確率にだけべき乗補正をかけて、影響範囲を
+        # 最小限にする。係数はキャリブレーション実績（予測確率0〜1%/1〜2%/2〜5%の
+        # 3点、実際の的中率とのべき乗回帰）にフィットした暫定値。データが増えたら
+        # 再フィットする前提。
+        prob = CALIBRATION_SCALE * (prob ** CALIBRATION_EXPONENT) if prob > 0 else 0.0
         combo_probs.append((f"{b1}-{b2}-{b3}", b1, b2, b3, prob))
 
     # 確率の高い順に並べて人気順位を付与
