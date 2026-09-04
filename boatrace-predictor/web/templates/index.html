@@ -906,9 +906,9 @@ footer{
       </div>
     </div>
 
-    {% if race_position_distribution %}
     <div class="vor-position-dist">
       <div class="vor-title">レース位置別 的中分布（集計中・全会場通し番号）</div>
+      {% if race_position_distribution %}
       <div class="vor-pos-grid">
         {% for d in race_position_distribution %}
         <div class="vor-pos-item">
@@ -917,8 +917,12 @@ footer{
         </div>
         {% endfor %}
       </div>
+      {% else %}
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--dim2);padding:6px 0;">
+        まだデータがありません（集計開始）
+      </div>
+      {% endif %}
     </div>
-    {% endif %}
   </div>
 </div>
 
