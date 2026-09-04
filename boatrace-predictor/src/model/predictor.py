@@ -1308,16 +1308,19 @@ def get_recommendations(
             })
 
         def _pick_strength_based(label_override):
-            """オッズ帯5点構成で選出（4エージェント合成確率をそのままEVに使用）
-            1〜2点目: 100〜199倍から2点
-            3点目: 100〜199倍から1点（1号艇を除外）
-            4点目: 201〜300倍から1点（1号艇を除外）
-            5点目: 301倍以上（上限なし）から1点（1号艇を除外）
-            各帯: EV(モデル確率×オッズ)上位の組み合わせを選出
-            3〜5点目は1着・2着・3着のいずれにも1号艇が入らない組み合わせに限定し、
-            「1号艇が完全に不在の大荒れ」パターンを狙い撃つ（オッズが上がるほど
-            1号艇不在の比重を高める設計。大穴狙いのコンセプトのため最も配当の
-            小さい30-99倍帯は廃止した）
+            """オッズ帯5点構成で選出（2026-09-04改訂）
+            1〜2点目: 100〜150倍から2点
+            3点目: 151〜250倍から1点
+            4点目: 151〜250倍から1点（1号艇を除外）
+            5点目: 251〜900倍から1点（1号艇を除外）
+            各帯: 確率×EVのブレンド（幾何平均）上位の組み合わせを選出。
+            純粋EV(確率×オッズ)だと帯の上限側に、純粋確率だと帯の下限側に選出が
+            偏ってしまう（どちらも範囲を分割した意味が薄れる）ため、両者の
+            バランスを取るブレンド方式を全点に採用した。オッズに無制限の上限が
+            あると極端な大穴に偏りがちなため、5点目にも900倍の上限を設けている。
+            4・5点目は1着・2着・3着のいずれにも1号艇が入らない組み合わせに限定し、
+            「1号艇が完全に不在の大荒れ」パターンを狙い撃つ（大穴狙いのコンセプトの
+            ため最も配当の小さい旧・30-99倍帯は廃止済み）。
             """
             available = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             if len(available) < 3:
@@ -1327,7 +1330,7 @@ def get_recommendations(
             seen_3ren = set()
 
             def _pick_odds_band(min_odds, max_odds, band_name, n_points=1, exclude_boat1=False):
-                """オッズ帯からEV(確率×オッズ)上位n_points点を選出
+                """オッズ帯から確率×EVのブレンド(幾何平均)上位n_points点を選出
                 exclude_boat1=True の場合、1着・2着・3着のいずれにも1号艇が入らない
                 組み合わせのみを対象にする（高オッズ帯なのに1号艇が絡み続ける矛盾を避け、
                 「1号艇が完全に不在の大荒れ」パターンを狙い撃つための限定）"""
@@ -1345,8 +1348,11 @@ def get_recommendations(
                     if pool.empty:
                         print(f"  [{band_name}] 1号艇除外後に該当なし→スキップ")
                         return 0
-                pool["ev"] = pool["prob"].astype(float) * pool["odds_value"].astype(float)
-                pool = pool.sort_values("ev", ascending=False)
+                pool["prob"] = pool["prob"].astype(float)
+                pool["odds_value"] = pool["odds_value"].astype(float)
+                pool["ev"] = pool["prob"] * pool["odds_value"]
+                pool["blend"] = np.sqrt(pool["prob"] * pool["ev"])
+                pool = pool.sort_values("blend", ascending=False)
 
                 picked = 0
                 for _, row in pool.iterrows():
@@ -1356,7 +1362,7 @@ def get_recommendations(
                         continue
                     seen_3ren.add(key)
                     _add_rec(row, "神熱", label_override=label_override, bet_type="3連単")
-                    print(f"  [{band_name}] {f}-{s}-{t} EV={float(row['ev']):.2f}")
+                    print(f"  [{band_name}] {f}-{s}-{t} EV={float(row['ev']):.2f} ブレンド={float(row['blend']):.4f}")
                     picked += 1
                     if picked >= n_points:
                         break
@@ -1364,13 +1370,13 @@ def get_recommendations(
                     print(f"  [{band_name}] 候補が全て選出済み→スキップ")
                 return picked
 
-            _pick_odds_band(100.0, 199.0, "1-2点目(100-199倍)", n_points=2)
-            _pick_odds_band(100.0, 199.0, "3点目(100-199倍・1号艇除外)", n_points=1, exclude_boat1=True)
-            _pick_odds_band(201.0, 300.0, "4点目(201-300倍・1号艇除外)", n_points=1, exclude_boat1=True)
-            _pick_odds_band(301.0, 999999.0, "5点目(301倍+・1号艇除外)", n_points=1, exclude_boat1=True)
+            _pick_odds_band(100.0, 150.0, "1-2点目(100-150倍)", n_points=2)
+            _pick_odds_band(151.0, 250.0, "3点目(151-250倍)", n_points=1)
+            _pick_odds_band(151.0, 250.0, "4点目(151-250倍・1号艇除外)", n_points=1, exclude_boat1=True)
+            _pick_odds_band(251.0, 900.0, "5点目(251-900倍・1号艇除外)", n_points=1, exclude_boat1=True)
 
         if not _valid.empty:
-            print(f"  {_label_color}[{_okuma_label}]{_C_RESET} {_gate['reason_text']} → オッズ帯EV選出")
+            print(f"  {_label_color}[{_okuma_label}]{_C_RESET} {_gate['reason_text']} → オッズ帯選出(ブレンド方式)")
             _pick_strength_based(_okuma_label)
         else:
             print(f"  [スキップ] {venue_name_log} {race_no}R オッズデータなし")
