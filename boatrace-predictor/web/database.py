@@ -1082,7 +1082,13 @@ def get_race_position_distribution():
     day_race_noは予想保存時に本日の全番組表(schedule)から算出した値を使う
     （記録済みレース数からの逆算ではない）ため、ツールの途中再起動や
     日中からの起動でも正しい「当日何レース目か」を維持できる。
-    day_race_noが未設定の古いレコード(この仕組み導入前)は対象外。"""
+    day_race_noが未設定の古いレコード(この仕組み導入前)は対象外。
+
+    表示する枠(バケット)の数は、的中データの有無に関わらず「これまでに記録された
+    最大の当日通しレース数」まで常にフルで用意し、まだ的中データが無い枠は
+    0/0(0%)として埋める（枠自体が消えたり歯抜けになったりしないようにするため）。
+    枠の最大値はstrategy_versionを問わず全期間のday_race_noから決める
+    （何レース目まで存在するかは選出方式と無関係な、番組表由来の構造的な値のため）。"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute(f"""
@@ -1101,19 +1107,27 @@ def get_race_position_distribution():
             FROM race_level
             WHERE has_result = 1
             GROUP BY bucket
-            ORDER BY bucket
         """).fetchall()
+        max_row = conn.execute("""
+            SELECT MAX(day_race_no) as max_day_race_no
+            FROM predictions
+            WHERE day_race_no IS NOT NULL
+        """).fetchone()
+
+    data_by_bucket = {dict(r)["bucket"]: dict(r) for r in rows}
+    max_day_race_no = dict(max_row).get("max_day_race_no") or 0
+    max_bucket = (max_day_race_no - 1) // 10 if max_day_race_no > 0 else -1
+
     result = []
-    for r in rows:
-        r = dict(r)
-        bucket = r["bucket"]
-        n_races = r["n_races"] or 0
-        n_hits = r["n_hits"] or 0
+    for bucket in range(0, max_bucket + 1):
+        r = data_by_bucket.get(bucket, {})
+        n_races = r.get("n_races") or 0
+        n_hits = r.get("n_hits") or 0
         result.append({
             "bucket": bucket,
             "label": f"{bucket * 10 + 1}〜{bucket * 10 + 10}R目",
             "n_races": n_races,
             "n_hits": n_hits,
-            "hit_rate": round(100 * n_hits / n_races, 1) if n_races else None,
+            "hit_rate": round(100 * n_hits / n_races, 1) if n_races else 0.0,
         })
     return result
