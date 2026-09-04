@@ -1304,7 +1304,9 @@ def get_recommendations(
                 "boat1_risk":         _calc_boat1_risk(race_row),
                 "okuma_signal_count": _gate_score,
                 "bet_type":           bet_type,
-                "strategy_version":   "5",
+                # 2026-09-04: オッズ帯・選出方式(EV→ブレンド)を刷新したため'5'→'6'に
+                # 引き上げ、的中関連の集計をゼロから取り直せるようにする
+                "strategy_version":   "6",
             })
 
         def _pick_strength_based(label_override):
