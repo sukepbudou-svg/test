@@ -402,6 +402,32 @@ def get_venue_okuma_ranking():
     return result
 
 
+def get_today_okuma_count(date: str = None):
+    """本日、全会場通しで実際に万舟(実配当≥1万円)になったレース数をカウントする。
+    的中したかどうか（自分の買い目が当たったか）とは無関係に、レースの実際の結果
+    だけを見る集計。strategy_versionとも無関係（選出方式が変わっても意味は変わらない
+    ため、リセット対象にしない）。"""
+    init_db()
+    if date is None:
+        date = datetime.now().strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        row = conn.execute("""
+            SELECT COUNT(*) as n_races_resulted,
+                   SUM(CASE WHEN actual_payout >= 10000 THEN 1 ELSE 0 END) as n_okuma
+            FROM (
+                SELECT date, venue_name, race_no, MAX(actual_payout) as actual_payout
+                FROM predictions
+                WHERE date=? AND bet_type='3連単' AND result_recorded_at IS NOT NULL
+                GROUP BY date, venue_name, race_no
+            )
+        """, (date,)).fetchone()
+    row = dict(row) if row else {}
+    return {
+        "n_races_resulted": row.get("n_races_resulted") or 0,
+        "n_okuma": row.get("n_okuma") or 0,
+    }
+
+
 def get_venue_stats():
     """会場別集計（全期間・レース単位）"""
     init_db()

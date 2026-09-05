@@ -16,6 +16,7 @@ from web.database import (
     get_pt_score_stats, get_pt_daily_entry_stats, get_pt_summary, get_pt_threshold_curve,
     get_pt_all_time_streaks,
     get_pt_calibration_stats, get_venue_okuma_ranking, get_race_position_distribution,
+    get_today_okuma_count,
     get_pt_condition_breakdown,
 )
 from src.model.predictor import PT_MIN_SCORE
@@ -121,6 +122,7 @@ def create_app():
         venue_okuma_ranking = get_venue_okuma_ranking()
         pt_counts, pt_total = _build_pt_counts(race_list, get_pt_all_time_streaks(), get_pt_score_stats())
         race_position_distribution = get_race_position_distribution()
+        today_okuma = get_today_okuma_count(date)
         # 「現在何R目か」は記録済みレース数(race_list|length)ではなく、本日の全番組表
         # から算出したday_race_noの最大値を使う。途中再起動・日中からの起動でも
         # 正しい「当日何レース目か」を維持できる。day_race_no未設定の日は件数で代替。
@@ -130,7 +132,7 @@ def create_app():
                                pt_min_score=PT_MIN_SCORE, venue_okuma_ranking=venue_okuma_ranking,
                                pt_counts=pt_counts, pt_total=pt_total,
                                race_position_distribution=race_position_distribution,
-                               today_progress=today_progress)
+                               today_progress=today_progress, today_okuma=today_okuma)
 
     @app.route("/stats")
     def stats():
