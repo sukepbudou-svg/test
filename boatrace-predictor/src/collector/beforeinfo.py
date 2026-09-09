@@ -46,6 +46,30 @@ def fetch_beforeinfo(date: datetime, venue_code: str, race_no: int, timeout: int
     return _parse_beforeinfo(soup, venue_code, race_no)
 
 
+# 開催中止判定のキーワード（公式サイトの表記ゆれに備えて複数用意。実際の中止ページの
+# 文言は未検証のため、運用しながら必要に応じて調整すること）
+_CANCELLED_KEYWORDS = ("本日は中止", "開催中止", "中止となりました", "順延")
+
+
+def check_venue_cancelled(date: datetime, venue_code: str, timeout: int = 10) -> bool:
+    """指定会場が本日開催中止かどうかを確認する。
+    番組表(Bファイル)は前日〜早朝に作成されるため、当日の天候等による急な開催中止が
+    反映されていないことがある。公式サイトのレース一覧ページ(raceindex)を見て、
+    中止を示すキーワードがあれば中止と判定する。通信エラー等で判定できない場合は
+    False（中止ではない）を返す ―― 通信の一時的な問題だけで会場を誤って除外し、
+    本来取得すべきレースを取りこぼさないようにするため。
+    """
+    hd = date.strftime("%Y%m%d")
+    url = "https://www.boatrace.jp/owpc/pc/race/raceindex"
+    try:
+        resp = requests.get(url, params={"jcd": venue_code.zfill(2), "hd": hd},
+                            headers=HEADERS, timeout=timeout)
+        resp.raise_for_status()
+    except requests.RequestException:
+        return False
+    return any(kw in resp.text for kw in _CANCELLED_KEYWORDS)
+
+
 def _parse_weather_conditions(soup: BeautifulSoup) -> dict:
     """直前情報ページから天候・風速・波高・風向をパースする"""
     conditions = {"weather": None, "wind_speed": 0, "wave_height": 0, "wind_direction": None}
