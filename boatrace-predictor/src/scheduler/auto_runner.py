@@ -209,22 +209,13 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
         )
         return
 
-    # 開催中止の会場を除外する。番組表(Bファイル)は前日〜早朝に作成されるため、
-    # 当日の天候等による急な開催中止が反映されていないことがある。中止会場を
-    # そのままにしておくと、存在しないレースの直前情報・オッズ・結果を延々と
-    # 取得しようとし続けてしまう。
-    from src.collector.beforeinfo import check_venue_cancelled
-    print("  開催中止会場の確認中...")
-    cancelled_venues = set()
-    for venue_code in sorted({r["venue_code"] for r in schedule}):
-        if check_venue_cancelled(today, venue_code):
-            cancelled_venues.add(venue_code)
-        time.sleep(0.5)  # 連続アクセス防止
-    if cancelled_venues:
-        cancelled_names = sorted({r["venue_name"] for r in schedule if r["venue_code"] in cancelled_venues})
-        print(f"  [開催中止] {', '.join(cancelled_names)} → 予想対象から除外します")
-        schedule = [r for r in schedule if r["venue_code"] not in cancelled_venues]
-    print()
+    # 2026-09-09に追加した開催中止会場の自動除外機能は、実際のページ文言を検証
+    # できないまま実装したところ、2026-09-11に開催中の江戸川を誤って「中止」と
+    # 判定し、実在するレースの予想を丸ごと取りこぼす事故が発生したため無効化した。
+    # 存在しないレースの情報取得を試み続けるだけの問題より、実在するレースを
+    # 取りこぼす方がはるかに深刻なため、キーワード判定の妥当性を確認できるまでは
+    # 復活させない（check_venue_cancelled自体はsrc/collector/beforeinfo.pyに残して
+    # あるが、ここからは呼び出していない）。
 
     # 起動時点での予想・結果取得状況をDBの実際の記録から判定する。
     # 「発走時刻を過ぎているか」だけで判定すると、発走10分前〜発走前（予想は
