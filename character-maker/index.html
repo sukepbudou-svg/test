@@ -6,14 +6,21 @@
 <title>キャラクターメーカー</title>
 <style>
   :root {
+    color-scheme: light;
     --bg: #f6f7f9; --panel: #fff; --text: #1f2328; --muted: #656d76;
     --line: #d0d7de; --accent: #2f6feb; --accent-text: #fff; --danger: #cf222e;
   }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
       --bg: #0d1117; --panel: #161b22; --text: #e6edf3; --muted: #8d96a0;
       --line: #30363d; --accent: #4493f8; --accent-text: #fff; --danger: #f85149;
     }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0d1117; --panel: #161b22; --text: #e6edf3; --muted: #8d96a0;
+      --line: #30363d; --accent: #4493f8; --accent-text: #fff; --danger: #f85149;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
@@ -63,7 +70,14 @@
     <div class="row">
       <button id="export">書き出し</button>
       <button id="import">読み込み</button>
-      <input type="file" id="importFile" accept=".json" hidden>
+    </div>
+    <div id="backup" hidden style="margin-top:12px">
+      <label for="backupText" id="backupLabel"></label>
+      <textarea id="backupText" style="min-height:140px;font-size:12px"></textarea>
+      <div class="row">
+        <button class="primary" id="backupAction"></button>
+        <button id="backupClose">閉じる</button>
+      </div>
     </div>
     <p class="hint">データはこのブラウザ内に保存されます。定期的に「書き出し」でバックアップしてください。</p>
   </section>
@@ -301,7 +315,14 @@ $('new').onclick = () => { currentId = null; fillForm(null); renderList(); };
 $('save').onclick = save;
 $('save2').onclick = save;
 $('delete').onclick = () => {
-  if (!currentId || !confirm('このキャラクターを削除しますか？')) return;
+  if (!currentId) return;
+  const btn = $('delete');
+  if (!btn.dataset.armed) {
+    btn.dataset.armed = '1'; btn.textContent = 'もう一度押すと削除';
+    setTimeout(() => { delete btn.dataset.armed; btn.textContent = '削除'; }, 3000);
+    return;
+  }
+  delete btn.dataset.armed; btn.textContent = '削除';
   chars = chars.filter((c) => c.id !== currentId);
   saveAll(chars); currentId = null; fillForm(null); renderList(); toast('削除しました');
 };
@@ -315,25 +336,39 @@ $('random').onclick = () => {
 $('copyApproach').onclick = () => copy(approachPrompt(readForm()));
 $('copyBoard').onclick = () => copy(boardPrompt(readForm()));
 
-$('export').onclick = () => {
-  const blob = new Blob([JSON.stringify(chars, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `characters-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click(); URL.revokeObjectURL(a.href);
-};
-$('import').onclick = () => $('importFile').click();
-$('importFile').onchange = async (e) => {
-  const file = e.target.files[0]; if (!file) return;
+// 書き出し：データを文字で表示してコピー。読み込み：貼り付けた文字から取り込み。
+let backupMode = null;
+function openBackup(mode) {
+  backupMode = mode;
+  $('backup').hidden = false;
+  if (mode === 'export') {
+    $('backupLabel').textContent = '下の文字をすべてコピーして、メモ帳などに保存してください';
+    $('backupText').value = JSON.stringify(chars, null, 2);
+    $('backupAction').textContent = 'コピー';
+  } else {
+    $('backupLabel').textContent = '書き出しで保存した文字を貼り付けてください';
+    $('backupText').value = '';
+    $('backupAction').textContent = '読み込む';
+  }
+}
+$('export').onclick = () => openBackup('export');
+$('import').onclick = () => openBackup('import');
+$('backupClose').onclick = () => { $('backup').hidden = true; };
+$('backupAction').onclick = async () => {
+  if (backupMode === 'export') {
+    try { await navigator.clipboard.writeText($('backupText').value); toast('コピーしました'); }
+    catch { $('backupText').select(); toast('選択しました。Ctrl+C（⌘+C）でコピーしてください'); }
+    return;
+  }
   try {
-    const incoming = JSON.parse(await file.text());
+    const incoming = JSON.parse($('backupText').value);
     if (!Array.isArray(incoming)) throw new Error();
     const ids = new Set(chars.map((c) => c.id));
     const added = incoming.filter((c) => c && c.id && !ids.has(c.id));
     chars = [...added, ...chars];
-    saveAll(chars); renderList(); toast(`${added.length}件読み込みました`);
-  } catch { toast('読み込めませんでした（ファイルを確認してください）'); }
-  e.target.value = '';
+    saveAll(chars); renderList(); $('backup').hidden = true;
+    toast(`${added.length}件読み込みました`);
+  } catch { toast('読み込めませんでした。書き出しで保存した文字をそのまま貼り付けてください'); }
 };
 
 buildFields();
