@@ -85,22 +85,31 @@
     </div>
 
     <div class="gen">
-      <h3>① プロフィール文</h3>
+      <h3>① 声かけメッセージ（タイトル＋本文）</h3>
       <div class="fields">
-        <div><label for="profileLen">長さ</label>
-          <select id="profileLen"><option>短め（100字程度）</option><option selected>普通（200〜300字）</option><option>長め（400〜500字）</option></select></div>
+        <div><label for="approachLen">長さ</label>
+          <select id="approachLen"><option>短め（50字程度）</option><option selected>普通（100〜150字）</option><option>長め（200〜300字）</option></select></div>
+        <div><label for="approachCount">作成数</label>
+          <select id="approachCount"><option>1案</option><option selected>3案</option><option>5案</option></select></div>
       </div>
-      <div class="row"><button id="copyProfile">指示文をコピー</button>
+      <div style="margin-top:12px">
+        <label for="target">声をかける相手の投稿・プロフィール（任意）</label>
+        <textarea id="target" style="min-height:70px" placeholder="相手の掲示板投稿などを貼ると、その内容に合わせた声かけになります（空欄なら一般的な声かけ）"></textarea>
+      </div>
+      <div class="row"><button id="copyApproach">指示文をコピー</button>
         <span class="hint">→ claude.ai に貼り付けて、できた文章を下に貼って保存</span></div>
-      <div style="margin-top:8px"><textarea id="profileText" placeholder="claude.ai で作成したプロフィール文を貼り付け"></textarea></div>
+      <div style="margin-top:8px"><textarea id="approachText" placeholder="claude.ai で作成した声かけメッセージを貼り付け"></textarea></div>
 
       <h3>② 掲示板本文</h3>
       <div class="fields">
+        <div><label for="boardPattern">書き方のパターン</label><select id="boardPattern"></select></div>
         <div><label for="boardLen">長さ</label>
           <select id="boardLen"><option>短め（100字程度）</option><option selected>普通（200字程度）</option><option>長め（300〜400字）</option></select></div>
+        <div><label for="boardCount">作成数</label>
+          <select id="boardCount"><option>1案</option><option selected>3案</option><option>5案</option></select></div>
       </div>
-      <div class="row"><button id="copyBoard">指示文をコピー</button>
-        <span class="hint">①のプロフィール文があれば、それに合わせて作成します</span></div>
+      <p class="hint" id="patternHint"></p>
+      <div class="row"><button id="copyBoard">指示文をコピー</button></div>
       <div style="margin-top:8px"><textarea id="boardText" placeholder="claude.ai で作成した掲示板本文を貼り付け"></textarea></div>
       <div class="row"><button class="primary" id="save2">保存</button></div>
     </div>
@@ -124,6 +133,18 @@ const FIELDS = [
   { key: 'purpose', label: '目的', options: ['未設定', '真面目', 'エロ', 'なんでも'] },
 ];
 // ==============================
+
+// 掲示板本文の書き方パターン。追加するときは { name, how } を足してください。
+const BOARD_PATTERNS = [
+  { name: '箇条書き', how: 'タイトルの下に、自分のこと・求める相手・条件などを「・」の箇条書きで並べる。' },
+  { name: '求める内容だけ淡々と', how: '自己紹介はほぼ省き、求めている相手や内容だけを飾らず淡々と書き連ねる。' },
+  { name: '自己紹介＋募集', how: '前半で軽く自己紹介し、後半で求める相手を書く、読みやすい文章形式。' },
+  { name: '一言だけ（超短文）', how: '1〜3行程度の短い一言で募集する。長さの指定より短くてよい。' },
+  { name: 'くだけたつぶやき風', how: '独り言やSNSのつぶやきのような、ゆるくくだけた口調で書く。' },
+  { name: '丁寧・真面目', how: '丁寧語で、誠実さが伝わる落ち着いた文章で書く。' },
+  { name: '条件をしっかり書く', how: '年齢・体型・役割など相手に求める条件や、NG事項を具体的に明記する。' },
+  { name: 'おまかせ（毎回違う形）', how: '箇条書き・短文・文章形式などを自由に選び、案ごとに違う書き方にする。' },
+];
 
 const STORAGE_KEY = 'character-maker-v1';
 const $ = (id) => document.getElementById(id);
@@ -166,14 +187,14 @@ function readForm() {
   }
   return {
     name: $('name').value.trim(), values, memo: $('memo').value.trim(),
-    profileText: $('profileText').value, boardText: $('boardText').value,
+    approachText: $('approachText').value, boardText: $('boardText').value,
   };
 }
 
 function fillForm(c) {
   $('name').value = c?.name || '';
   $('memo').value = c?.memo || '';
-  $('profileText').value = c?.profileText || '';
+  $('approachText').value = c?.approachText ?? c?.profileText ?? '';
   $('boardText').value = c?.boardText || '';
   for (const f of FIELDS) {
     const v = c?.values?.[f.key] ?? f.options[0];
@@ -229,31 +250,41 @@ const COMMON_RULES = `・登場人物は18歳以上の架空のキャラクタ�
 ・露骨な性的描写は避けてください。
 ・完成した文章だけを出力してください（前置きや解説は不要です）。`;
 
-function profilePrompt(data) {
-  return `ロールプレイ（なりきり）サービスで使うキャラクターのプロフィール文を作成してください。
+const count = (id) => $(id).value.replace('案', '');
+
+function approachPrompt(data) {
+  const target = $('target').value.trim();
+  const targetBlock = target
+    ? `\n【声をかける相手の投稿・プロフィール】\n${target}\n` : '';
+  return `ロールプレイ（なりきり）サービスで、下記のキャラクターが相手に初めて声をかけるメッセージを作成してください。
 
 【キャラクター設定】
 ${describe(data)}
-
+${targetBlock}
 【条件】
-・キャラクター本人が書いた自己紹介として、本人の一人称・口調で書いてください。
-・長さ：${$('profileLen').value}
+・1行目にタイトル（件名）、2行目以降に本文を書いてください。
+・キャラクター本人の一人称・口調で、設定（特に役割と目的）に合った声のかけ方にしてください。
+・${target ? '相手の投稿内容に触れて、その人に向けた声かけにしてください。' : '相手が返信したくなるような、自然な声かけにしてください。'}
+・長さ（本文）：${$('approachLen').value}
+・${count('approachCount')}案作成し、案ごとに雰囲気や切り口を変えてください。各案の間は「---」で区切ってください。
 ${COMMON_RULES}`;
 }
 
 function boardPrompt(data) {
-  const profile = data.profileText.trim()
-    ? `\n【このキャラクターのプロフィール文】\n${data.profileText.trim()}\n` : '';
+  const p = BOARD_PATTERNS[$('boardPattern').value];
   return `ロールプレイ（なりきり）サービスの掲示板に、下記のキャラクターとして投稿する募集の本文を作成してください。
 
 【キャラクター設定】
 ${describe(data)}
-${profile}
+
+【書き方のパターン：${p.name}】
+${p.how}
+
 【条件】
 ・1行目にタイトル、2行目以降に本文を書いてください。
 ・キャラクター本人の一人称・口調で、目的に合った相手を募集する内容にしてください。
-・プロフィール文がある場合は、その内容と矛盾しないようにしてください。
 ・長さ：${$('boardLen').value}
+・${count('boardCount')}案作成し、各案の間は「---」で区切ってください。
 ${COMMON_RULES}`;
 }
 
@@ -281,7 +312,7 @@ $('random').onclick = () => {
     $(`o_${f.key}`).hidden = true;
   }
 };
-$('copyProfile').onclick = () => copy(profilePrompt(readForm()));
+$('copyApproach').onclick = () => copy(approachPrompt(readForm()));
 $('copyBoard').onclick = () => copy(boardPrompt(readForm()));
 
 $('export').onclick = () => {
@@ -306,6 +337,10 @@ $('importFile').onchange = async (e) => {
 };
 
 buildFields();
+$('boardPattern').innerHTML = BOARD_PATTERNS.map((p, i) => `<option value="${i}">${p.name}</option>`).join('');
+const showPatternHint = () => { $('patternHint').textContent = BOARD_PATTERNS[$('boardPattern').value].how; };
+$('boardPattern').onchange = showPatternHint;
+showPatternHint();
 fillForm(null);
 renderList();
 </script>
