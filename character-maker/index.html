@@ -69,6 +69,8 @@
   .seg label + input + label, .seg input + label ~ label { border-left: 1px solid var(--line); }
   .seg input:checked + label { background: var(--accent); color: var(--accent-text); }
   .seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .list .date { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #usage.warn { color: var(--danger); }
   .names-raw { white-space: pre-wrap; margin: 8px 0 0; font: inherit; }
   .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text);
            color: var(--bg); padding: 8px 16px; border-radius: 6px; opacity: 0; transition: opacity .2s; pointer-events: none; }
@@ -97,6 +99,7 @@
         <button id="backupClose">閉じる</button>
       </div>
     </div>
+    <p class="hint" id="usage"></p>
     <p class="hint">データはこのブラウザ内に保存されます。定期的に「書き出し」でバックアップしてください。</p>
   </section>
 
@@ -308,7 +311,25 @@ function fillForm(c) {
   }
 }
 
+function formatDate(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `(${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())})`;
+}
+
+// ブラウザの保存容量はおよそ5MB（日本語で約250万文字）。安全側に見積もって使用率を出す。
+const CAPACITY_CHARS = 2500000;
+function renderUsage() {
+  const used = JSON.stringify(chars).length;
+  const pct = Math.min(100, Math.round((used / CAPACITY_CHARS) * 1000) / 10);
+  $('usage').textContent = `保存数 ${chars.length}体・容量の使用 約${pct}%` +
+    (pct >= 80 ? '（残りが少なくなっています。書き出してから古いキャラクターを削除してください）' : '');
+  $('usage').classList.toggle('warn', pct >= 80);
+}
+
 function renderList() {
+  renderUsage();
   const ul = $('list');
   ul.innerHTML = '';
   if (!chars.length) { ul.innerHTML = '<li class="sub">まだありません</li>'; return; }
@@ -316,8 +337,9 @@ function renderList() {
     const li = document.createElement('li');
     if (c.id === currentId) li.className = 'active';
     const sub = FIELDS.map((f) => c.values[f.key]).filter((v) => v && v !== '未設定').join(' / ');
-    li.innerHTML = `<div></div><div class="sub"></div>`;
-    li.firstChild.textContent = c.name || '（名前なし）';
+    li.innerHTML = `<div><span></span> <span class="date"></span></div><div class="sub"></div>`;
+    li.firstChild.firstChild.textContent = c.name || '（名前なし）';
+    li.querySelector('.date').textContent = formatDate(c.updatedAt || c.createdAt);
     li.lastChild.textContent = sub;
     li.onclick = () => { currentId = c.id; fillForm(c); renderList(); };
     ul.appendChild(li);
