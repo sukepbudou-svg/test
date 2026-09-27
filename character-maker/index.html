@@ -99,6 +99,18 @@
     </div>
 
     <div class="gen">
+      <h3>名前の候補</h3>
+      <div class="fields">
+        <div><label for="nameStyle">名前の雰囲気</label><select id="nameStyle"></select></div>
+        <div><label for="nameCount">候補の数</label>
+          <select id="nameCount"><option>5個</option><option selected>10個</option><option>20個</option></select></div>
+      </div>
+      <p class="hint" id="nameStyleHint"></p>
+      <div class="row"><button id="copyName">指示文をコピー</button>
+        <span class="hint">→ claude.ai に貼り付けて、気に入った名前を上の「キャラクター名」に入力</span></div>
+    </div>
+
+    <div class="gen">
       <h3>① 声かけメッセージ（タイトル＋本文）</h3>
       <div class="fields">
         <div><label for="approachLen">長さ</label>
@@ -147,6 +159,17 @@ const FIELDS = [
   { key: 'purpose', label: '目的', options: ['未設定', '真面目', 'エロ', 'なんでも'] },
 ];
 // ==============================
+
+// 名前の雰囲気。追加するときは { name, how } を足してください。
+const NAME_STYLES = [
+  { name: '普通の名前', how: '日常でよく見かける、自然で親しみやすい名前。' },
+  { name: '職業・キャラ設定に合った名前', how: '設定（補足メモに書いた職業や性格など）から連想される、イメージに合った名前。' },
+  { name: 'ユーモアのある名前', how: 'くすっと笑える、遊び心やダジャレのある名前。' },
+  { name: '掲示板のハンドルネーム風', how: '掲示板やSNSで使われるような、カタカナ・ひらがな・短い愛称などのハンドルネーム。' },
+  { name: 'かっこいい名前', how: '硬派でクール、または大人っぽい印象の名前。' },
+  { name: 'かわいい名前', how: 'やわらかく、かわいらしい印象の名前や愛称。' },
+  { name: 'おまかせ（いろいろ混ぜる）', how: '上のような雰囲気をいろいろ混ぜて、幅広く提案する。' },
+];
 
 // 掲示板本文の書き方パターン。追加するときは { name, how } を足してください。
 const BOARD_PATTERNS = [
@@ -264,7 +287,26 @@ const COMMON_RULES = `・登場人物は18歳以上の架空のキャラクタ�
 ・露骨な性的描写は避けてください。
 ・完成した文章だけを出力してください（前置きや解説は不要です）。`;
 
-const count = (id) => $(id).value.replace('案', '');
+const count = (id) => $(id).value.replace(/[案個]/, '');
+
+function namePrompt(data) {
+  const st = NAME_STYLES[$('nameStyle').value];
+  const settings = describe({ ...data, name: '' }) || '（特になし）';
+  return `ロールプレイ（なりきり）サービスで使うキャラクターの名前の候補を考えてください。
+
+【キャラクター設定】
+${settings}
+
+【名前の雰囲気：${st.name}】
+${st.how}
+
+【条件】
+・候補を${count('nameCount')}個出してください。
+・1行に1つ、「名前（読み方）：その名前にした理由を一言」の形で書いてください。
+・設定のイメージに合う名前にしてください。
+・実在の有名人と同じ名前は避けてください。
+・候補の一覧だけを出力してください（前置きや解説は不要です）。`;
+}
 
 function approachPrompt(data) {
   const target = $('target').value.trim();
@@ -333,6 +375,7 @@ $('random').onclick = () => {
     $(`o_${f.key}`).hidden = true;
   }
 };
+$('copyName').onclick = () => copy(namePrompt(readForm()));
 $('copyApproach').onclick = () => copy(approachPrompt(readForm()));
 $('copyBoard').onclick = () => copy(boardPrompt(readForm()));
 
@@ -373,6 +416,10 @@ $('backupAction').onclick = async () => {
 
 buildFields();
 $('boardPattern').innerHTML = BOARD_PATTERNS.map((p, i) => `<option value="${i}">${p.name}</option>`).join('');
+$('nameStyle').innerHTML = NAME_STYLES.map((p, i) => `<option value="${i}">${p.name}</option>`).join('');
+const showNameHint = () => { $('nameStyleHint').textContent = NAME_STYLES[$('nameStyle').value].how; };
+$('nameStyle').onchange = showNameHint;
+showNameHint();
 const showPatternHint = () => { $('patternHint').textContent = BOARD_PATTERNS[$('boardPattern').value].how; };
 $('boardPattern').onchange = showPatternHint;
 showPatternHint();
