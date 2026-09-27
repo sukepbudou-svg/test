@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>キャラクターメーカー</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --text: #1f2328; --muted: #656d76;
+    --line: #d0d7de; --accent: #2f6feb; --accent-text: #fff; --danger: #cf222e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --panel: #161b22; --text: #e6edf3; --muted: #8d96a0;
+      --line: #30363d; --accent: #4493f8; --accent-text: #fff; --danger: #f85149;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
+         font-size: 15px; line-height: 1.6; }
+  header { padding: 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { margin: 0; font-size: 20px; }
+  main { display: grid; grid-template-columns: 260px 1fr; gap: 16px; padding: 16px; max-width: 1200px; margin: 0 auto; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  h3 { font-size: 15px; margin: 20px 0 8px; }
+  .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  select, input[type=text], textarea {
+    width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--bg); color: var(--text); font: inherit;
+  }
+  textarea { min-height: 120px; resize: vertical; }
+  .other { margin-top: 6px; }
+  button { padding: 8px 14px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
+           color: var(--text); font: inherit; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  button.danger { color: var(--danger); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+  .list { list-style: none; margin: 0; padding: 0; }
+  .list li { padding: 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
+  .list li:hover { border-color: var(--line); }
+  .list li.active { border-color: var(--accent); }
+  .list .sub { font-size: 12px; color: var(--muted); }
+  .hint { font-size: 13px; color: var(--muted); }
+  .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--text);
+           color: var(--bg); padding: 8px 16px; border-radius: 6px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .gen { border-top: 1px solid var(--line); margin-top: 20px; padding-top: 4px; }
+</style>
+</head>
+<body>
+<header><h1>キャラクターメーカー</h1></header>
+<main>
+  <section>
+    <h2>キャラクター一覧</h2>
+    <ul class="list" id="list"></ul>
+    <div class="row">
+      <button class="primary" id="new">＋ 新規作成</button>
+    </div>
+    <div class="row">
+      <button id="export">書き出し</button>
+      <button id="import">読み込み</button>
+      <input type="file" id="importFile" accept=".json" hidden>
+    </div>
+    <p class="hint">データはこのブラウザ内に保存されます。定期的に「書き出し」でバックアップしてください。</p>
+  </section>
+
+  <section>
+    <h2>プロフィール設定</h2>
+    <div class="fields">
+      <div><label for="name">キャラクター名</label><input type="text" id="name" placeholder="例：ハル"></div>
+    </div>
+    <div class="fields" id="fields" style="margin-top:12px"></div>
+    <div style="margin-top:12px">
+      <label for="memo">補足メモ（自由入力・任意）</label>
+      <textarea id="memo" style="min-height:70px" placeholder="例：関西弁で話す、甘えん坊"></textarea>
+    </div>
+    <div class="row">
+      <button id="random">ランダムで選ぶ</button>
+      <button class="primary" id="save">保存</button>
+      <button class="danger" id="delete">削除</button>
+    </div>
+
+    <div class="gen">
+      <h3>① プロフィール文</h3>
+      <div class="fields">
+        <div><label for="profileLen">長さ</label>
+          <select id="profileLen"><option>短め（100字程度）</option><option selected>普通（200〜300字）</option><option>長め（400〜500字）</option></select></div>
+      </div>
+      <div class="row"><button id="copyProfile">指示文をコピー</button>
+        <span class="hint">→ claude.ai に貼り付けて、できた文章を下に貼って保存</span></div>
+      <div style="margin-top:8px"><textarea id="profileText" placeholder="claude.ai で作成したプロフィール文を貼り付け"></textarea></div>
+
+      <h3>② 掲示板本文</h3>
+      <div class="fields">
+        <div><label for="boardLen">長さ</label>
+          <select id="boardLen"><option>短め（100字程度）</option><option selected>普通（200字程度）</option><option>長め（300〜400字）</option></select></div>
+      </div>
+      <div class="row"><button id="copyBoard">指示文をコピー</button>
+        <span class="hint">①のプロフィール文があれば、それに合わせて作成します</span></div>
+      <div style="margin-top:8px"><textarea id="boardText" placeholder="claude.ai で作成した掲示板本文を貼り付け"></textarea></div>
+      <div class="row"><button class="primary" id="save2">保存</button></div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== 項目と選択肢の設定 =====
+// 項目を追加するときは、この配列に { key, label, options } を追加してください。
+// key は英数字の一意な名前、options の先頭が初期値になります。
+const range = (from, to, unit) => Array.from({ length: to - from + 1 }, (_, i) => `${from + i}${unit}`);
+const OTHER = 'その他（自由入力）';
+
+const FIELDS = [
+  { key: 'age',     label: '年齢', options: ['未設定', ...range(18, 70, '歳')] },
+  { key: 'role',    label: '役割', options: ['未設定', 'タチ', 'ウケ', 'リバ'] },
+  { key: 'height',  label: '身長', options: ['未設定', ...range(150, 200, 'cm')] },
+  { key: 'weight',  label: '体重', options: ['未設定', ...range(40, 150, 'kg')] },
+  { key: 'body',    label: '体型', options: ['未設定', '標準体型', '筋肉質', '肥満系'] },
+  { key: 'purpose', label: '目的', options: ['未設定', '真面目', 'エロ', 'なんでも'] },
+];
+// ==============================
+
+const STORAGE_KEY = 'character-maker-v1';
+const $ = (id) => document.getElementById(id);
+
+function loadAll() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; }
+}
+function saveAll(chars) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(chars)); return true; } catch { return false; }
+}
+
+let chars = loadAll();
+let currentId = null;
+
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+function buildFields() {
+  const box = $('fields');
+  for (const f of FIELDS) {
+    const wrap = document.createElement('div');
+    const opts = [...f.options, OTHER].map((o) => `<option>${o}</option>`).join('');
+    wrap.innerHTML = `<label for="f_${f.key}">${f.label}</label>
+      <select id="f_${f.key}">${opts}</select>
+      <input type="text" class="other" id="o_${f.key}" placeholder="${f.label}を入力" hidden>`;
+    box.appendChild(wrap);
+    $(`f_${f.key}`).addEventListener('change', () => {
+      $(`o_${f.key}`).hidden = $(`f_${f.key}`).value !== OTHER;
+    });
+  }
+}
+
+function readForm() {
+  const values = {};
+  for (const f of FIELDS) {
+    const v = $(`f_${f.key}`).value;
+    values[f.key] = v === OTHER ? $(`o_${f.key}`).value.trim() || '未設定' : v;
+  }
+  return {
+    name: $('name').value.trim(), values, memo: $('memo').value.trim(),
+    profileText: $('profileText').value, boardText: $('boardText').value,
+  };
+}
+
+function fillForm(c) {
+  $('name').value = c?.name || '';
+  $('memo').value = c?.memo || '';
+  $('profileText').value = c?.profileText || '';
+  $('boardText').value = c?.boardText || '';
+  for (const f of FIELDS) {
+    const v = c?.values?.[f.key] ?? f.options[0];
+    const known = f.options.includes(v);
+    $(`f_${f.key}`).value = known ? v : OTHER;
+    $(`o_${f.key}`).value = known ? '' : v;
+    $(`o_${f.key}`).hidden = known;
+  }
+}
+
+function renderList() {
+  const ul = $('list');
+  ul.innerHTML = '';
+  if (!chars.length) { ul.innerHTML = '<li class="sub">まだありません</li>'; return; }
+  for (const c of chars) {
+    const li = document.createElement('li');
+    if (c.id === currentId) li.className = 'active';
+    const sub = FIELDS.map((f) => c.values[f.key]).filter((v) => v && v !== '未設定').join(' / ');
+    li.innerHTML = `<div></div><div class="sub"></div>`;
+    li.firstChild.textContent = c.name || '（名前なし）';
+    li.lastChild.textContent = sub;
+    li.onclick = () => { currentId = c.id; fillForm(c); renderList(); };
+    ul.appendChild(li);
+  }
+}
+
+function save() {
+  const data = readForm();
+  if (currentId) {
+    const i = chars.findIndex((c) => c.id === currentId);
+    chars[i] = { ...chars[i], ...data, updatedAt: new Date().toISOString() };
+  } else {
+    currentId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+    chars.unshift({ id: currentId, ...data, createdAt: new Date().toISOString() });
+  }
+  toast(saveAll(chars) ? '保存しました' : '保存できませんでした（書き出しでバックアップしてください）');
+  renderList();
+}
+
+function describe(data) {
+  const lines = [];
+  if (data.name) lines.push(`・名前：${data.name}`);
+  for (const f of FIELDS) {
+    const v = data.values[f.key];
+    if (v && v !== '未設定') lines.push(`・${f.label}：${v}`);
+  }
+  if (data.memo) lines.push(`・補足：${data.memo}`);
+  return lines.join('\n');
+}
+
+const COMMON_RULES = `・登場人物は18歳以上の架空のキャラクターです。
+・設定にない項目は、設定と矛盾しない範囲で自然に補ってかまいません。
+・露骨な性的描写は避けてください。
+・完成した文章だけを出力してください（前置きや解説は不要です）。`;
+
+function profilePrompt(data) {
+  return `ロールプレイ（なりきり）サービスで使うキャラクターのプロフィール文を作成してください。
+
+【キャラクター設定】
+${describe(data)}
+
+【条件】
+・キャラクター本人が書いた自己紹介として、本人の一人称・口調で書いてください。
+・長さ：${$('profileLen').value}
+${COMMON_RULES}`;
+}
+
+function boardPrompt(data) {
+  const profile = data.profileText.trim()
+    ? `\n【このキャラクターのプロフィール文】\n${data.profileText.trim()}\n` : '';
+  return `ロールプレイ（なりきり）サービスの掲示板に、下記のキャラクターとして投稿する募集の本文を作成してください。
+
+【キャラクター設定】
+${describe(data)}
+${profile}
+【条件】
+・1行目にタイトル、2行目以降に本文を書いてください。
+・キャラクター本人の一人称・口調で、目的に合った相手を募集する内容にしてください。
+・プロフィール文がある場合は、その内容と矛盾しないようにしてください。
+・長さ：${$('boardLen').value}
+${COMMON_RULES}`;
+}
+
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); ta.remove();
+  }
+  toast('指示文をコピーしました。claude.ai に貼り付けてください');
+}
+
+$('new').onclick = () => { currentId = null; fillForm(null); renderList(); };
+$('save').onclick = save;
+$('save2').onclick = save;
+$('delete').onclick = () => {
+  if (!currentId || !confirm('このキャラクターを削除しますか？')) return;
+  chars = chars.filter((c) => c.id !== currentId);
+  saveAll(chars); currentId = null; fillForm(null); renderList(); toast('削除しました');
+};
+$('random').onclick = () => {
+  for (const f of FIELDS) {
+    const pool = f.options.filter((o) => o !== '未設定');
+    $(`f_${f.key}`).value = pool[Math.floor(Math.random() * pool.length)];
+    $(`o_${f.key}`).hidden = true;
+  }
+};
+$('copyProfile').onclick = () => copy(profilePrompt(readForm()));
+$('copyBoard').onclick = () => copy(boardPrompt(readForm()));
+
+$('export').onclick = () => {
+  const blob = new Blob([JSON.stringify(chars, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `characters-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+};
+$('import').onclick = () => $('importFile').click();
+$('importFile').onchange = async (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  try {
+    const incoming = JSON.parse(await file.text());
+    if (!Array.isArray(incoming)) throw new Error();
+    const ids = new Set(chars.map((c) => c.id));
+    const added = incoming.filter((c) => c && c.id && !ids.has(c.id));
+    chars = [...added, ...chars];
+    saveAll(chars); renderList(); toast(`${added.length}件読み込みました`);
+  } catch { toast('読み込めませんでした（ファイルを確認してください）'); }
+  e.target.value = '';
+};
+
+buildFields();
+fillForm(null);
+renderList();
+</script>
+</body>
+</html>
