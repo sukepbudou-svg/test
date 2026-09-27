@@ -117,7 +117,9 @@
           <select id="approachLen"><option>短め（50字程度）</option><option selected>普通（100〜150字）</option><option>長め（200〜300字）</option></select></div>
         <div><label for="approachCount">作成数</label>
           <select id="approachCount"><option>1案</option><option selected>3案</option><option>5案</option></select></div>
+        <div><label for="reason">声をかけた理由</label><select id="reason"></select></div>
       </div>
+      <input type="text" class="other" id="reasonOther" placeholder="理由を入力（例：夜勤明けで誰かと話したかった）" hidden>
       <div style="margin-top:12px">
         <label for="target">声をかける相手の投稿・プロフィール（任意）</label>
         <textarea id="target" style="min-height:70px" placeholder="相手の掲示板投稿などを貼ると、その内容に合わせた声かけになります（空欄なら一般的な声かけ）"></textarea>
@@ -179,6 +181,27 @@ const NAME_STYLES = [
   { name: 'かわいい名前', how: 'やわらかく、かわいらしい印象の名前や愛称。' },
   { name: 'おまかせ（いろいろ混ぜる）', how: '上のような雰囲気をいろいろ混ぜて、幅広く提案する。' },
 ];
+
+// 声をかけた理由の例。「おまかせ」のときは、この中から毎回ランダムに選んだものをヒントとして渡します。
+const REASONS = [
+  '寂しかった',
+  '人には中々言えない悩みを聞いてほしい',
+  '気軽な遊び友達が欲しい',
+  '相手の投稿の雰囲気に惹かれた',
+  '趣味や好みが合いそう',
+  '仕事の疲れを癒やしたい',
+  '引っ越してきたばかりで知り合いがいない',
+  '恋人と別れたばかり',
+  '真剣な出会いを探している',
+  '日常に刺激が欲しい',
+  '周りに同じ趣味や境遇の人がいない',
+  '休みの日に一緒に過ごせる人が欲しい',
+  '夜なかなか眠れず、誰かと話したい',
+  '年上（年下）の人と話してみたかった',
+  '勇気を出して初めて声をかけてみた',
+  '自分を変えたいと思った',
+];
+const REASON_AUTO = 'おまかせ（設定に合わせて毎回変える）';
 
 // 掲示板本文の書き方パターン。追加するときは { name, how } を足してください。
 const BOARD_PATTERNS = [
@@ -322,11 +345,26 @@ function approachPrompt(data) {
   const target = $('target').value.trim();
   const targetBlock = target
     ? `\n【声をかける相手の投稿・プロフィール】\n${target}\n` : '';
+  const n = Number(count('approachCount'));
+  let reasonBlock;
+  if ($('reason').value === REASON_AUTO) {
+    const hints = [...REASONS].sort(() => Math.random() - 0.5).slice(0, 6);
+    reasonBlock = `【声をかけた理由】
+キャラクターの設定（年齢・職業・目的・性格など）から、このキャラクターらしい理由を考えて、本文に自然に織り込んでください。
+${n > 1 ? '案ごとに違う理由にしてください。' : ''}下の例を参考にしてもよく、例にない理由でもかまいません。
+${hints.map((h) => `・${h}`).join('\n')}`;
+  } else {
+    const r = $('reason').value === OTHER ? $('reasonOther').value.trim() : $('reason').value;
+    reasonBlock = `【声をかけた理由】
+「${r || '気軽に話せる相手が欲しい'}」という理由を、キャラクターの設定に合う形で本文に自然に織り込んでください。${n > 1 ? '案ごとに表現や切り口を変えてください。' : ''}`;
+  }
   return `ロールプレイ（なりきり）サービスで、下記のキャラクターが相手に初めて声をかけるメッセージを作成してください。
 
 【キャラクター設定】
 ${describe(data)}
 ${targetBlock}
+${reasonBlock}
+
 【条件】
 ・1行目にタイトル（件名）、2行目以降に本文を書いてください。
 ・キャラクター本人の一人称・口調で、設定（特に役割と目的）に合った声のかけ方にしてください。
@@ -430,6 +468,8 @@ $('nameStyle').innerHTML = NAME_STYLES.map((p, i) => `<option value="${i}">${p.n
 const showNameHint = () => { $('nameStyleHint').textContent = NAME_STYLES[$('nameStyle').value].how; };
 $('nameStyle').onchange = showNameHint;
 showNameHint();
+$('reason').innerHTML = [REASON_AUTO, ...REASONS, OTHER].map((r) => `<option>${r}</option>`).join('');
+$('reason').onchange = () => { $('reasonOther').hidden = $('reason').value !== OTHER; };
 const showPatternHint = () => { $('patternHint').textContent = BOARD_PATTERNS[$('boardPattern').value].how; };
 $('boardPattern').onchange = showPatternHint;
 showPatternHint();
