@@ -26,7 +26,18 @@
   body { margin: 0; background: var(--bg); color: var(--text);
          font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
          font-size: 15px; line-height: 1.6; }
-  header { padding: 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  /* 目に優しい表示：まぶしさと青みを抑えた色、少し大きめの文字と広めの行間 */
+  body.eye { --bg: #efe9dc; --panel: #f7f2e7; --text: #3e3a32; --muted: #7a7264;
+    --line: #dcd2bf; --accent: #5f8a6b; --accent-text: #fbf8f1; --danger: #a8543f;
+    font-size: 16px; line-height: 1.8; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) body.eye { --bg: #1c1a16; --panel: #24211c; --text: #d6cfbf; --muted: #968e7c;
+    --line: #38332b; --accent: #7fa287; --accent-text: #1c1a16; --danger: #cf8a72; }
+  }
+  :root[data-theme="dark"] body.eye { --bg: #1c1a16; --panel: #24211c; --text: #d6cfbf; --muted: #968e7c;
+    --line: #38332b; --accent: #7fa287; --accent-text: #1c1a16; --danger: #cf8a72; }
+  header { padding: 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+           display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
   header h1 { margin: 0; font-size: 20px; }
   main { display: grid; grid-template-columns: 260px 1fr; gap: 16px; padding: 16px; max-width: 1200px; margin: 0 auto; }
   @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
@@ -79,7 +90,13 @@
 </style>
 </head>
 <body>
-<header><h1>キャラクターメーカー</h1></header>
+<header>
+  <h1>キャラクターメーカー</h1>
+  <div class="seg" role="radiogroup" aria-label="表示">
+    <input type="radio" name="look" id="lookNormal" value="normal" checked><label for="lookNormal">標準</label>
+    <input type="radio" name="look" id="lookEye" value="eye"><label for="lookEye">目に優しい</label>
+  </div>
+</header>
 <main>
   <section>
     <h2>キャラクター一覧</h2>
@@ -645,7 +662,21 @@ $('genBoard').onclick = () => runGenerate({
   ['nameStatus', 'approachStatus', 'boardStatus'].forEach((id) => setStatus(id, ''));
 })();
 
+// 表示の切り替え（標準／目に優しい）。選んだ表示はブラウザに記憶する。
+const LOOK_KEY = 'character-maker-look';
+function initLook() {
+  let saved = null;
+  try { saved = localStorage.getItem(LOOK_KEY); } catch {}
+  const apply = (v) => { document.body.classList.toggle('eye', v === 'eye'); };
+  if (saved === 'eye') $('lookEye').checked = true;
+  apply(saved);
+  document.querySelectorAll('input[name="look"]').forEach((r) => {
+    r.onchange = () => { apply(r.value); try { localStorage.setItem(LOOK_KEY, r.value); } catch {} };
+  });
+}
+
 buildFields();
+initLook();
 initTier();
 $('boardPattern').innerHTML = BOARD_PATTERNS.map((p, i) => `<option value="${i}">${p.name}</option>`).join('');
 $('nameStyle').innerHTML = NAME_STYLES.map((p, i) => `<option value="${i}">${p.name}</option>`).join('');
