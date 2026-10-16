@@ -1099,6 +1099,72 @@ def get_pt_condition_breakdown():
     return result
 
 
+def get_odds_band_stats():
+    """オッズ帯（買い目のodds_value）別の賭け数・的中数・的中率・回収率を集計する。
+    PTではなく「実際に何倍のオッズの組み合わせを買ったか」で区切るため、
+    1〜2点目(100〜150倍)・3〜4点目(151〜250倍)・5点目(251〜900倍)それぞれが
+    実際にどれくらい機能しているかを直接検証できる。的中関連の集計なので、
+    オッズ帯・選出方式を刷新した2026-09-04以降のみを対象にする（PT_V6_RESET_FILTER）。
+    """
+    init_db()
+    bands = [
+        (100.0, 150.0, "100〜150倍（1〜2点目）"),
+        (150.0, 250.0, "151〜250倍（3〜4点目）"),
+        (250.0, 900.0, "251〜900倍（5点目）"),
+    ]
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT odds_value, is_hit, actual_payout, result_recorded_at
+            FROM predictions
+            WHERE {PT_V6_RESET_FILTER} AND bet_type='3連単'
+        """).fetchall()
+
+    result = []
+    other = {"n_bets": 0, "n_resulted": 0, "n_hits": 0, "total_return": 0}
+    bucketed = [dict(n_bets=0, n_resulted=0, n_hits=0, total_return=0) for _ in bands]
+    for r in rows:
+        r = dict(r)
+        odds = r["odds_value"]
+        resulted = r["result_recorded_at"] is not None
+        is_hit = r["is_hit"] or 0
+        payout = r["actual_payout"] or 0
+        target = other
+        for i, (lo, hi, _label) in enumerate(bands):
+            if odds is not None and lo < odds <= hi:
+                target = bucketed[i]
+                break
+        target["n_bets"] += 1
+        if resulted:
+            target["n_resulted"] += 1
+            target["n_hits"] += is_hit
+            if is_hit:
+                target["total_return"] += payout
+
+    for (lo, hi, label), b in zip(bands, bucketed):
+        n_resulted = b["n_resulted"]
+        result.append({
+            "label": label,
+            "n_bets": b["n_bets"],
+            "n_resulted": n_resulted,
+            "n_hits": b["n_hits"],
+            "hit_rate": round(100 * b["n_hits"] / n_resulted, 2) if n_resulted else None,
+            "roi_pct": round(100 * b["total_return"] / (n_resulted * 100), 1) if n_resulted else None,
+            "avg_payout": round(b["total_return"] / b["n_hits"]) if b["n_hits"] else None,
+        })
+    if other["n_bets"]:
+        n_resulted = other["n_resulted"]
+        result.append({
+            "label": "その他（帯外）",
+            "n_bets": other["n_bets"],
+            "n_resulted": n_resulted,
+            "n_hits": other["n_hits"],
+            "hit_rate": round(100 * other["n_hits"] / n_resulted, 2) if n_resulted else None,
+            "roi_pct": round(100 * other["total_return"] / (n_resulted * 100), 1) if n_resulted else None,
+            "avg_payout": round(other["total_return"] / other["n_hits"]) if other["n_hits"] else None,
+        })
+    return result
+
+
 def get_race_position_distribution():
     """その日の何レース目（全会場通しの順番）で的中しているかを10レース刻みで集計。
     日付をまたいで全期間累積する。的中関連の集計なので、オッズ帯・選出方式を
