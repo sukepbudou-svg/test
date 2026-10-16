@@ -117,7 +117,7 @@ def save_prediction(rec: dict):
             str(rec.get("boat1_risk", "")),
             int(rec.get("okuma_signal_count", 0) or 0),
             str(rec.get("bet_type", "3連単")),
-            str(rec.get("strategy_version", "6")),
+            str(rec.get("strategy_version", "7")),
             rec.get("day_race_no"),
         ))
 
@@ -457,75 +457,6 @@ def get_venue_stats():
     return [dict(r) for r in rows]
 
 
-def get_grade_stats():
-    """等級別集計（全期間・レース単位）"""
-    init_db()
-    with get_conn() as conn:
-        rows = conn.execute("""
-            SELECT
-                COALESCE(NULLIF(race_grade,''), '不明') as race_grade,
-                COUNT(*) as total,
-                SUM(has_result) as result_count,
-                SUM(is_hit_any) as hits,
-                SUM(race_payout) as total_payout,
-                SUM(CASE WHEN has_result=1 THEN combo_count ELSE 0 END) as result_combos
-            FROM (
-                SELECT date, venue_name, race_no,
-                    MAX(bet_label) as bet_label,
-                    MAX(COALESCE(NULLIF(race_grade,''), '不明')) as race_grade,
-                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
-                    MAX(is_hit) as is_hit_any,
-                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
-                    COUNT(*) as combo_count
-                FROM predictions
-                WHERE strategy_version = '3'
-                GROUP BY date, venue_name, race_no
-            )
-            GROUP BY race_grade
-            ORDER BY
-                CASE race_grade
-                    WHEN 'SG' THEN 1 WHEN 'G1' THEN 2 WHEN 'G2' THEN 3
-                    WHEN 'G3' THEN 4 WHEN '一般' THEN 5 ELSE 6
-                END
-        """).fetchall()
-    return [dict(r) for r in rows]
-
-
-def get_daily_label_stats():
-    """日付×ラベル×賭け種別集計（直近30日・レース単位）"""
-    init_db()
-    with get_conn() as conn:
-        rows = conn.execute("""
-            SELECT
-                date,
-                bet_label,
-                COALESCE(NULLIF(bet_type,''), '3連単') as bet_type,
-                COUNT(*) as total,
-                SUM(has_result) as result_count,
-                SUM(is_hit_any) as hits,
-                SUM(race_payout) as total_payout,
-                SUM(CASE WHEN has_result=1 THEN combo_count ELSE 0 END) as result_combos
-            FROM (
-                SELECT date, venue_name, race_no,
-                    MAX(bet_label) as bet_label,
-                    COALESCE(NULLIF(bet_type,''), '3連単') as bet_type,
-                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
-                    MAX(is_hit) as is_hit_any,
-                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
-                    COUNT(*) as combo_count
-                FROM predictions
-                WHERE strategy_version = '3'
-                GROUP BY date, venue_name, race_no, COALESCE(NULLIF(bet_type,''), '3連単')
-            )
-            GROUP BY date, bet_label, bet_type
-            ORDER BY date DESC,
-                CASE bet_label WHEN '神熱' THEN 1 ELSE 2 END,
-                CASE bet_type WHEN '3連単' THEN 1 WHEN '2連単' THEN 2 ELSE 3 END
-            LIMIT 200
-        """).fetchall()
-    return [dict(r) for r in rows]
-
-
 def get_payout_distribution():
     """ラベル別・実結果3連単配当分布（神熱 vs 見送り比較用）"""
     init_db()
@@ -555,42 +486,6 @@ def get_payout_distribution():
     return [dict(r) for r in rows]
 
 
-def get_hero_stats():
-    """ヒーロー（1着）的中率分析：ラベル別にヒーロー的中と組み合わせ的中を集計"""
-    init_db()
-    with get_conn() as conn:
-        rows = conn.execute("""
-            SELECT
-                bet_label,
-                COUNT(*) as total_races,
-                SUM(has_result) as result_count,
-                SUM(hero_correct) as hero_hits,
-                SUM(is_hit_any) as combo_hits
-            FROM (
-                SELECT date, venue_name, race_no,
-                    MAX(bet_label) as bet_label,
-                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
-                    MAX(CASE WHEN result_recorded_at IS NOT NULL
-                              AND SUBSTR(combination, 1, 1) = SUBSTR(actual_combination, 1, 1)
-                              THEN 1 ELSE 0 END) as hero_correct,
-                    MAX(is_hit) as is_hit_any
-                FROM predictions
-                WHERE strategy_version = '3'
-                GROUP BY date, venue_name, race_no
-            )
-            GROUP BY bet_label
-            ORDER BY
-                CASE bet_label
-                    WHEN 'プチュン' THEN 1
-                    WHEN '黒船熱' THEN 2
-                    WHEN '中穴' THEN 3
-                    WHEN '見送り' THEN 4
-                    ELSE 5
-                END
-        """).fetchall()
-    return [dict(r) for r in rows]
-
-
 def get_pt_payout_stats():
     """荒れPT帯別の実際の配当分布（荒れPTの有効性検証用）"""
     init_db()
@@ -615,45 +510,6 @@ def get_pt_payout_stats():
             )
             GROUP BY arare_score
             ORDER BY arare_score
-        """).fetchall()
-    return [dict(r) for r in rows]
-
-
-def get_signal_stats():
-    """大穴シグナル数別集計（arare_reasonsから動的計算・全期間）"""
-    init_db()
-    with get_conn() as conn:
-        rows = conn.execute("""
-            SELECT
-                sig,
-                COUNT(*) as race_count,
-                SUM(has_result) as result_count,
-                SUM(is_hit_any) as hits,
-                SUM(race_payout) as total_payout,
-                SUM(CASE WHEN has_result=1 THEN combo_count ELSE 0 END) as result_combos,
-                SUM(CASE WHEN has_result=1 AND actual_payout >= 8000 THEN 1 ELSE 0 END) as okuma_actual_count
-            FROM (
-                SELECT date, venue_name, race_no,
-                    (
-                        CASE WHEN MAX(arare_reasons) LIKE '%M低%'       THEN 1 ELSE 0 END +
-                        CASE WHEN MAX(arare_reasons) LIKE '%展示最遅%'  THEN 1 ELSE 0 END +
-                        CASE WHEN MAX(arare_reasons) LIKE '%A1選手%'    THEN 1 ELSE 0 END +
-                        CASE WHEN MAX(arare_reasons) LIKE '%荒れ会場%'
-                               OR MAX(arare_reasons) LIKE '%江戸川%'    THEN 1 ELSE 0 END +
-                        CASE WHEN MAX(arare_reasons) LIKE '%前付け%'    THEN 1 ELSE 0 END +
-                        CASE WHEN MAX(arare_reasons) LIKE '%1号ST遅%'   THEN 1 ELSE 0 END
-                    ) as sig,
-                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
-                    MAX(is_hit) as is_hit_any,
-                    MAX(actual_payout) as actual_payout,
-                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
-                    COUNT(*) as combo_count
-                FROM predictions
-                WHERE strategy_version = '3'
-                GROUP BY date, venue_name, race_no
-            )
-            GROUP BY sig
-            ORDER BY sig
         """).fetchall()
     return [dict(r) for r in rows]
 
@@ -724,8 +580,8 @@ def get_all_streaks():
 #     選出方式と無関係な事実なので strategy_version IN ('5','6') として '5' 以降を
 #     通して積み上げる
 # ══════════════════════════════════════════════════════════════
-PT_V6_RESET_FILTER = "strategy_version='6'"       # 的中関連（刷新後のみ・リセット）
-PT_V5_ACCUMULATE_FILTER = "strategy_version IN ('5','6')"  # 実結果関連（'5'以降を積み上げ）
+PT_V6_RESET_FILTER = "strategy_version='7'"       # 的中関連（刷新後のみ・リセット）
+PT_V5_ACCUMULATE_FILTER = "strategy_version IN ('5','6','7')"  # 実結果関連（'5'以降を積み上げ）
 
 
 def _pt_v4_race_level_sql(select_extra: str = "", version_filter: str = PT_V6_RESET_FILTER) -> str:

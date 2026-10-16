@@ -10,9 +10,9 @@ from flask import Flask, render_template, jsonify, request, Response, stream_wit
 from web.database import (
     get_today_predictions, get_pt_stats, get_label_stats,
     get_daily_summary, get_consecutive_misses, init_db, update_result,
-    get_venue_stats, get_grade_stats, get_venue_detail, get_all_streaks,
-    get_recent_activity, get_activity_watermark, get_hero_stats, get_pt_payout_stats, get_signal_stats,
-    get_payout_distribution, get_daily_label_stats,
+    get_venue_stats, get_venue_detail, get_all_streaks,
+    get_recent_activity, get_activity_watermark, get_pt_payout_stats,
+    get_payout_distribution,
     get_pt_score_stats, get_pt_daily_entry_stats, get_pt_summary, get_pt_threshold_curve,
     get_pt_all_time_streaks,
     get_pt_calibration_stats, get_venue_okuma_ranking, get_race_position_distribution,
@@ -150,13 +150,9 @@ def create_app():
             cumulative.append({"date": d["date"], "pnl": running})
 
         venue_stats = get_venue_stats()
-        grade_stats = get_grade_stats()
         all_streaks = get_all_streaks()
-        hero_stats = get_hero_stats()
         pt_payout_stats = get_pt_payout_stats()
-        signal_stats = get_signal_stats()
         payout_dist = get_payout_distribution()
-        daily_label = get_daily_label_stats()
 
         # 新PTスコア方式（的中関連はstrategy_version='6'、実結果関連は'5'以降を集計）
         pt_score_stats = get_pt_score_stats()
@@ -174,13 +170,9 @@ def create_app():
                                streaks=streaks,
                                cumulative=cumulative,
                                venue_stats=venue_stats,
-                               grade_stats=grade_stats,
                                all_streaks=all_streaks,
-                               hero_stats=hero_stats,
                                pt_payout_stats=pt_payout_stats,
-                               signal_stats=signal_stats,
                                payout_dist=payout_dist,
-                               daily_label=daily_label,
                                pt_score_stats=pt_score_stats,
                                pt_daily_entry=pt_daily_entry,
                                pt_summary=pt_summary,

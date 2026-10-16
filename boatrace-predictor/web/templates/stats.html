@@ -210,6 +210,12 @@ canvas{width:100%!important}
 
 .daily-table-wrap{overflow-x:auto}
 
+.new-badge{
+  display:inline-block;margin-left:8px;padding:1px 8px;
+  font-size:10px;font-weight:700;vertical-align:middle;
+  color:#1a1400;background:#ffcc00;border-radius:10px;
+}
+
 footer{
   padding:20px 28px;font-size:10px;color:var(--dim);
   border-top:1px solid rgba(79,143,255,0.1);margin-top:16px;
@@ -296,11 +302,16 @@ footer{
 </div>
 {% endif %}
 
-<!-- ══════════════ 新PTスコア方式（2026-08-25〜・strategy_version=4）══════════════ -->
+<!-- ══════════════ 新PTスコア方式（2026-10-16〜・strategy_version=7）══════════════ -->
 <div class="section" style="border-top:2px solid rgba(255,204,0,0.35);padding-top:20px;margin-top:8px;">
-  <h2 style="color:#ffcc00;">🆕 新PTスコア方式 集計</h2>
+  <h2 style="color:#ffcc00;">🆕 2026-10-16〜 新集計（5点目を条件ベース選出に刷新）</h2>
   <p style="font-family:var(--font-mono);font-size:11px;color:var(--dim2);margin:6px 0 16px;">
-    満点29点の加算式PT（市場ミスプライス/外艇脅威の複数性/1・2号艇の弱さ/環境条件）。
+    5点目を「確率×EVブレンド(251〜900倍)」から「4エージェント確率を使わない条件ベース選出
+    (200〜300倍)」に差し替えたため、<b style="color:#ffcc00;">的中関連の集計（的中数・的中率・
+    回収率・キャリブレーション検証など）は本日からゼロから取り直しています</b>。
+    会場別万舟ランキング・PT毎の平均実配当額など「レースの実際の結果」だけに基づく集計は、
+    買い目の選び方と無関係なので以前のデータを引き続き積み上げています。
+    満点20点の加算式PT（市場ミスプライス/外艇脅威/1号艇の弱さ/環境条件）。
     現在の参戦ライン: <b style="color:#ffcc00;">PT{{ pt_min_score }}以上</b>
   </p>
 </div>
@@ -326,7 +337,7 @@ footer{
 
 <!-- ── PT値別集計 ── -->
 <div class="section">
-  <h2>PT値別集計（1点=100円換算）</h2>
+  <h2>PT値別集計（1点=100円換算）<span class="new-badge">10/16〜 新集計</span></h2>
   <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
     「平均実配当額(全レース)」は的中・外れに関わらずそのPT帯の実際のレース結果の平均配当。
     PTが機能していればPTが高いほどこの金額も上がるはず。
@@ -381,7 +392,7 @@ footer{
 
 <!-- ── モデル確率キャリブレーション検証 ── -->
 <div class="section">
-  <h2>モデル確率キャリブレーション検証</h2>
+  <h2>モデル確率キャリブレーション検証<span class="new-badge">10/16〜 新集計</span></h2>
   <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
     4エージェント合成確率が信頼できるかの検証。「予測確率」と「実際の的中率」が近ければ確率推定は妥当、
     大きくズレているほどエージェント重み・温度スケーリングの見直しが必要。
@@ -425,7 +436,7 @@ footer{
 
 <!-- ── PT条件パターン別 内訳 ── -->
 <div class="section">
-  <h2>PT条件パターン別 内訳</h2>
+  <h2>PT条件パターン別 内訳<span class="new-badge">10/16〜 新集計</span></h2>
   <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
     荒れPTはA(市場ミスプライシング)/B(外艇の脅威)/C(1号艇の弱さ)/D(環境条件)の単純加算のため、
     同じPT合計値でもどの区分から積み上がったかが異なる場合がある。区分の組み合わせパターン別に
@@ -463,7 +474,7 @@ footer{
 
 <!-- ── オッズ帯別（買い目の点数ごと）成績 ── -->
 <div class="section">
-  <h2>オッズ帯別（1〜5点目）成績</h2>
+  <h2>オッズ帯別（1〜5点目）成績<span class="new-badge">10/16〜 新集計</span></h2>
   <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
     PTではなく「実際に何倍のオッズの組み合わせを買ったか」で区切った集計。
     1〜2点目(100〜150倍)・3〜4点目(151〜250倍)・5点目(251〜900倍)それぞれが
@@ -505,7 +516,7 @@ footer{
 
 <!-- ── 参戦ライン候補別 累積成績 ── -->
 <div class="section">
-  <h2>参戦ライン候補別 累積成績（PT≥X の場合）</h2>
+  <h2>参戦ライン候補別 累積成績（PT≥X の場合）<span class="new-badge">10/16〜 新集計</span></h2>
   <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
     参戦ラインを変更した場合のシミュレーション。今後のPT_MIN_SCORE調整の参考に。
   </p>
@@ -545,7 +556,7 @@ footer{
 
 <!-- ── 日別 参戦/見送り結果 ── -->
 <div class="section">
-  <h2>日別 参戦/見送り結果</h2>
+  <h2>日別 参戦/見送り結果<span class="new-badge">10/16〜 新集計</span></h2>
   <div class="table-wrap">
   <table class="data-table">
     <thead>
@@ -711,119 +722,6 @@ footer{
       </tr>
     {% else %}
       <tr><td colspan="7" style="text-align:center;color:var(--dim);padding:20px;">データなし</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-</div>
-
-<!-- ── ヒーロー的中分析 ── -->
-<div class="section">
-  <h2>ヒーロー（1着）的中分析</h2>
-  <div class="table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>ラベル</th>
-        <th>結果済</th>
-        <th>1着的中</th>
-        <th>1着的中率</th>
-        <th>組み合わせ的中</th>
-        <th>組み合わせ的中率</th>
-        <th>診断</th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for s in hero_stats %}
-      {% set lbl = s.bet_label %}
-      {% set rc = s.result_count or 0 %}
-      {% set hh = s.hero_hits or 0 %}
-      {% set ch = s.combo_hits or 0 %}
-      {% set hhr = (hh / rc * 100) if rc > 0 else 0 %}
-      {% set chr = (ch / rc * 100) if rc > 0 else 0 %}
-      <tr>
-        <td class="{% if lbl == '神熱' %}label-shinnetsu{% elif lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% elif lbl == '中穴' %}label-chuana{% else %}label-skip{% endif %}">{{ lbl }}</td>
-        <td>{{ rc }}</td>
-        <td class="{% if hh > 0 %}roi-good{% endif %}">{{ hh }}</td>
-        <td class="{% if hhr >= 30 %}roi-good{% elif hhr >= 15 %}roi-neutral{% else %}roi-bad{% endif %}">
-          {{ "%.1f" % hhr }}%
-        </td>
-        <td class="{% if ch > 0 %}roi-good{% endif %}">{{ ch }}</td>
-        <td class="{% if chr >= 10 %}roi-good{% elif chr >= 5 %}roi-neutral{% else %}roi-bad{% endif %}">
-          {{ "%.1f" % chr }}%
-        </td>
-        <td style="font-size:11px;color:var(--dim2);">
-          {% if rc == 0 %}データ待ち
-          {% elif hh == 0 %}1着が外れ続き→hero選出を見直す
-          {% elif hh > 0 and ch == 0 %}1着は当たり→2・3着を改善中
-          {% elif ch > 0 %}的中あり
-          {% endif %}
-        </td>
-      </tr>
-    {% else %}
-      <tr><td colspan="7" style="text-align:center;color:var(--dim);padding:20px;">データなし</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-</div>
-
-<!-- ── 神熱シグナル数別集計 ── -->
-<div class="section">
-  <h2>神熱シグナル数別集計（参戦判断基準の検証）</h2>
-  <p style="font-size:12px;color:var(--dim2);margin:-8px 0 12px;">シグナル: ①1号M低 ②展示最遅 ③外艇A1 ④荒れ会場 / 超人気集中（1号≤4倍）は除外対象</p>
-  <div class="table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>シグナル数</th>
-        <th>予想数</th>
-        <th>結果済</th>
-        <th>実神熱率</th>
-        <th>実神熱数</th>
-        <th>的中数</th>
-        <th>的中率</th>
-        <th>払戻合計</th>
-        <th>コスト</th>
-        <th>収支</th>
-        <th>参戦判断</th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for s in signal_stats %}
-      {% set sig = s.sig %}
-      {% set rc = s.result_count or 0 %}
-      {% set h = s.hits or 0 %}
-      {% set pay = s.total_payout or 0 %}
-      {% set c = (s.result_combos or 0) * 100 %}
-      {% set okuma_r = s.okuma_actual_count or 0 %}
-      {% set okuma_rate = (okuma_r / rc * 100) if rc > 0 else 0 %}
-      {% set hr = (h / rc * 100) if rc > 0 else 0 %}
-      {% set pnl = pay - c %}
-      <tr>
-        <td style="font-weight:700;font-size:16px;
-          {% if sig >= 2 %}color:#40c8e0{% else %}color:var(--dim){% endif %}">
-          {{ sig }}/4
-        </td>
-        <td>{{ s.race_count }}</td>
-        <td>{{ rc }}</td>
-        <td class="{% if okuma_rate >= 25 %}roi-good{% elif okuma_rate >= 15 %}roi-neutral{% else %}roi-bad{% endif %}">
-          {{ "%.1f" % okuma_rate }}%
-        </td>
-        <td>{{ okuma_r }}</td>
-        <td>{{ h }}</td>
-        <td class="{% if hr >= 5 %}roi-good{% elif hr >= 2 %}roi-neutral{% else %}roi-bad{% endif %}">
-          {{ "%.1f" % hr }}%
-        </td>
-        <td>¥{{ "{:,}".format(pay) }}</td>
-        <td>¥{{ "{:,}".format(c) }}</td>
-        <td class="{% if pnl >= 0 %}roi-good{% else %}roi-bad{% endif %}">
-          {% if pnl >= 0 %}+{% endif %}¥{{ "{:,}".format(pnl) }}
-        </td>
-        <td>{% if sig >= 2 %}<span class="label-shinnetsu">神熱参戦</span>{% else %}<span class="label-skip">見送り</span>{% endif %}</td>
-      </tr>
-    {% else %}
-      <tr><td colspan="11" style="text-align:center;color:var(--dim);padding:20px;">データなし</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -997,59 +895,6 @@ footer{
   </div>
 </div>
 
-<!-- ── 等級別集計 ── -->
-<div class="section">
-  <h2>等級別集計（全レース）</h2>
-  <div class="table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>等級</th>
-        <th>参戦数</th>
-        <th>結果済</th>
-        <th>的中</th>
-        <th>的中率</th>
-        <th>X連に1回</th>
-        <th>払戻合計</th>
-        <th>収支</th>
-        <th>回収率</th>
-        <th>現在の連外</th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for s in grade_stats %}
-      {% set rc = s.result_count %}
-      {% set h = s.hits %}
-      {% set pay = s.total_payout %}
-      {% set c = s.result_combos * 100 %}
-      {% set p = pay - c %}
-      {% set roi = (pay / c * 100) if c > 0 else 0 %}
-      {% set hr = (h / rc * 100) if rc > 0 else 0 %}
-      {% set sk = all_streaks.grade.get(s.race_grade, 0) %}
-      <tr>
-        <td>{{ s.race_grade }}</td>
-        <td>{{ s.total }}</td>
-        <td>{{ rc }}</td>
-        <td>{{ h }}</td>
-        <td>{{ "%.1f" % hr }}%</td>
-        <td>{% if h > 0 %}{{ "%.1f" % (rc / h) }}回{% else %}—{% endif %}</td>
-        <td>¥{{ "{:,}".format(pay) }}</td>
-        <td class="{% if p >= 0 %}roi-good{% else %}roi-bad{% endif %}">
-          {% if p >= 0 %}+{% endif %}¥{{ "{:,}".format(p) }}
-        </td>
-        <td class="{% if roi >= 100 %}roi-good{% elif roi >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
-          {{ "%.1f" % roi }}%
-        </td>
-        <td class="{% if sk >= 6 %}streak-col-hot{% elif sk >= 3 %}streak-col-warn{% elif sk >= 1 %}streak-col-low{% else %}streak-col-none{% endif %}">
-          {% if sk == 0 %}0連{% else %}{{ sk }}連外{% endif %}
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-</div>
-
 <!-- ── 日別サマリー（合計） ── -->
 <div class="section">
   <h2>日別サマリー（直近30日・全体合計）</h2>
@@ -1081,64 +926,6 @@ footer{
           {% if p >= 0 %}+{% endif %}¥{{ "{:,}".format(p) }}
         </td>
       </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-</div>
-
-<!-- ── 日別ラベル別詳細 ── -->
-<div class="section">
-  <h2>日別ラベル別詳細（神熱 / 見送り × 3連単 / 2連単）</h2>
-  <div class="daily-table-wrap table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>日付</th>
-        <th>ラベル</th>
-        <th>予想数</th>
-        <th>結果済</th>
-        <th>的中</th>
-        <th>的中率</th>
-        <th>払戻</th>
-        <th>収支</th>
-        <th>回収率</th>
-      </tr>
-    </thead>
-    <tbody>
-    {% set prev_date = namespace(v='') %}
-    {% for d in daily_label %}
-      {% set rc = d.result_count or 0 %}
-      {% set h = d.hits or 0 %}
-      {% set pay = d.total_payout or 0 %}
-      {% set c = (d.result_combos or 0) * 100 %}
-      {% set p = pay - c %}
-      {% set roi = (pay / c * 100) if c > 0 else 0 %}
-      {% set hr = (h / rc * 100) if rc > 0 else 0 %}
-      <tr {% if d.date != prev_date.v %}style="border-top:2px solid rgba(79,143,255,0.2)"{% endif %}>
-        <td style="color:var(--dim2);font-size:12px">
-          {% if d.date != prev_date.v %}{{ d.date }}{% endif %}
-          {% set prev_date.v = d.date %}
-        </td>
-        <td class="{% if d.bet_label == '神熱' %}label-shinnetsu{% else %}label-skip{% endif %}">
-          {{ d.bet_label }}<span style="font-size:9px;opacity:0.7;margin-left:4px">{{ d.bet_type }}</span>
-        </td>
-        <td>{{ d.total }}</td>
-        <td>{{ rc }}</td>
-        <td class="{% if h > 0 %}roi-good{% endif %}">{{ h }}</td>
-        <td class="{% if hr >= 20 %}roi-good{% elif hr >= 10 %}roi-neutral{% elif rc > 0 %}roi-bad{% endif %}">
-          {{ "%.1f" % hr }}%
-        </td>
-        <td>{% if pay > 0 %}¥{{ "{:,}".format(pay) }}{% else %}—{% endif %}</td>
-        <td class="{% if p >= 0 %}roi-good{% else %}roi-bad{% endif %}">
-          {% if c > 0 %}{% if p >= 0 %}+{% endif %}¥{{ "{:,}".format(p) }}{% else %}—{% endif %}
-        </td>
-        <td class="{% if roi >= 100 %}roi-good{% elif roi >= 70 %}roi-neutral{% elif c > 0 %}roi-bad{% endif %}">
-          {% if c > 0 %}{{ "%.1f" % roi }}%{% else %}—{% endif %}
-        </td>
-      </tr>
-    {% else %}
-      <tr><td colspan="9" style="text-align:center;color:var(--dim);padding:20px;">データなし（新方式のデータが蓄積されると表示されます）</td></tr>
     {% endfor %}
     </tbody>
   </table>

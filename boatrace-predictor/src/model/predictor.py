@@ -1304,25 +1304,29 @@ def get_recommendations(
                 "boat1_risk":         _calc_boat1_risk(race_row),
                 "okuma_signal_count": _gate_score,
                 "bet_type":           bet_type,
-                # 2026-09-04: オッズ帯・選出方式(EV→ブレンド)を刷新したため'5'→'6'に
-                # 引き上げ、的中関連の集計をゼロから取り直せるようにする
-                "strategy_version":   "6",
+                # 2026-10-16: 5点目を条件ベース選出に差し替えたため'6'→'7'に引き上げ、
+                # 的中関連の集計をゼロから取り直せるようにする
+                "strategy_version":   "7",
             })
 
         def _pick_strength_based(label_override):
-            """オッズ帯5点構成で選出（2026-09-04改訂）
-            1〜2点目: 100〜150倍から2点
-            3点目: 151〜250倍から1点
-            4点目: 151〜250倍から1点（1号艇を除外）
-            5点目: 251〜900倍から1点（1号艇を除外）
-            各帯: 確率×EVのブレンド（幾何平均）上位の組み合わせを選出。
+            """オッズ帯5点構成で選出（2026-10-16改訂）
+            1〜2点目: 100〜150倍から2点（確率×EVのブレンド）
+            3点目: 151〜250倍から1点（確率×EVのブレンド）
+            4点目: 151〜250倍から1点（確率×EVのブレンド・1号艇を除外）
+            5点目: 200〜300倍から1点（モデル確率を使わない条件ベース選出）
+            1〜4点目は確率×EVのブレンド（幾何平均）上位の組み合わせを選出。
             純粋EV(確率×オッズ)だと帯の上限側に、純粋確率だと帯の下限側に選出が
             偏ってしまう（どちらも範囲を分割した意味が薄れる）ため、両者の
-            バランスを取るブレンド方式を全点に採用した。オッズに無制限の上限が
-            あると極端な大穴に偏りがちなため、5点目にも900倍の上限を設けている。
-            4・5点目は1着・2着・3着のいずれにも1号艇が入らない組み合わせに限定し、
+            バランスを取るブレンド方式を採用している。
+            4点目は1着・2着・3着のいずれにも1号艇が入らない組み合わせに限定し、
             「1号艇が完全に不在の大荒れ」パターンを狙い撃つ（大穴狙いのコンセプトの
             ため最も配当の小さい旧・30-99倍帯は廃止済み）。
+            旧5点目（251-900倍・ブレンド）は的中率0.06%・回収率12.7%と他の帯に比べ
+            著しく機能していなかったため2026-10-16に廃止し、代わりに4エージェント
+            合成確率を一切使わない条件ベースの選出(_pick_threat_based)に差し替えた。
+            1〜4点目は全て同じ確率モデルを土台にしているため、モデルの推定に歪みが
+            あれば共倒れしてしまう弱点があり、5点目だけは独立した視点を持たせる狙い。
             """
             available = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             if len(available) < 3:
@@ -1372,13 +1376,52 @@ def get_recommendations(
                     print(f"  [{band_name}] 候補が全て選出済み→スキップ")
                 return picked
 
+            def _pick_threat_based(min_odds, max_odds, band_name):
+                """確率モデル(4エージェント合成)を一切使わず、展示タイム・展示ST・
+                前付け・今節成績から直接「脅威艇」を特定するルールベースのロジック
+                (_pick_condition_based_ana)で組み立てた「新本命穴」「新超穴」のうち、
+                実際のオッズがmin_odds〜max_oddsに収まる方を採用する。1〜4点目は
+                全て4エージェント合成確率というモデルを土台にしており、モデルの
+                推定に歪みがあれば1〜4点目すべてが同じ弱点を共有してしまうため、
+                モデルを一切介さない独立した視点をあえて取り入れている（2026-10-16）。
+                該当する候補が無ければスキップ（フォールバックなし）。"""
+                shinhonmei, shinchoana = _pick_condition_based_ana(
+                    race_row, _gate["reasons"], absent_boats, by_prob=_valid
+                )
+                for combo, tag in ((shinhonmei, "新本命穴"), (shinchoana, "新超穴")):
+                    if not combo:
+                        continue
+                    try:
+                        f, s, t = (int(x) for x in combo.split("-"))
+                    except ValueError:
+                        continue
+                    key = (f, s, t)
+                    if key in seen_3ren:
+                        continue
+                    match = _valid[
+                        (_valid["boat1"].astype(int) == f) &
+                        (_valid["boat2"].astype(int) == s) &
+                        (_valid["boat3"].astype(int) == t)
+                    ]
+                    if match.empty:
+                        continue
+                    row = match.iloc[0]
+                    odds_val = float(row["odds_value"])
+                    if min_odds <= odds_val <= max_odds:
+                        seen_3ren.add(key)
+                        _add_rec(row, "神熱", label_override=label_override, bet_type="3連単")
+                        print(f"  [{band_name}] {combo} オッズ{odds_val:.0f}倍 (条件ベース:{tag})")
+                        return 1
+                print(f"  [{band_name}] オッズ帯に収まる候補なし→スキップ")
+                return 0
+
             _pick_odds_band(100.0, 150.0, "1-2点目(100-150倍)", n_points=2)
             _pick_odds_band(151.0, 250.0, "3点目(151-250倍)", n_points=1)
             _pick_odds_band(151.0, 250.0, "4点目(151-250倍・1号艇除外)", n_points=1, exclude_boat1=True)
-            _pick_odds_band(251.0, 900.0, "5点目(251-900倍・1号艇除外)", n_points=1, exclude_boat1=True)
+            _pick_threat_based(200.0, 300.0, "5点目(200-300倍・条件ベース)")
 
         if not _valid.empty:
-            print(f"  {_label_color}[{_okuma_label}]{_C_RESET} {_gate['reason_text']} → オッズ帯選出(ブレンド方式)")
+            print(f"  {_label_color}[{_okuma_label}]{_C_RESET} {_gate['reason_text']} → オッズ帯選出(ブレンド方式+条件ベース5点目)")
             _pick_strength_based(_okuma_label)
         else:
             print(f"  [スキップ] {venue_name_log} {race_no}R オッズデータなし")
