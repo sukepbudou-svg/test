@@ -117,7 +117,7 @@ def save_prediction(rec: dict):
             str(rec.get("boat1_risk", "")),
             int(rec.get("okuma_signal_count", 0) or 0),
             str(rec.get("bet_type", "3連単")),
-            str(rec.get("strategy_version", "7")),
+            str(rec.get("strategy_version", "8")),
             rec.get("day_race_no"),
         ))
 
@@ -372,7 +372,7 @@ def get_venue_okuma_ranking():
     「今から」を正確に区切れる。今後レースが記録されるたびに集計対象が増えていく。
     レースの実際の結果だけに基づく集計（買い目の選出方式とは無関係）なので、
     2026-09-04のオッズ帯・選出方式刷新（'5'→'6'）をまたいでも積み上げ続ける
-    （PT_V5_ACCUMULATE_FILTER）。"""
+    （PT_ACCUMULATE_FILTER）。"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute(f"""
@@ -382,7 +382,7 @@ def get_venue_okuma_ranking():
             FROM (
                 SELECT date, venue_name, race_no, MAX(actual_payout) as actual_payout
                 FROM predictions
-                WHERE bet_type='3連単' AND result_recorded_at IS NOT NULL AND {PT_V5_ACCUMULATE_FILTER}
+                WHERE bet_type='3連単' AND result_recorded_at IS NOT NULL AND {PT_ACCUMULATE_FILTER}
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY venue_name
@@ -552,14 +552,14 @@ def get_all_streaks():
 #     選出方式と無関係な事実なので strategy_version IN ('5','6') として '5' 以降を
 #     通して積み上げる
 # ══════════════════════════════════════════════════════════════
-PT_V6_RESET_FILTER = "strategy_version='7'"       # 的中関連（刷新後のみ・リセット）
-PT_V5_ACCUMULATE_FILTER = "strategy_version IN ('5','6','7')"  # 実結果関連（'5'以降を積み上げ）
+PT_RESET_FILTER = "strategy_version='8'"       # 的中関連（刷新後のみ・リセット）
+PT_ACCUMULATE_FILTER = "strategy_version IN ('5','6','7','8')"  # 実結果関連（'5'以降を積み上げ）
 
 
-def _pt_v4_race_level_sql(select_extra: str = "", version_filter: str = PT_V6_RESET_FILTER) -> str:
+def _pt_v4_race_level_sql(select_extra: str = "", version_filter: str = PT_RESET_FILTER) -> str:
     """strategy_versionで絞り込んだレース単位集計サブクエリ（共通部分）。
-    version_filterはPT_V6_RESET_FILTER（デフォルト・的中関連の集計用）または
-    PT_V5_ACCUMULATE_FILTER（実結果だけに基づく集計用）を渡す。"""
+    version_filterはPT_RESET_FILTER（デフォルト・的中関連の集計用）または
+    PT_ACCUMULATE_FILTER（実結果だけに基づく集計用）を渡す。"""
     return f"""
         SELECT date, venue_name, race_no,
                MAX(bet_label) as label,
@@ -581,9 +581,9 @@ def get_pt_score_stats():
     賭け数(1点=100円)・的中率・平均配当率(ROI)・万舟率(実配当≥1万円のレース比率)・現在の連続不的中数
 
     2026-09-04のオッズ帯・選出方式刷新に伴い、的中関連(n_bets/n_hits/hit_rate/roi_pct/
-    avg_payout/n_race_hits/race_hits_per/current_miss_streak)はPT_V6_RESET_FILTER
+    avg_payout/n_race_hits/race_hits_per/current_miss_streak)はPT_RESET_FILTER
     （刷新後のみ）でゼロから集計し、レースの実際の結果だけに基づく集計
-    (avg_actual_payout/n_okuma/okuma_rate)はPT_V5_ACCUMULATE_FILTER（'5'以降を通して）
+    (avg_actual_payout/n_okuma/okuma_rate)はPT_ACCUMULATE_FILTER（'5'以降を通して）
     で積み上げる。両者は分母(n_races_resulted)も別々になる点に注意。
     """
     init_db()
@@ -595,7 +595,7 @@ def get_pt_score_stats():
                    SUM(is_hit) as n_hits,
                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as total_return
             FROM predictions
-            WHERE {PT_V6_RESET_FILTER} AND bet_type='3連単'
+            WHERE {PT_RESET_FILTER} AND bet_type='3連単'
             GROUP BY arare_score
         """).fetchall()
 
@@ -604,7 +604,7 @@ def get_pt_score_stats():
                    COUNT(*) as n_races,
                    SUM(has_result) as n_races_resulted,
                    SUM(CASE WHEN has_result=1 THEN race_hit ELSE 0 END) as n_race_hits
-            FROM ({_pt_v4_race_level_sql(version_filter=PT_V6_RESET_FILTER)})
+            FROM ({_pt_v4_race_level_sql(version_filter=PT_RESET_FILTER)})
             GROUP BY pt
         """).fetchall()
 
@@ -613,14 +613,14 @@ def get_pt_score_stats():
                    SUM(has_result) as n_races_resulted,
                    SUM(CASE WHEN has_result=1 AND actual_payout >= 10000 THEN 1 ELSE 0 END) as n_okuma,
                    SUM(CASE WHEN has_result=1 THEN actual_payout ELSE 0 END) as total_actual_payout
-            FROM ({_pt_v4_race_level_sql(version_filter=PT_V5_ACCUMULATE_FILTER)})
+            FROM ({_pt_v4_race_level_sql(version_filter=PT_ACCUMULATE_FILTER)})
             GROUP BY pt
         """).fetchall()
 
         streak_rows = conn.execute(f"""
             SELECT MAX(arare_score) as pt, MAX(is_hit) as is_hit
             FROM predictions
-            WHERE {PT_V6_RESET_FILTER} AND bet_type='3連単' AND result_recorded_at IS NOT NULL
+            WHERE {PT_RESET_FILTER} AND bet_type='3連単' AND result_recorded_at IS NOT NULL
             GROUP BY date, venue_name, race_no
             ORDER BY MAX(id) DESC
         """).fetchall()
@@ -664,7 +664,7 @@ def get_pt_score_stats():
 
 
 def get_pt_all_time_streaks():
-    """PT値ごと・全体の、日付をまたいだ全期間での現在の連続不的中数（PT_V6_RESET_FILTER限定）
+    """PT値ごと・全体の、日付をまたいだ全期間での現在の連続不的中数（PT_RESET_FILTER限定）
     TODAY画面のPT別集計で「当日分だけ」ではなく前日以前も込みで連続不的中を数えるために使う。
     的中関連の集計なので、オッズ帯・選出方式を刷新した2026-09-04以降のみを対象にする。"""
     init_db()
@@ -672,7 +672,7 @@ def get_pt_all_time_streaks():
         rows = conn.execute(f"""
             SELECT MAX(arare_score) as pt, MAX(is_hit) as is_hit
             FROM predictions
-            WHERE {PT_V6_RESET_FILTER} AND bet_type='3連単' AND result_recorded_at IS NOT NULL
+            WHERE {PT_RESET_FILTER} AND bet_type='3連単' AND result_recorded_at IS NOT NULL
             GROUP BY date, venue_name, race_no
             ORDER BY MAX(id) DESC
         """).fetchall()
@@ -764,7 +764,7 @@ def get_pt_threshold_curve():
                    SUM(is_hit) as n_hits,
                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as total_return
             FROM predictions
-            WHERE {PT_V6_RESET_FILTER} AND bet_type='3連単'
+            WHERE {PT_RESET_FILTER} AND bet_type='3連単'
             GROUP BY arare_score
         """).fetchall()
     rows = [dict(r) for r in rows]
@@ -808,7 +808,7 @@ def get_pt_calibration_stats():
         rows = conn.execute(f"""
             SELECT prob, is_hit
             FROM predictions
-            WHERE {PT_V6_RESET_FILTER} AND bet_type='3連単'
+            WHERE {PT_RESET_FILTER} AND bet_type='3連単'
               AND result_recorded_at IS NOT NULL
         """).fetchall()
 
@@ -847,18 +847,18 @@ def get_pt_calibration_stats():
 
 
 def _classify_pt_pattern(reasons: str) -> str:
-    """arare_reasons（レース単位の加点理由テキスト）の文言から、荒れPTのA〜D区分
-    のうちどれが加点に寄与したかを判定する（DBに区分ごとのフラグを持たせていないため）。"""
+    """arare_reasons（レース単位の加点理由テキスト）の文言から、荒れPTのA〜C区分
+    のうちどれが加点に寄与したかを判定する（DBに区分ごとのフラグを持たせていないため）。
+    2026-10-16にPTの計算式を刷新したため区分も合わせて更新（A:1号艇の弱さ/
+    B:外艇の脅威/C:環境条件）。"""
     reasons = reasons or ""
     cats = []
-    if "市場ミスプライス" in reasons or "市場圏外気味" in reasons:
+    if "1号ST" in reasons or "1号M" in reasons or "1号B級" in reasons or "1号2率" in reasons:
         cats.append("A")
-    if "前付け" in reasons or "A1選手" in reasons or "外艇ST速" in reasons:
+    if "展示最速" in reasons or "号A1" in reasons or "ST速" in reasons:
         cats.append("B")
-    if "ST不安" in reasons or "M低" in reasons:
+    if "風速" in reasons or "波高" in reasons or "荒れ会場" in reasons or "江戸川" in reasons or "一般戦" in reasons:
         cats.append("C")
-    if "荒れ会場" in reasons or "強風" in reasons:
-        cats.append("D")
     return "+".join(cats) if cats else "(該当なし)"
 
 
@@ -869,9 +869,9 @@ def get_pt_condition_breakdown():
     積み上がったかが違うレース同士を一括りにしてよいのか（例: A条件単独のPT4とB+C条件の
     PT4は同じ意味を持つか）を検証するための機能。
 
-    2026-09-04のオッズ帯・選出方式刷新に伴い、的中関連(n_hits/hit_rate)はPT_V6_RESET_FILTER
+    2026-09-04のオッズ帯・選出方式刷新に伴い、的中関連(n_hits/hit_rate)はPT_RESET_FILTER
     （刷新後のみ）でゼロから集計し、レースの実際の結果だけに基づく集計(avg_pt/
-    avg_actual_payout)はPT_V5_ACCUMULATE_FILTER（'5'以降を通して）で積み上げる。
+    avg_actual_payout)はPT_ACCUMULATE_FILTER（'5'以降を通して）で積み上げる。
     """
     init_db()
     with get_conn() as conn:
@@ -880,7 +880,7 @@ def get_pt_condition_breakdown():
                    MAX(arare_reasons) as reasons,
                    MAX(is_hit) as is_hit
             FROM predictions
-            WHERE {PT_V6_RESET_FILTER} AND bet_type='3連単' AND result_recorded_at IS NOT NULL
+            WHERE {PT_RESET_FILTER} AND bet_type='3連単' AND result_recorded_at IS NOT NULL
             GROUP BY date, venue_name, race_no
         """).fetchall()
         rows_all = conn.execute(f"""
@@ -889,7 +889,7 @@ def get_pt_condition_breakdown():
                    MAX(arare_reasons) as reasons,
                    MAX(actual_payout) as actual_payout
             FROM predictions
-            WHERE {PT_V5_ACCUMULATE_FILTER} AND bet_type='3連単' AND result_recorded_at IS NOT NULL
+            WHERE {PT_ACCUMULATE_FILTER} AND bet_type='3連単' AND result_recorded_at IS NOT NULL
             GROUP BY date, venue_name, race_no
         """).fetchall()
 
@@ -932,7 +932,7 @@ def get_odds_band_stats():
     PTではなく「実際に何倍のオッズの組み合わせを買ったか」で区切るため、
     1〜2点目(100〜150倍)・3〜4点目(151〜250倍)・5点目(251〜900倍)それぞれが
     実際にどれくらい機能しているかを直接検証できる。的中関連の集計なので、
-    オッズ帯・選出方式を刷新した2026-09-04以降のみを対象にする（PT_V6_RESET_FILTER）。
+    オッズ帯・選出方式を刷新した2026-09-04以降のみを対象にする（PT_RESET_FILTER）。
     """
     init_db()
     bands = [
@@ -944,7 +944,7 @@ def get_odds_band_stats():
         rows = conn.execute(f"""
             SELECT odds_value, is_hit, actual_payout, result_recorded_at
             FROM predictions
-            WHERE {PT_V6_RESET_FILTER} AND bet_type='3連単'
+            WHERE {PT_RESET_FILTER} AND bet_type='3連単'
         """).fetchall()
 
     result = []
@@ -996,7 +996,7 @@ def get_odds_band_stats():
 def get_race_position_distribution():
     """その日の何レース目（全会場通しの順番）で的中しているかを10レース刻みで集計。
     日付をまたいで全期間累積する。的中関連の集計なので、オッズ帯・選出方式を
-    刷新した2026-09-04以降のみを対象にする（PT_V6_RESET_FILTER）。
+    刷新した2026-09-04以降のみを対象にする（PT_RESET_FILTER）。
     「50〜59レース目で的中が多い＝狙い目」のような目安を作るための集計。
 
     day_race_noは予想保存時に本日の全番組表(schedule)から算出した値を使う
@@ -1018,7 +1018,7 @@ def get_race_position_distribution():
                        MAX(is_hit) as race_hit,
                        MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
                 FROM predictions
-                WHERE bet_type='3連単' AND {PT_V6_RESET_FILTER} AND day_race_no IS NOT NULL
+                WHERE bet_type='3連単' AND {PT_RESET_FILTER} AND day_race_no IS NOT NULL
                 GROUP BY date, venue_name, race_no
             )
             SELECT (day_race_no - 1) / 10 AS bucket,

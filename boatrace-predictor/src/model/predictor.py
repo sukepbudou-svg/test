@@ -42,9 +42,8 @@ PAYOUT_LOOKUP_PATH = MODEL_DIR / "payout_by_rank.json"
 # 荒れ条件: 参戦ベースラインスコア（PT5〜9 AND 1号艇ライブ5〜9倍で参戦）
 ARARE_MIN_SCORE = 5
 
-# 荒れやすい会場の加点（固定リスト）。旧・荒れPTスコアリング（_calc_arare_score、
-# バックテストモード専用）でのみ使用。現在の予想フロー（_calc_race_pt）は下の
-# _get_venue_okuma_points() による動的ランキングを使う。
+# 荒れやすい会場の加点（固定リスト）。_calc_arare_score（バックテスト専用の旧版）と
+# _calc_race_pt（現行、2026-10-16に2026年5月当時の配点へ差し戻し）の両方で使用する。
 ARARE_VENUES = {
     "03": 2,  # 江戸川（河川・最難関）
     "02": 1,  # 戸田
@@ -53,49 +52,6 @@ ARARE_VENUES = {
     "10": 1,  # 三国
     "19": 1,  # 下関
 }
-
-# 荒れやすい会場の加点は、固定リストではなく実際の万舟率（3連単配当≥1万円の割合）
-# ランキングから動的に算出する（2026-09-02〜）。以前は「江戸川+2/戸田・平和島・
-# 鳴門・三国・下関+1」という一般的な荒れ会場イメージに基づく固定リストだったが、
-# 実データと突き合わせると下関・鳴門は下位、逆に児島・芦屋・びわこ・蒲郡などが
-# 無加点なのに上位という乖離が見つかったため、実データに基づくランキングに
-# 差し替えた。詳細は _get_venue_okuma_points() を参照。
-VENUE_OKUMA_MIN_SAMPLE = 15  # このレース数未満の会場はサンプル不足として無加点扱い
-VENUE_OKUMA_TIER2_POINTS = 2  # 万舟率が上位の会場（VENUE_OKUMA_TIER2_TOPに入る会場）
-VENUE_OKUMA_TIER1_POINTS = 1  # 次点の会場（VENUE_OKUMA_TIER1_TOPまでに入る会場）
-VENUE_OKUMA_TIER2_TOP = 3   # 万舟率ランキング上位何会場が+2点になるか
-VENUE_OKUMA_TIER1_TOP = 9   # 万舟率ランキング上位何会場までが+1点以上になるか（tier2含む）
-VENUE_OKUMA_CACHE_TTL_SEC = 1800  # ランキング再計算の間隔（30分）
-
-_venue_okuma_cache = {"points": {}, "computed_at": None}
-
-
-def _get_venue_okuma_points() -> dict:
-    """会場名 → 荒れPTのD区分加点、を実際の万舟率ランキングから動的に算出する。
-    strategy_version='5'以降のデータのみ対象（web.database.get_venue_okuma_rankingと
-    同じ集計）。DB未接続・データ不足時は空dict（=全会場無加点）を返す。
-    結果はVENUE_OKUMA_CACHE_TTL_SEC秒キャッシュし、予想のたびにDBへ問い合わせない。"""
-    import time as _time
-    now = _time.time()
-    if (_venue_okuma_cache["computed_at"] is not None
-            and now - _venue_okuma_cache["computed_at"] < VENUE_OKUMA_CACHE_TTL_SEC):
-        return _venue_okuma_cache["points"]
-
-    points = {}
-    try:
-        from web.database import get_venue_okuma_ranking
-        ranking = [r for r in get_venue_okuma_ranking() if r["n_races"] >= VENUE_OKUMA_MIN_SAMPLE]
-        for i, r in enumerate(ranking):
-            if i < VENUE_OKUMA_TIER2_TOP:
-                points[r["venue_name"]] = VENUE_OKUMA_TIER2_POINTS
-            elif i < VENUE_OKUMA_TIER1_TOP:
-                points[r["venue_name"]] = VENUE_OKUMA_TIER1_POINTS
-    except Exception:
-        points = {}
-
-    _venue_okuma_cache["points"] = points
-    _venue_okuma_cache["computed_at"] = now
-    return points
 
 
 def _safe_float(v) -> float | None:
@@ -631,93 +587,97 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.Da
     return score, reasons
 
 
-# 参戦ライン（暫定値）: 実データのPT分布・実際の配当を見ながら調整する
-PT_MIN_SCORE = 9
+# 参戦ライン: 2026年5月頃（約3〜5ヶ月前、4エージェント体制が固まった直後）の
+# 荒れ条件スコアと同じ値に2026-10-16差し戻し。当時は戦績が良かったとの実感があり、
+# 現行の簡略版PT（A〜D区分・満点20点・PT_MIN_SCORE=9）が「平均実配当額がPTと相関
+# しない」等、有効性を裏付けられていなかったため、一旦この時代の配点に戻して検証する。
+PT_MIN_SCORE = 7
 
 
 def _calc_race_pt(race_row: pd.Series, weather: dict = None, by_prob: "pd.DataFrame | None" = None) -> dict:
     """
-    レースの荒れPTを計算する（簡略版・満点20点）
-    「配当サイズに直結する要素」を重く、「荒れる確率だけの要素」を軽く配点している。
-    条件数を絞り、今日的（当日の状態）で市場が織り込みにくい信号だけを残した。
-    A. 市場のミスプライシング（最大4点）: 1号艇ライブ最安オッズが4〜10倍+4/11〜15倍+2
-    B. 外艇の脅威（最大8点）: 前付け+3/外A1+2/複数外艇ST速+3
-    C. 1号艇の弱さ（最大5点）: 1号ST不安+3/1号M低+2
-    D. 環境・条件（最大3点）: 荒れ会場+1〜2/強風+1
+    レースの荒れPTを計算する（2026年5月の配点に差し戻し・満点16点）
+    2点条件: 1号艇の展示ST遅い / モーター不良 / B級 / 外艇(4-6号)展示タイム全艇1位
+    1点条件: 1号艇の全国2連率低い / 外艇A1選手 / 外艇ST速い / 風速強 / 波高 / 荒れ会場 / 一般戦
     参戦 = PT合計 ≥ PT_MIN_SCORE
+    by_probは現在未使用（当時のPTは市場オッズを使っていなかったため、シグネチャ互換のためだけに残す）。
     """
     score = 0
     reasons = []
 
-    # ── A. 市場のミスプライシング（最大4点・ライブオッズ取得時のみ） ──
-    market_odds = None
-    if by_prob is not None and not by_prob.empty and "odds_source" in by_prob.columns:
-        b1_live = by_prob[(by_prob["odds_source"] == "live") & (by_prob["boat1"] == 1)]
-        if not b1_live.empty:
-            market_odds = float(b1_live["odds_value"].min())
-    if market_odds is not None:
-        if 4.0 <= market_odds <= 10.0:
-            score += 4
-            reasons.append(f"市場ミスプライス({market_odds:.1f}倍)")
-        elif 11.0 <= market_odds <= 15.0:
-            score += 2
-            reasons.append(f"市場圏外気味({market_odds:.1f}倍)")
-
-    # ── B. 外艇の脅威（最大8点） ──
-    g1 = _safe_float(race_row.get("boat1_grade_num"))
-    g1_is_a1 = g1 is not None and g1 >= 4
-
-    for bn in [4, 5, 6]:
-        ac_raw = race_row.get(f"boat{bn}_actual_course")
-        try:
-            ac = int(ac_raw) if ac_raw is not None else bn
-        except (TypeError, ValueError):
-            ac = bn
-        if ac <= 2 and ac != bn:
-            score += 3
-            reasons.append(f"{bn}号前付け(→{ac}C)")
-            break
-
-    if not g1_is_a1:
-        for bn in [4, 5, 6]:
-            g = _safe_float(race_row.get(f"boat{bn}_grade_num"))
-            if g is not None and g >= 4:
-                score += 2
-                reasons.append(f"{bn}号A1選手")
-                break
-
-    fast_outer_count = sum(
-        1 for bn in [3, 4, 5, 6]
-        if (_ost := _safe_float(race_row.get(f"boat{bn}_exhibition_st"))) and _ost > 0 and _ost <= 0.13
-    )
-    if fast_outer_count >= 2:
-        score += 3
-        reasons.append(f"外艇ST速({fast_outer_count}艇≤0.13)")
-
-    # ── C. 1号艇の弱さ（最大5点） ──
+    # ── 1号艇の弱点（各2点） ──
     st1 = _safe_float(race_row.get("boat1_exhibition_st"))
     if st1 is not None and st1 >= 0.18:
-        score += 3
-        reasons.append(f"1号ST不安({st1:.2f})")
+        score += 2
+        reasons.append(f"1号ST{st1:.2f}")
 
     m1 = _safe_float(race_row.get("boat1_motor_2rate"))
-    if m1 is not None and m1 < 0.30:
+    if m1 is not None and m1 < 0.35:
         score += 2
-        reasons.append(f"1号M低({m1:.0%})")
+        reasons.append(f"1号M{m1:.0%}")
 
-    # ── D. 環境・条件（最大3点） ──
-    venue_name = str(race_row.get("venue_name", ""))
-    venue_pts = _get_venue_okuma_points().get(venue_name, 0)
-    rough_water = bool(venue_pts)
-    if venue_pts:
-        score += venue_pts
-        reasons.append(f"荒れ会場({venue_name})")
+    g1 = _safe_float(race_row.get("boat1_grade_num"))
+    if g1 is not None and g1 <= 2:
+        score += 2
+        reasons.append("1号B級")
+
+    # ── 外艇(4-6号)の最速タイムが全艇1位（2点） ──
+    et_vals = {}
+    for bn in range(1, 7):
+        v = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
+        if v and v > 0:
+            et_vals[bn] = v
+    if len(et_vals) >= 4:
+        fastest_boat = min(et_vals, key=lambda b: et_vals[b])
+        if fastest_boat in {4, 5, 6}:
+            score += 2
+            reasons.append(f"{fastest_boat}号艇展示最速({et_vals[fastest_boat]:.2f}s)")
+
+    # ── 補助条件（各1点） ──
+    n2_1 = _safe_float(race_row.get("boat1_national_2rate"))
+    if n2_1 is not None and n2_1 < 0.40:
+        score += 1
+        reasons.append(f"1号2率{n2_1:.0%}")
+
+    for bn in [4, 5, 6]:
+        g = _safe_float(race_row.get(f"boat{bn}_grade_num"))
+        if g is not None and g >= 4:
+            score += 1
+            reasons.append(f"{bn}号A1")
+            break
+
+    for bn in [4, 5, 6]:
+        st = _safe_float(race_row.get(f"boat{bn}_exhibition_st"))
+        if st is not None and st <= 0.12:
+            score += 1
+            reasons.append(f"{bn}号ST速({st:.2f})")
+            break
 
     wind = _safe_float((weather or {}).get("wind_speed"))
-    if wind is not None and wind >= 5:
+    if wind and wind >= 5:
         score += 1
-        reasons.append(f"強風{wind:.0f}m")
+        reasons.append(f"風速{int(wind)}m")
         rough_water = True
+    else:
+        rough_water = False
+
+    wave = _safe_float((weather or {}).get("wave_height"))
+    if wave and wave >= 15:
+        score += 1
+        reasons.append(f"波高{int(wave)}cm")
+        rough_water = True
+
+    vc = str(race_row.get("venue_code", "")).zfill(2)
+    venue_pts = ARARE_VENUES.get(vc, 0)
+    if venue_pts:
+        score += venue_pts
+        reasons.append("江戸川(最難関)" if venue_pts == 2 else "荒れ会場")
+        rough_water = True
+
+    mg = _safe_float(race_row.get("meet_grade_num"))
+    if mg is not None and mg <= 1:
+        score += 1
+        reasons.append("一般戦")
 
     entry = score >= PT_MIN_SCORE
     reason_text = f"PT{score}" + (" [" + " / ".join(reasons) + "]" if reasons else "")
@@ -1304,9 +1264,9 @@ def get_recommendations(
                 "boat1_risk":         _calc_boat1_risk(race_row),
                 "okuma_signal_count": _gate_score,
                 "bet_type":           bet_type,
-                # 2026-10-16: 5点目を条件ベース選出に差し替えたため'6'→'7'に引き上げ、
-                # 的中関連の集計をゼロから取り直せるようにする
-                "strategy_version":   "7",
+                # 2026-10-16: 荒れPTの計算式を2026年5月当時の配点に差し戻したため
+                # '7'→'8'に引き上げ、的中関連の集計をゼロから取り直せるようにする
+                "strategy_version":   "8",
             })
 
         def _pick_strength_based(label_override):
