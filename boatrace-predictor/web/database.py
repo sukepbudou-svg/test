@@ -206,10 +206,10 @@ def get_today_predictions(date: str = None):
 
 
 def get_daily_summary():
-    """日付別集計（最新30日・レース単位）"""
+    """日付別集計（最新30日・レース単位）。的中関連の集計なので現行PT(strategy_version='8')のみ対象。"""
     init_db()
     with get_conn() as conn:
-        rows = conn.execute("""
+        rows = conn.execute(f"""
             SELECT
                 date,
                 COUNT(*) as total,
@@ -225,7 +225,7 @@ def get_daily_summary():
                     SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
                     COUNT(*) as combo_count
                 FROM predictions
-                WHERE strategy_version = '3'
+                WHERE {PT_RESET_FILTER}
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY date
@@ -236,10 +236,10 @@ def get_daily_summary():
 
 
 def get_venue_detail(venue_name: str):
-    """会場別ドリルダウン: PT帯別・等級別の内訳"""
+    """会場別ドリルダウン: PT帯別・等級別の内訳。的中関連の集計なので現行PT(strategy_version='8')のみ対象。"""
     init_db()
     with get_conn() as conn:
-        pt_rows = conn.execute("""
+        pt_rows = conn.execute(f"""
             SELECT
                 arare_score,
                 MAX(bet_label) as bet_label,
@@ -256,14 +256,14 @@ def get_venue_detail(venue_name: str):
                     SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
                     COUNT(*) as combo_count
                 FROM predictions
-                WHERE venue_name = ? AND strategy_version = '3'
+                WHERE venue_name = ? AND {PT_RESET_FILTER}
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY arare_score
             ORDER BY arare_score
         """, (venue_name,)).fetchall()
 
-        grade_rows = conn.execute("""
+        grade_rows = conn.execute(f"""
             SELECT
                 COALESCE(NULLIF(race_grade,''), '不明') as race_grade,
                 COUNT(*) as total,
@@ -280,7 +280,7 @@ def get_venue_detail(venue_name: str):
                     SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
                     COUNT(*) as combo_count
                 FROM predictions
-                WHERE venue_name = ? AND strategy_version = '3'
+                WHERE venue_name = ? AND {PT_RESET_FILTER}
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY race_grade
@@ -362,10 +362,10 @@ def get_today_okuma_count(date: str = None):
 
 
 def get_venue_stats():
-    """会場別集計（全期間・レース単位）"""
+    """会場別集計（全期間・レース単位）。的中関連の集計なので現行PT(strategy_version='8')のみ対象。"""
     init_db()
     with get_conn() as conn:
-        rows = conn.execute("""
+        rows = conn.execute(f"""
             SELECT
                 venue_name,
                 COUNT(*) as total,
@@ -381,7 +381,7 @@ def get_venue_stats():
                     SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
                     COUNT(*) as combo_count
                 FROM predictions
-                WHERE strategy_version = '3'
+                WHERE {PT_RESET_FILTER}
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY venue_name
@@ -391,10 +391,11 @@ def get_venue_stats():
 
 
 def get_payout_distribution():
-    """ラベル別・実結果3連単配当分布（神熱 vs 見送り比較用）"""
+    """ラベル別・実結果3連単配当分布（神熱 vs 見送り比較用）。ラベル(神熱/見送り)は
+    現行PT_MIN_SCOREの判定に基づくため、現行PT(strategy_version='8')のみ対象。"""
     init_db()
     with get_conn() as conn:
-        rows = conn.execute("""
+        rows = conn.execute(f"""
             SELECT
                 bet_label,
                 COUNT(*) as total_races,
@@ -409,7 +410,7 @@ def get_payout_distribution():
                     MAX(bet_label) as bet_label,
                     MAX(actual_payout_3ren) as actual_payout_3ren
                 FROM predictions
-                WHERE strategy_version = '3'
+                WHERE {PT_RESET_FILTER}
                 GROUP BY date, venue_name, race_no
             )
             GROUP BY bet_label
@@ -442,10 +443,11 @@ def _calc_streaks(rows, key_fn):
 
 
 def get_all_streaks():
-    """ラベル・賭け種・PT・会場・等級別の直近連続外れ数を一括取得（参戦レースのみ・レース単位）"""
+    """ラベル・賭け種・PT・会場・等級別の直近連続外れ数を一括取得（参戦レースのみ・レース単位）。
+    的中関連の集計なので現行PT(strategy_version='8')のみ対象。"""
     init_db()
     with get_conn() as conn:
-        rows = conn.execute("""
+        rows = conn.execute(f"""
             SELECT MAX(bet_label) as bet_label,
                    COALESCE(NULLIF(bet_type,''), '3連単') as bet_type,
                    MAX(arare_score) as arare_score,
@@ -455,7 +457,7 @@ def get_all_streaks():
             FROM predictions
             WHERE result_recorded_at IS NOT NULL
               AND bet_label != '見送り'
-              AND strategy_version = '3'
+              AND {PT_RESET_FILTER}
             GROUP BY date, venue_name, race_no, COALESCE(NULLIF(bet_type,''), '3連単')
             ORDER BY MAX(id) DESC
         """).fetchall()

@@ -215,6 +215,15 @@ strategy_version='3'限定の古い集計関数はこれで概ね一掃した。
 「新体制のデータが反映されない」という指摘があれば、まず該当セクションの
 バックエンド関数が`strategy_version = '3'`で絞り込んでいないか確認すること。
 
+### 残っていたstrategy_version='3'参照を全てPT_RESET_FILTERに切り替え（2026-10-19）
+`get_daily_summary`（収支グラフ）・`get_venue_detail`（会場詳細モーダル、PT帯別・
+等級別の2クエリ）・`get_venue_stats`（会場別集計）・`get_payout_distribution`
+（実結果3連単払戻分布、神熱/見送りのラベル分類は現行PT_MIN_SCOREの判定に基づくため
+的中関連扱い）・`get_all_streaks`（連続外れアラート）の計6箇所に残っていた
+`strategy_version = '3'`を全て`{PT_RESET_FILTER}`（f-string化）に切り替えた。
+これで`web/database.py`内にstrategy_version='3'限定の集計関数は残っていない
+（全てPT_RESET_FILTER／PT_ACCUMULATE_FILTERのいずれかを使うようになった）。
+
 ### 「参戦ライン候補別累積成績」「オッズ帯別成績」のカウント単位を点数→レースに変更（2026-10-18）
 `get_pt_threshold_curve()`と`get_odds_band_stats()`は元々「賭け数」（1レースにつき最大5点の
 買い目を個別にカウント）を主な単位にしていたが、1レースで複数点が同じ区分（同じPT≥Xの括り、
