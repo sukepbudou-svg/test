@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, Response, stream_with_context
 from web.database import (
-    get_today_predictions, get_pt_stats, get_label_stats,
+    get_today_predictions, get_label_stats,
     get_daily_summary, get_consecutive_misses, init_db, update_result,
     get_venue_stats, get_venue_detail, get_all_streaks,
     get_recent_activity, get_activity_watermark,
@@ -136,7 +136,6 @@ def create_app():
 
     @app.route("/stats")
     def stats():
-        pt_stats = get_pt_stats()
         label_stats = get_label_stats()
         daily = get_daily_summary()
         streaks = get_consecutive_misses()
@@ -163,7 +162,6 @@ def create_app():
         odds_band_stats = get_odds_band_stats()
 
         return render_template("stats.html",
-                               pt_stats=pt_stats,
                                label_stats=label_stats,
                                daily=daily,
                                streaks=streaks,
@@ -184,10 +182,6 @@ def create_app():
     def api_today():
         date = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
         return jsonify(get_today_predictions(date))
-
-    @app.route("/api/pt_stats")
-    def api_pt_stats():
-        return jsonify(get_pt_stats())
 
     @app.route("/api/recent_activity")
     def api_recent_activity():

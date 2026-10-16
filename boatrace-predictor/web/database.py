@@ -205,34 +205,6 @@ def get_today_predictions(date: str = None):
     return [dict(r) for r in rows]
 
 
-def get_pt_stats():
-    """PT帯別集計（全期間・レース単位）"""
-    init_db()
-    with get_conn() as conn:
-        rows = conn.execute("""
-            SELECT
-                arare_score,
-                COUNT(*) as total,
-                SUM(has_result) as result_count,
-                SUM(is_hit_any) as hits,
-                SUM(race_payout) as total_payout,
-                SUM(CASE WHEN has_result=1 THEN combo_count ELSE 0 END) as result_combos
-            FROM (
-                SELECT date, venue_name, race_no, arare_score,
-                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result,
-                    MAX(is_hit) as is_hit_any,
-                    SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_payout,
-                    COUNT(*) as combo_count
-                FROM predictions
-                WHERE strategy_version = '3'
-                GROUP BY date, venue_name, race_no
-            )
-            GROUP BY arare_score
-            ORDER BY arare_score
-        """).fetchall()
-    return [dict(r) for r in rows]
-
-
 def get_label_stats():
     """ラベル×賭け種別集計（全期間・レース単位）"""
     init_db()

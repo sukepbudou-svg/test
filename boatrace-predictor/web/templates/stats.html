@@ -733,59 +733,6 @@ footer{
   </div>
 </div>
 
-<!-- ── PT帯別集計 ── -->
-<div class="section">
-  <h2>荒れPT帯別集計</h2>
-  <div class="table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>荒れPT</th>
-        <th>予想数</th>
-        <th>結果済</th>
-        <th>的中</th>
-        <th>的中率</th>
-        <th>X連に1回</th>
-        <th>払戻合計</th>
-        <th>収支</th>
-        <th>回収率</th>
-        <th>現在の連外</th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for s in pt_stats %}
-      {% set rc = s.result_count %}
-      {% set h = s.hits %}
-      {% set pay = s.total_payout %}
-      {% set c = s.result_combos * 100 %}
-      {% set p = pay - c %}
-      {% set roi = (pay / c * 100) if c > 0 else 0 %}
-      {% set hr = (h / rc * 100) if rc > 0 else 0 %}
-      {% set sk = all_streaks.pt.get(s.arare_score, 0) %}
-      <tr>
-        <td>PT{{ s.arare_score }}</td>
-        <td>{{ s.total }}</td>
-        <td>{{ rc }}</td>
-        <td>{{ h }}</td>
-        <td>{{ "%.1f" % hr }}%</td>
-        <td>{% if h > 0 %}{{ "%.1f" % (rc / h) }}回{% else %}—{% endif %}</td>
-        <td>¥{{ "{:,}".format(pay) }}</td>
-        <td class="{% if p >= 0 %}roi-good{% else %}roi-bad{% endif %}">
-          {% if p >= 0 %}+{% endif %}¥{{ "{:,}".format(p) }}
-        </td>
-        <td class="{% if roi >= 100 %}roi-good{% elif roi >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
-          {{ "%.1f" % roi }}%
-        </td>
-        <td class="{% if sk >= 6 %}streak-col-hot{% elif sk >= 3 %}streak-col-warn{% elif sk >= 1 %}streak-col-low{% else %}streak-col-none{% endif %}">
-          {% if sk == 0 %}0連{% else %}{{ sk }}連外{% endif %}
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-</div>
-
 <!-- ── 会場別集計 ── -->
 <div class="section">
   <h2>会場別集計（全レース）</h2>
