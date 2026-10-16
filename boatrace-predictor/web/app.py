@@ -11,7 +11,7 @@ from web.database import (
     get_today_predictions, get_pt_stats, get_label_stats,
     get_daily_summary, get_consecutive_misses, init_db, update_result,
     get_venue_stats, get_venue_detail, get_all_streaks,
-    get_recent_activity, get_activity_watermark, get_pt_payout_stats,
+    get_recent_activity, get_activity_watermark,
     get_payout_distribution,
     get_pt_score_stats, get_pt_daily_entry_stats, get_pt_summary, get_pt_threshold_curve,
     get_pt_all_time_streaks,
@@ -151,7 +151,6 @@ def create_app():
 
         venue_stats = get_venue_stats()
         all_streaks = get_all_streaks()
-        pt_payout_stats = get_pt_payout_stats()
         payout_dist = get_payout_distribution()
 
         # 新PTスコア方式（的中関連はstrategy_version='6'、実結果関連は'5'以降を集計）
@@ -171,7 +170,6 @@ def create_app():
                                cumulative=cumulative,
                                venue_stats=venue_stats,
                                all_streaks=all_streaks,
-                               pt_payout_stats=pt_payout_stats,
                                payout_dist=payout_dist,
                                pt_score_stats=pt_score_stats,
                                pt_daily_entry=pt_daily_entry,
