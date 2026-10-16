@@ -752,20 +752,22 @@ def get_pt_summary():
 
 
 def get_pt_threshold_curve():
-    """新PTスコア方式: 参戦ライン候補ごとの累積成績（PT≥X の場合の的中率・ROI）
+    """新PTスコア方式: 参戦ライン候補ごとの累積成績（PT≥X の場合のレース数・的中率・ROI）
     今後の参戦ライン(PT_MIN_SCORE)調整の参考データ。的中関連の集計なので、
-    オッズ帯・選出方式を刷新した2026-09-04以降のみを対象にする。"""
+    オッズ帯・選出方式を刷新した2026-09-04以降のみを対象にする。
+    カウント単位はレース（1レースに複数点の買い目があっても1レースとして数える。
+    回収率の計算だけは実際に賭けた金額＝買い目の点数×100円を使う）。"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute(f"""
-            SELECT arare_score as pt,
-                   COUNT(*) as n_bets,
-                   SUM(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as n_resulted,
-                   SUM(is_hit) as n_hits,
-                   SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as total_return
-            FROM predictions
-            WHERE {PT_RESET_FILTER} AND bet_type='3連単'
-            GROUP BY arare_score
+            SELECT pt,
+                   COUNT(*) as n_races,
+                   SUM(has_result) as n_races_resulted,
+                   SUM(CASE WHEN has_result=1 THEN race_hit ELSE 0 END) as n_race_hits,
+                   SUM(CASE WHEN has_result=1 THEN n_bets ELSE 0 END) as n_bets_resulted,
+                   SUM(CASE WHEN has_result=1 THEN race_return ELSE 0 END) as total_return
+            FROM ({_pt_v4_race_level_sql()})
+            GROUP BY pt
         """).fetchall()
     rows = [dict(r) for r in rows]
     if not rows:
@@ -774,23 +776,24 @@ def get_pt_threshold_curve():
     by_pt = {r["pt"]: r for r in rows}
     curve = []
     for threshold in range(max_pt, -1, -1):
-        cum_bets = cum_resulted = cum_hits = cum_return = 0
+        cum_races = cum_races_resulted = cum_race_hits = cum_bets_resulted = cum_return = 0
         for pt in range(threshold, max_pt + 1):
             r = by_pt.get(pt)
             if not r:
                 continue
-            cum_bets += r["n_bets"]
-            cum_resulted += r["n_resulted"] or 0
-            cum_hits += r["n_hits"] or 0
+            cum_races += r["n_races"]
+            cum_races_resulted += r["n_races_resulted"] or 0
+            cum_race_hits += r["n_race_hits"] or 0
+            cum_bets_resulted += r["n_bets_resulted"] or 0
             cum_return += r["total_return"] or 0
         curve.append({
             "threshold": threshold,
-            "n_bets": cum_bets,
-            "n_resulted": cum_resulted,
-            "n_hits": cum_hits,
-            "hit_rate": round(100 * cum_hits / cum_resulted, 1) if cum_resulted else None,
-            "hits_per": round(cum_resulted / cum_hits, 1) if cum_hits else None,
-            "roi_pct": round(100 * cum_return / (cum_resulted * 100), 1) if cum_resulted else None,
+            "n_races": cum_races,
+            "n_races_resulted": cum_races_resulted,
+            "n_race_hits": cum_race_hits,
+            "hit_rate": round(100 * cum_race_hits / cum_races_resulted, 1) if cum_races_resulted else None,
+            "hits_per": round(cum_races_resulted / cum_race_hits, 1) if cum_race_hits else None,
+            "roi_pct": round(100 * cum_return / (cum_bets_resulted * 100), 1) if cum_bets_resulted else None,
         })
     return curve
 
@@ -928,68 +931,75 @@ def get_pt_condition_breakdown():
 
 
 def get_odds_band_stats():
-    """オッズ帯（買い目のodds_value）別の賭け数・的中数・的中率・回収率を集計する。
+    """オッズ帯（買い目のodds_value）別のレース数・的中数・的中率・回収率を集計する。
     PTではなく「実際に何倍のオッズの組み合わせを買ったか」で区切るため、
     1〜2点目(100〜150倍)・3〜4点目(151〜250倍)・5点目(251〜900倍)それぞれが
     実際にどれくらい機能しているかを直接検証できる。的中関連の集計なので、
     オッズ帯・選出方式を刷新した2026-09-04以降のみを対象にする（PT_RESET_FILTER）。
+    カウント単位はレース（同じ帯に1レースで複数点の買い目があっても1レースとして
+    数える。例: 1〜2点目はどちらも100〜150倍帯なので2点とも同じ帯に入る）。
+    回収率の計算だけは実際に賭けた金額＝その帯での買い目の点数×100円を使う。
     """
     init_db()
     bands = [
         (100.0, 150.0, "100〜150倍（1〜2点目）"),
-        (150.0, 250.0, "151〜250倍（3〜4点目）"),
-        (250.0, 900.0, "251〜900倍（5点目）"),
+        (151.0, 250.0, "151〜250倍（3〜4点目）"),
+        (251.0, 900.0, "251〜900倍（5点目）"),
     ]
     with get_conn() as conn:
         rows = conn.execute(f"""
-            SELECT odds_value, is_hit, actual_payout, result_recorded_at
+            SELECT date, venue_name, race_no, odds_value, is_hit, actual_payout, result_recorded_at
             FROM predictions
             WHERE {PT_RESET_FILTER} AND bet_type='3連単'
         """).fetchall()
 
-    result = []
-    other = {"n_bets": 0, "n_resulted": 0, "n_hits": 0, "total_return": 0}
-    bucketed = [dict(n_bets=0, n_resulted=0, n_hits=0, total_return=0) for _ in bands]
+    # (race_key, band_index) -> {n_bets, resulted, hit, payout}
+    race_band = {}
     for r in rows:
         r = dict(r)
         odds = r["odds_value"]
-        resulted = r["result_recorded_at"] is not None
-        is_hit = r["is_hit"] or 0
-        payout = r["actual_payout"] or 0
-        target = other
+        band_idx = None
         for i, (lo, hi, _label) in enumerate(bands):
-            if odds is not None and lo < odds <= hi:
-                target = bucketed[i]
+            if odds is not None and lo <= odds <= hi:
+                band_idx = i
                 break
-        target["n_bets"] += 1
-        if resulted:
-            target["n_resulted"] += 1
-            target["n_hits"] += is_hit
-            if is_hit:
-                target["total_return"] += payout
+        race_key = (r["date"], r["venue_name"], r["race_no"], band_idx)
+        g = race_band.setdefault(race_key, {"n_bets": 0, "resulted": False, "hit": 0, "payout": 0})
+        g["n_bets"] += 1
+        if r["result_recorded_at"] is not None:
+            g["resulted"] = True
+            if r["is_hit"]:
+                g["hit"] = 1
+                g["payout"] += r["actual_payout"] or 0
 
-    for (lo, hi, label), b in zip(bands, bucketed):
-        n_resulted = b["n_resulted"]
-        result.append({
+    bucketed = [dict(n_races=0, n_races_resulted=0, n_race_hits=0, n_bets_resulted=0, total_return=0)
+                for _ in bands]
+    other = dict(n_races=0, n_races_resulted=0, n_race_hits=0, n_bets_resulted=0, total_return=0)
+    for (_date, _venue, _race_no, band_idx), g in race_band.items():
+        target = bucketed[band_idx] if band_idx is not None else other
+        target["n_races"] += 1
+        if g["resulted"]:
+            target["n_races_resulted"] += 1
+            target["n_race_hits"] += g["hit"]
+            target["n_bets_resulted"] += g["n_bets"]
+            target["total_return"] += g["payout"]
+
+    def _to_row(label, b):
+        n_races_resulted = b["n_races_resulted"]
+        n_bets_resulted = b["n_bets_resulted"]
+        return {
             "label": label,
-            "n_bets": b["n_bets"],
-            "n_resulted": n_resulted,
-            "n_hits": b["n_hits"],
-            "hit_rate": round(100 * b["n_hits"] / n_resulted, 2) if n_resulted else None,
-            "roi_pct": round(100 * b["total_return"] / (n_resulted * 100), 1) if n_resulted else None,
-            "avg_payout": round(b["total_return"] / b["n_hits"]) if b["n_hits"] else None,
-        })
-    if other["n_bets"]:
-        n_resulted = other["n_resulted"]
-        result.append({
-            "label": "その他（帯外）",
-            "n_bets": other["n_bets"],
-            "n_resulted": n_resulted,
-            "n_hits": other["n_hits"],
-            "hit_rate": round(100 * other["n_hits"] / n_resulted, 2) if n_resulted else None,
-            "roi_pct": round(100 * other["total_return"] / (n_resulted * 100), 1) if n_resulted else None,
-            "avg_payout": round(other["total_return"] / other["n_hits"]) if other["n_hits"] else None,
-        })
+            "n_races": b["n_races"],
+            "n_races_resulted": n_races_resulted,
+            "n_race_hits": b["n_race_hits"],
+            "hit_rate": round(100 * b["n_race_hits"] / n_races_resulted, 2) if n_races_resulted else None,
+            "roi_pct": round(100 * b["total_return"] / (n_bets_resulted * 100), 1) if n_bets_resulted else None,
+            "avg_payout": round(b["total_return"] / b["n_race_hits"]) if b["n_race_hits"] else None,
+        }
+
+    result = [_to_row(label, b) for (lo, hi, label), b in zip(bands, bucketed)]
+    if other["n_races"]:
+        result.append(_to_row("その他（帯外）", other))
     return result
 
 
