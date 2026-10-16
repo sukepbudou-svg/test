@@ -599,65 +599,6 @@ footer{
   </div>
 </div>
 
-<!-- ── ラベル別集計 ── -->
-<div class="section">
-  <h2>ラベル別集計</h2>
-  <div class="table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>ラベル</th>
-        <th>予想数</th>
-        <th>結果済</th>
-        <th>的中</th>
-        <th>的中率</th>
-        <th>X連に1回</th>
-        <th>払戻合計</th>
-        <th>コスト</th>
-        <th>収支</th>
-        <th>回収率</th>
-        <th>現在の連外</th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for s in label_stats %}
-      {% set lbl = s.bet_label %}
-      {% set btype = s.bet_type %}
-      {% set rc = s.result_count %}
-      {% set h = s.hits %}
-      {% set pay = s.total_payout %}
-      {% set c = s.result_combos * 100 %}
-      {% set p = pay - c %}
-      {% set roi = (pay / c * 100) if c > 0 else 0 %}
-      {% set hr = (h / rc * 100) if rc > 0 else 0 %}
-      {% set sk = all_streaks.label.get((lbl, btype), 0) %}
-      <tr>
-        <td class="{% if lbl == '神熱' %}label-shinnetsu{% elif lbl == 'プチュン' %}label-puchun{% elif lbl == '黒船熱' %}label-kokusen{% elif lbl == '中穴' %}label-chuana{% else %}label-skip{% endif %}">
-          {{ lbl }}<span style="font-size:9px;opacity:0.7;margin-left:4px">{{ btype }}</span>
-        </td>
-        <td>{{ s.total }}</td>
-        <td>{{ rc }}</td>
-        <td>{{ h }}</td>
-        <td>{{ "%.1f" % hr }}%</td>
-        <td>{% if h > 0 %}{{ "%.1f" % (rc / h) }}回{% else %}—{% endif %}</td>
-        <td>¥{{ "{:,}".format(pay) }}</td>
-        <td>¥{{ "{:,}".format(c) }}</td>
-        <td class="{% if p >= 0 %}roi-good{% else %}roi-bad{% endif %}">
-          {% if p >= 0 %}+{% endif %}¥{{ "{:,}".format(p) }}
-        </td>
-        <td class="{% if roi >= 100 %}roi-good{% elif roi >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
-          {{ "%.1f" % roi }}%
-        </td>
-        <td class="{% if sk >= 6 %}streak-col-hot{% elif sk >= 3 %}streak-col-warn{% elif sk >= 1 %}streak-col-low{% else %}streak-col-none{% endif %}">
-          {% if lbl == '見送り' %}—{% elif sk == 0 %}0連{% else %}{{ sk }}連外{% endif %}
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-</div>
-
 <!-- ── 実結果3連単払戻分布（神熱 vs 見送り） ── -->
 <div class="section">
   <h2>実結果 3連単払戻分布（神熱 vs 見送り比較）</h2>
