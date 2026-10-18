@@ -865,6 +865,89 @@ def get_pt_condition_breakdown():
     return result
 
 
+# 3連単の控除率（寺銭）。公式には約25〜27%程度とされるが、ここでは概算値として使う。
+# 「モデル確率が市場の暗示確率よりどれだけ強気/弱気か」という相対比較が目的なので、
+# この値の厳密さよりも一貫して同じ値を使うことの方が重要。
+TAKEOUT_RATE_3REN = 0.25
+
+
+def get_edge_vs_market_stats():
+    """モデル確率(prob)と市場オッズが暗示する確率を比較し、「市場より強気(エッジ大)」
+    なほど実際の的中率・回収率が上がっているかを検証する。
+    市場の暗示確率 = (1 - 控除率) / オッズ（控除率を考慮しないと1/オッズの合計が
+    120通り分で約1.33になってしまい、モデル確率と対等に比較できないため）。
+    エッジ = モデル確率 / 市場の暗示確率（1倍=市場と一致、2倍=市場の2倍強気、など）。
+    「歪みを検知できているか」の検証なので、買い目単位（レース単位ではない）で集計する。
+    市場オッズを使った判断の検証なので、ライブオッズ取得時の買い目のみが対象になる
+    （履歴オッズのみの買い目はodds_sourceの区別をDBに持たせていないため含む。
+    履歴オッズの場合は市場の実際の暗示確率とズレる可能性がある点に注意）。
+    的中関連の集計なので現行PT(strategy_version='8')のみ対象。
+    """
+    init_db()
+    bins = [
+        (0.0, 0.5, "0.5倍未満（市場より弱気）"),
+        (0.5, 1.0, "0.5〜1.0倍"),
+        (1.0, 1.5, "1.0〜1.5倍"),
+        (1.5, 2.0, "1.5〜2.0倍"),
+        (2.0, float("inf"), "2.0倍以上（市場より強気）"),
+    ]
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT prob, odds_value, is_hit, actual_payout, result_recorded_at
+            FROM predictions
+            WHERE {PT_RESET_FILTER} AND bet_type='3連単'
+        """).fetchall()
+
+    bucketed = [dict(n_bets=0, n_resulted=0, n_hits=0, total_return=0,
+                     model_prob_sum=0.0, market_prob_sum=0.0) for _ in bins]
+    skipped = 0
+    for r in rows:
+        r = dict(r)
+        try:
+            model_prob = float(r["prob"])
+        except (TypeError, ValueError):
+            skipped += 1
+            continue
+        odds = r["odds_value"]
+        if not odds or odds <= 0 or model_prob <= 0:
+            skipped += 1
+            continue
+        market_prob = (1 - TAKEOUT_RATE_3REN) / odds
+        edge = model_prob / market_prob
+
+        for i, (lo, hi, _label) in enumerate(bins):
+            if lo <= edge < hi:
+                b = bucketed[i]
+                break
+        else:
+            continue
+
+        b["n_bets"] += 1
+        b["model_prob_sum"] += model_prob
+        b["market_prob_sum"] += market_prob
+        if r["result_recorded_at"] is not None:
+            b["n_resulted"] += 1
+            if r["is_hit"]:
+                b["n_hits"] += 1
+                b["total_return"] += r["actual_payout"] or 0
+
+    result = []
+    for (lo, hi, label), b in zip(bins, bucketed):
+        n_bets = b["n_bets"]
+        n_resulted = b["n_resulted"]
+        result.append({
+            "label": label,
+            "n_bets": n_bets,
+            "n_resulted": n_resulted,
+            "n_hits": b["n_hits"],
+            "hit_rate": round(100 * b["n_hits"] / n_resulted, 2) if n_resulted else None,
+            "roi_pct": round(100 * b["total_return"] / (n_resulted * 100), 1) if n_resulted else None,
+            "avg_model_prob_pct": round(100 * b["model_prob_sum"] / n_bets, 2) if n_bets else None,
+            "avg_market_prob_pct": round(100 * b["market_prob_sum"] / n_bets, 2) if n_bets else None,
+        })
+    return result
+
+
 def get_odds_band_stats():
     """オッズ帯（買い目のodds_value）別のレース数・的中数・的中率・回収率を集計する。
     PTではなく「実際に何倍のオッズの組み合わせを買ったか」で区切るため、

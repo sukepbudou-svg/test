@@ -17,7 +17,7 @@ from web.database import (
     get_pt_all_time_streaks,
     get_pt_calibration_stats, get_venue_okuma_ranking, get_race_position_distribution,
     get_today_okuma_count,
-    get_pt_condition_breakdown, get_odds_band_stats,
+    get_pt_condition_breakdown, get_odds_band_stats, get_edge_vs_market_stats,
 )
 from src.model.predictor import PT_MIN_SCORE
 
@@ -159,6 +159,7 @@ def create_app():
         pt_calibration = get_pt_calibration_stats()
         pt_condition_breakdown = get_pt_condition_breakdown()
         odds_band_stats = get_odds_band_stats()
+        edge_vs_market_stats = get_edge_vs_market_stats()
 
         return render_template("stats.html",
                                daily=daily,
@@ -174,6 +175,7 @@ def create_app():
                                pt_calibration=pt_calibration,
                                pt_condition_breakdown=pt_condition_breakdown,
                                odds_band_stats=odds_band_stats,
+                               edge_vs_market_stats=edge_vs_market_stats,
                                pt_min_score=PT_MIN_SCORE)
 
     @app.route("/api/today")
