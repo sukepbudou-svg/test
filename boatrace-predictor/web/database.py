@@ -55,6 +55,11 @@ def init_db():
                 conn.execute(f"ALTER TABLE predictions ADD COLUMN {col}")
             except Exception:
                 pass
+        # 2026-10-19: 5点目のみの選出方式変更でstrategy_versionを'8'→'9'に上げたところ、
+        # 的中関連の統計が1〜4点目（無変更）の直近データまで巻き込んでリセットされてしまい、
+        # ユーザーから「データが消えた」との指摘を受けて即日revert。その間に'9'で保存された
+        # 行を'8'に戻し、リセット前のデータと再び地続きにする（既に'9'が無ければ無害な空振り）。
+        conn.execute("UPDATE predictions SET strategy_version='8' WHERE strategy_version='9'")
 
 
 def sync_race_predictions(date: str, venue_name: str, race_no: int, combinations: list):
@@ -117,7 +122,7 @@ def save_prediction(rec: dict):
             str(rec.get("boat1_risk", "")),
             int(rec.get("okuma_signal_count", 0) or 0),
             str(rec.get("bet_type", "3連単")),
-            str(rec.get("strategy_version", "9")),
+            str(rec.get("strategy_version", "8")),
             rec.get("day_race_no"),
         ))
 
@@ -206,7 +211,7 @@ def get_today_predictions(date: str = None):
 
 
 def get_daily_summary():
-    """日付別集計（最新30日・レース単位）。的中関連の集計なので現行PT(strategy_version='9')のみ対象。"""
+    """日付別集計（最新30日・レース単位）。的中関連の集計なので現行PT(strategy_version='8')のみ対象。"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute(f"""
@@ -236,7 +241,7 @@ def get_daily_summary():
 
 
 def get_venue_detail(venue_name: str):
-    """会場別ドリルダウン: PT帯別・等級別の内訳。的中関連の集計なので現行PT(strategy_version='9')のみ対象。"""
+    """会場別ドリルダウン: PT帯別・等級別の内訳。的中関連の集計なので現行PT(strategy_version='8')のみ対象。"""
     init_db()
     with get_conn() as conn:
         pt_rows = conn.execute(f"""
@@ -362,7 +367,7 @@ def get_today_okuma_count(date: str = None):
 
 
 def get_venue_stats():
-    """会場別集計（全期間・レース単位）。的中関連の集計なので現行PT(strategy_version='9')のみ対象。"""
+    """会場別集計（全期間・レース単位）。的中関連の集計なので現行PT(strategy_version='8')のみ対象。"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute(f"""
@@ -392,7 +397,7 @@ def get_venue_stats():
 
 def get_payout_distribution():
     """ラベル別・実結果3連単配当分布（神熱 vs 見送り比較用）。ラベル(神熱/見送り)は
-    現行PT_MIN_SCOREの判定に基づくため、現行PT(strategy_version='9')のみ対象。"""
+    現行PT_MIN_SCOREの判定に基づくため、現行PT(strategy_version='8')のみ対象。"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute(f"""
@@ -444,7 +449,7 @@ def _calc_streaks(rows, key_fn):
 
 def get_all_streaks():
     """ラベル・賭け種・PT・会場・等級別の直近連続外れ数を一括取得（参戦レースのみ・レース単位）。
-    的中関連の集計なので現行PT(strategy_version='9')のみ対象。"""
+    的中関連の集計なので現行PT(strategy_version='8')のみ対象。"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute(f"""
@@ -487,8 +492,8 @@ def get_all_streaks():
 #     選出方式と無関係な事実なので strategy_version IN ('5','6') として '5' 以降を
 #     通して積み上げる
 # ══════════════════════════════════════════════════════════════
-PT_RESET_FILTER = "strategy_version='9'"       # 的中関連（刷新後のみ・リセット）
-PT_ACCUMULATE_FILTER = "strategy_version IN ('5','6','7','8','9')"  # 実結果関連（'5'以降を積み上げ）
+PT_RESET_FILTER = "strategy_version='8'"       # 的中関連（刷新後のみ・リセット）
+PT_ACCUMULATE_FILTER = "strategy_version IN ('5','6','7','8')"  # 実結果関連（'5'以降を積み上げ）
 
 
 def _pt_v4_race_level_sql(select_extra: str = "", version_filter: str = PT_RESET_FILTER) -> str:
@@ -881,7 +886,7 @@ def get_edge_vs_market_stats():
     市場オッズを使った判断の検証なので、ライブオッズ取得時の買い目のみが対象になる
     （履歴オッズのみの買い目はodds_sourceの区別をDBに持たせていないため含む。
     履歴オッズの場合は市場の実際の暗示確率とズレる可能性がある点に注意）。
-    的中関連の集計なので現行PT(strategy_version='9')のみ対象。
+    的中関連の集計なので現行PT(strategy_version='8')のみ対象。
     """
     init_db()
     bins = [

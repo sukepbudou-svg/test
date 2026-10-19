@@ -1099,9 +1099,11 @@ def get_recommendations(
                 "okuma_signal_count": _gate_score,
                 "bet_type":           bet_type,
                 # 2026-10-19: 5点目の選出方式を条件ベースから歪み検知方式
-                # (_pick_edge_based)に差し替えたため'8'→'9'に引き上げ、
-                # 的中関連の集計をゼロから取り直せるようにする
-                "strategy_version":   "9",
+                # (_pick_edge_based)に変更したが、1〜4点目の選出方法は無変更のため
+                # strategy_versionは上げない（'8'のまま）。的中関連の統計を5点目の
+                # 変更だけで毎回ゼロから取り直すと、1〜4点目（買い目の大半・実績の
+                # 大半を占める）の直近データまで巻き込んで消えてしまうため
+                "strategy_version":   "8",
             })
 
         def _pick_strength_based(label_override):
