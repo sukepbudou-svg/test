@@ -72,131 +72,6 @@ _C_GREEN  = "\033[1;32m"   # 参戦確定
 _C_RESET  = "\033[0m"
 
 
-def _pick_condition_based_ana(
-    race_row: pd.Series,
-    arare_reasons: list[str],
-    absent_boats: list | None,
-    by_prob: "pd.DataFrame | None" = None,
-) -> tuple[str | None, str | None]:
-    """
-    展示タイム・ST・今節成績・前付け・グレード・積極性から脅威アウト艇を特定し、
-    新本命穴・新超穴の組み合わせを返す
-
-    Returns:
-        (新本命穴コンボ, 新超穴コンボ) or (None, None)
-    """
-    available = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
-    outer_boats = [b for b in [3, 4, 5, 6] if b in available]
-    if len(outer_boats) < 1:
-        return None, None
-
-    # MLモデル確率フィルタ: 外枠艇のうちML1着確率が上位2艇のみを候補とする
-    if by_prob is not None and not by_prob.empty:
-        outer_win_probs = {}
-        for bn in outer_boats:
-            mask = by_prob["boat1"] == bn
-            outer_win_probs[bn] = float(by_prob[mask]["prob"].sum()) if mask.any() else 0.0
-        outer_boats = sorted(outer_boats, key=lambda b: outer_win_probs.get(b, 0), reverse=True)[:2]
-        if not outer_boats:
-            return None, None
-
-    # 展示タイム・STを収集
-    et_vals: dict[int, float] = {}
-    for bn in available:
-        et = _safe_float(race_row.get(f"boat{bn}_exhibition_time"))
-        if et and et > 0:
-            et_vals[bn] = et
-
-    # 展示タイムを速い順にランク付け（全艇中の順位）
-    et_sorted = sorted(et_vals.values())
-
-    # 統合脅威スコアリング（外枠絞込み済み艇のみ）
-    # _calc_threat_score: 展示ST・今節ST・グレード・racer積極性 を合算
-    outer_scores: dict[int, float] = {}
-    for bn in outer_boats:
-        s = _calc_threat_score(bn, race_row)
-
-        # 展示タイムランク加点（全艇中: 1位+3, 2位+2, 3位+1）
-        if bn in et_vals:
-            rank = et_sorted.index(et_vals[bn])
-            s += max(0.0, 3.0 - rank)
-
-        # 前付け加点（実際のコースが艇番より内側 = 積極的侵入）
-        ac_raw = race_row.get(f"boat{bn}_actual_course")
-        try:
-            ac = int(ac_raw) if ac_raw is not None else bn
-        except (TypeError, ValueError):
-            ac = bn
-        if ac < bn:
-            s += 2.0
-
-        # 今節成績加点（平均着順: 1着平均=+1.5, 3着平均=0, 6着平均=-1.5）
-        meet_avg_rank = _safe_float(race_row.get(f"boat{bn}_meet_avg_rank"))
-        meet_races = int(race_row.get(f"boat{bn}_meet_races", 0) or 0)
-        if meet_avg_rank is not None and meet_races >= 1:
-            s += (3.0 - meet_avg_rank) * 0.5
-
-        outer_scores[bn] = s
-
-    if not outer_scores:
-        return None, None
-
-    ranked = sorted(outer_scores, key=lambda b: outer_scores[b], reverse=True)
-    threat1 = ranked[0]
-    threat2 = ranked[1] if len(ranked) >= 2 else None
-
-    # 1号艇の弱さを判定（ST遅い・B級・モーター不良）
-    boat1_weak = any("1号ST" in r or "1号B" in r or "1号M" in r for r in arare_reasons)
-
-    def _best_third(used: set) -> int | None:
-        cands = sorted(
-            [(b, et_vals.get(b, 9.99)) for b in available if b not in used],
-            key=lambda x: x[1],
-        )
-        return cands[0][0] if cands else None
-
-    # ── 新本命穴: 脅威艇1着 × 1号艇2着 × 残り展示上位3着 ──
-    if 1 in available and not boat1_weak:
-        second_h = 1
-    elif threat2:
-        second_h = threat2
-    else:
-        others = [b for b in available if b != threat1]
-        second_h = others[0] if others else None
-
-    if second_h is None:
-        return None, None
-    third_h = _best_third({threat1, second_h})
-    if third_h is None:
-        return None, None
-    shinhonmei = f"{threat1}-{second_h}-{third_h}"
-
-    # ── 新超穴: 脅威艇1着 × 1号艇除外の候補2着 × 残り3着 ──
-    # threat1・1号艇を除いた全候補を展示タイム順に列挙し、新本命穴と被らない組み合わせを探す
-    cands_c = sorted(
-        [(b, et_vals.get(b, 9.99)) for b in available if b != threat1 and b != 1],
-        key=lambda x: x[1],
-    )
-    # threat2を優先（second_hと異なる場合は先頭へ）
-    if threat2 and threat2 != second_h:
-        cands_c = [(threat2, et_vals.get(threat2, 9.99))] + [
-            (b, e) for b, e in cands_c if b != threat2
-        ]
-
-    shinchoana = None
-    for second_c, _ in cands_c:
-        third_c = _best_third({threat1, second_c})
-        if third_c is None:
-            continue
-        candidate = f"{threat1}-{second_c}-{third_c}"
-        if candidate != shinhonmei:
-            shinchoana = candidate
-            break
-
-    return shinhonmei, shinchoana
-
-
-
 # 各会場のイン逃げ率（1コース逃げ率・実績ベース統計値）
 _VENUE_INNER_ESCAPE = {
     "01": 0.580,  # 桐生
@@ -267,52 +142,6 @@ def _calc_nigerate(race_row: pd.Series) -> str:
 
     nigerate = max(0.05, min(0.95, nigerate))
     return f"逃げ{int(round(nigerate * 100))}%"
-
-
-def _calc_threat_score(bn: int, race_row: pd.Series) -> float:
-    """
-    荒れ時の脅威艇スコアを計算する。
-    展示ST速度・グレード・アウトコース積極性を合算して返す。
-    フォーメーション3着枠の「確率外脅威艇」選出に使用。
-    """
-    score = 0.0
-
-    # 展示ST（低い＝速い → 脅威度高）: 0.10→+0.50, 0.15→0, 0.20→-0.50
-    exh_st = race_row.get(f"boat{bn}_exhibition_st")
-    if exh_st is not None:
-        try:
-            st_val = float(exh_st)
-            if st_val > 0:
-                score += (0.150 - st_val) * 10.0
-        except (TypeError, ValueError):
-            pass
-
-    # 今節ST実績（展示STを補強）
-    meet_avg_st = race_row.get(f"boat{bn}_meet_avg_st")
-    if meet_avg_st is not None:
-        try:
-            score += (0.150 - float(meet_avg_st)) * 5.0
-        except (TypeError, ValueError):
-            pass
-
-    # グレード（A1=4→+0.8, A2=3→+0.4, B1/B2=0）
-    gn_raw = race_row.get(f"boat{bn}_grade_num", 2)
-    try:
-        gn = int(float(gn_raw)) if gn_raw is not None else 2
-        if gn >= 3:
-            score += (gn - 2) * 0.4
-    except (TypeError, ValueError):
-        pass
-
-    # アウトコース積極性（3〜6号艇のみ: 積極的な選手ほど荒れの主役になりやすい）
-    if bn >= 3:
-        racer_no = int(race_row.get(f"boat{bn}_racer_no", 0) or 0)
-        if racer_no in _RACER_STYLE:
-            style = _RACER_STYLE[racer_no]
-            aggression = style.get("aggression_score", 1.0) if isinstance(style, dict) else float(style)
-            score += max(0.0, (aggression - 1.0) * 0.5)
-
-    return score
 
 
 def _calc_inner_score(bn: int, race_row: pd.Series) -> float:
@@ -592,6 +421,11 @@ def _calc_arare_score(race_row: pd.Series, weather: dict = None, by_prob: "pd.Da
 # 現行の簡略版PT（A〜D区分・満点20点・PT_MIN_SCORE=9）が「平均実配当額がPTと相関
 # しない」等、有効性を裏付けられていなかったため、一旦この時代の配点に戻して検証する。
 PT_MIN_SCORE = 7
+
+# 3連単の控除率（寺銭）の概算値。5点目の歪み検知選出(_pick_edge_based)で使う。
+# web/database.pyのget_edge_vs_market_stats()と同じ値を使うこと（ずれると
+# 「選出時に見ていたエッジ」と「STATSで検証するエッジ」が食い違ってしまう）。
+TAKEOUT_RATE_3REN = 0.25
 
 
 def _calc_race_pt(race_row: pd.Series, weather: dict = None, by_prob: "pd.DataFrame | None" = None) -> dict:
@@ -1264,17 +1098,19 @@ def get_recommendations(
                 "boat1_risk":         _calc_boat1_risk(race_row),
                 "okuma_signal_count": _gate_score,
                 "bet_type":           bet_type,
-                # 2026-10-16: 荒れPTの計算式を2026年5月当時の配点に差し戻したため
-                # '7'→'8'に引き上げ、的中関連の集計をゼロから取り直せるようにする
-                "strategy_version":   "8",
+                # 2026-10-19: 5点目の選出方式を条件ベースから歪み検知方式
+                # (_pick_edge_based)に差し替えたため'8'→'9'に引き上げ、
+                # 的中関連の集計をゼロから取り直せるようにする
+                "strategy_version":   "9",
             })
 
         def _pick_strength_based(label_override):
-            """オッズ帯5点構成で選出（2026-10-16改訂）
+            """オッズ帯5点構成で選出（2026-10-19改訂）
             1〜2点目: 100〜150倍から2点（確率×EVのブレンド）
             3点目: 151〜250倍から1点（確率×EVのブレンド）
             4点目: 151〜250倍から1点（確率×EVのブレンド・1号艇を除外）
-            5点目: 200〜300倍から1点（モデル確率を使わない条件ベース選出）
+            5点目: オッズ帯を区切らず、モデル確率と市場オッズの歪み(エッジ)が
+            最大の組み合わせを1点（_pick_edge_based、詳細はその関数のdocstring参照）
             1〜4点目は確率×EVのブレンド（幾何平均）上位の組み合わせを選出。
             純粋EV(確率×オッズ)だと帯の上限側に、純粋確率だと帯の下限側に選出が
             偏ってしまう（どちらも範囲を分割した意味が薄れる）ため、両者の
@@ -1283,10 +1119,12 @@ def get_recommendations(
             「1号艇が完全に不在の大荒れ」パターンを狙い撃つ（大穴狙いのコンセプトの
             ため最も配当の小さい旧・30-99倍帯は廃止済み）。
             旧5点目（251-900倍・ブレンド）は的中率0.06%・回収率12.7%と他の帯に比べ
-            著しく機能していなかったため2026-10-16に廃止し、代わりに4エージェント
-            合成確率を一切使わない条件ベースの選出(_pick_threat_based)に差し替えた。
-            1〜4点目は全て同じ確率モデルを土台にしているため、モデルの推定に歪みが
-            あれば共倒れしてしまう弱点があり、5点目だけは独立した視点を持たせる狙い。
+            著しく機能していなかったため2026-10-16に一度、4エージェント合成確率を
+            一切使わない展示タイム等の条件ベース選出(_pick_condition_based_ana、
+            オッズ帯200-300倍限定)に差し替えたが、固定2パターンしか候補を出さない
+            上にオッズ帯の絞り込みも重なり、頻繁に「候補なし→スキップ」になる問題が
+            あった。2026-10-19にオッズ倍率を見ない歪み検知方式(_pick_edge_based)へ
+            再度差し替え、条件ベースのロジック自体は不使用のため削除した。
             """
             available = [b for b in range(1, 7) if not (absent_boats and b in absent_boats)]
             if len(available) < 3:
@@ -1336,49 +1174,42 @@ def get_recommendations(
                     print(f"  [{band_name}] 候補が全て選出済み→スキップ")
                 return picked
 
-            def _pick_threat_based(min_odds, max_odds, band_name):
-                """確率モデル(4エージェント合成)を一切使わず、展示タイム・展示ST・
-                前付け・今節成績から直接「脅威艇」を特定するルールベースのロジック
-                (_pick_condition_based_ana)で組み立てた「新本命穴」「新超穴」のうち、
-                実際のオッズがmin_odds〜max_oddsに収まる方を採用する。1〜4点目は
-                全て4エージェント合成確率というモデルを土台にしており、モデルの
-                推定に歪みがあれば1〜4点目すべてが同じ弱点を共有してしまうため、
-                モデルを一切介さない独立した視点をあえて取り入れている（2026-10-16）。
-                該当する候補が無ければスキップ（フォールバックなし）。"""
-                shinhonmei, shinchoana = _pick_condition_based_ana(
-                    race_row, _gate["reasons"], absent_boats, by_prob=_valid
-                )
-                for combo, tag in ((shinhonmei, "新本命穴"), (shinchoana, "新超穴")):
-                    if not combo:
-                        continue
-                    try:
-                        f, s, t = (int(x) for x in combo.split("-"))
-                    except ValueError:
-                        continue
+            def _pick_edge_based(band_name):
+                """モデル確率と市場オッズが暗示する確率の歪み（ズレ）が最大の
+                組み合わせを、オッズ帯を区切らずレース全体から選ぶ(2026-10-19改訂)。
+                市場の暗示確率 = (1 - TAKEOUT_RATE_3REN) / オッズ。
+                エッジ = モデル確率 / 市場の暗示確率（1倍=市場と一致、大きいほど
+                モデルが市場より強気＝歪みを検知している）。倍率(オッズそのもの)は
+                一切見ず、歪みの大きさだけを基準にする。1〜4点目は全て確率×EVの
+                ブレンド（≒EVの大きさ）で選んでおり、エッジはEVを(1-TAKEOUT_RATE_3REN)
+                で割っただけの単調な変換なので、本質的にはEVの大きい順と同じ並びに
+                なる点に注意（=1〜4点目と同じ「モデルが強気な場所」を狙っている）。
+                そのため1〜4点目で既に選ばれた組み合わせはスキップし、次点を採用する。"""
+                pool = _valid.copy()
+                pool["boat1"] = pool["boat1"].astype(int)
+                pool["boat2"] = pool["boat2"].astype(int)
+                pool["boat3"] = pool["boat3"].astype(int)
+                pool["odds_value"] = pool["odds_value"].astype(float)
+                pool["prob"] = pool["prob"].astype(float)
+                pool["market_prob"] = (1 - TAKEOUT_RATE_3REN) / pool["odds_value"]
+                pool["edge"] = pool["prob"] / pool["market_prob"]
+                pool = pool.sort_values("edge", ascending=False)
+                for _, row in pool.iterrows():
+                    f, s, t = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
                     key = (f, s, t)
                     if key in seen_3ren:
                         continue
-                    match = _valid[
-                        (_valid["boat1"].astype(int) == f) &
-                        (_valid["boat2"].astype(int) == s) &
-                        (_valid["boat3"].astype(int) == t)
-                    ]
-                    if match.empty:
-                        continue
-                    row = match.iloc[0]
-                    odds_val = float(row["odds_value"])
-                    if min_odds <= odds_val <= max_odds:
-                        seen_3ren.add(key)
-                        _add_rec(row, "神熱", label_override=label_override, bet_type="3連単")
-                        print(f"  [{band_name}] {combo} オッズ{odds_val:.0f}倍 (条件ベース:{tag})")
-                        return 1
-                print(f"  [{band_name}] オッズ帯に収まる候補なし→スキップ")
+                    seen_3ren.add(key)
+                    _add_rec(row, "神熱", label_override=label_override, bet_type="3連単")
+                    print(f"  [{band_name}] {f}-{s}-{t} オッズ{float(row['odds_value']):.0f}倍 エッジ={float(row['edge']):.2f}倍")
+                    return 1
+                print(f"  [{band_name}] 候補なし→スキップ")
                 return 0
 
             _pick_odds_band(100.0, 150.0, "1-2点目(100-150倍)", n_points=2)
             _pick_odds_band(151.0, 250.0, "3点目(151-250倍)", n_points=1)
             _pick_odds_band(151.0, 250.0, "4点目(151-250倍・1号艇除外)", n_points=1, exclude_boat1=True)
-            _pick_threat_based(200.0, 300.0, "5点目(200-300倍・条件ベース)")
+            _pick_edge_based("5点目(歪み検知・オッズ帯なし)")
 
         if not _valid.empty:
             print(f"  {_label_color}[{_okuma_label}]{_C_RESET} {_gate['reason_text']} → オッズ帯選出(ブレンド方式+条件ベース5点目)")
