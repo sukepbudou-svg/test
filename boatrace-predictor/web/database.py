@@ -51,7 +51,8 @@ def init_db():
                     "strategy_version TEXT",
                     "actual_payout_3ren INTEGER DEFAULT 0",
                     "day_race_no INTEGER",
-                    "venue_day_rank INTEGER"]:
+                    "venue_day_rank INTEGER",
+                    "boat1_grade TEXT"]:
             try:
                 conn.execute(f"ALTER TABLE predictions ADD COLUMN {col}")
             except Exception:
@@ -106,8 +107,8 @@ def save_prediction(rec: dict):
               (date, venue_name, race_no, race_time, race_grade, combination, odds, odds_value,
                arare_score, arare_reasons, bet_label, tier,
                prob, expected_roi, nigerate_str, boat1_risk, okuma_signal_count, bet_type,
-               strategy_version, day_race_no, venue_day_rank)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               strategy_version, day_race_no, venue_day_rank, boat1_grade)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             date, venue, race_no,
             str(rec.get("race_time", "")),
@@ -126,6 +127,7 @@ def save_prediction(rec: dict):
             str(rec.get("strategy_version", "8")),
             rec.get("day_race_no"),
             rec.get("venue_day_rank"),
+            str(rec.get("boat1_grade", "")),
         ))
 
 
@@ -415,6 +417,51 @@ def get_b_class_venue_rank_curve():
             "roi_pct": round(100 * cum_return / (cum_bets_resulted * 100), 1) if cum_bets_resulted else None,
         })
     return curve
+
+
+# 1号艇の級別（A1/A2/B1・B2）とレースの実配当額の相関検証（2026-10-20追加）。
+# B1とB2は「新戦略: 1号艇B級×会場当日順位」と同じ基準でまとめて1枠にする。
+_GRADE_BUCKET_LABELS = {"A1": "A1", "A2": "A2", "B1": "B級(B1/B2)", "B2": "B級(B1/B2)"}
+
+
+def get_boat1_grade_payout_stats():
+    """1号艇の級別（A1/A2/B級）によってレースの実配当額に差があるか検証する集計
+    （2026-10-20追加）。的中したかどうか（自分の買い目が当たったか）とは無関係に、
+    レースの実際の結果だけを見る集計（会場別万舟ランキングと同じ考え方）。
+    boat1_gradeは2026-10-20以降に予想保存時へ付与する新しい列のため、それより前の
+    データは空文字でこの集計からは自動的に除外される。"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT date, venue_name, race_no,
+                   MAX(boat1_grade) as boat1_grade,
+                   MAX(actual_payout) as actual_payout,
+                   MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
+            FROM predictions
+            WHERE bet_type='3連単' AND boat1_grade IS NOT NULL AND boat1_grade != ''
+            GROUP BY date, venue_name, race_no
+        """).fetchall()
+
+    buckets: dict[str, list] = {"A1": [], "A2": [], "B級(B1/B2)": []}
+    for r in rows:
+        r = dict(r)
+        if not r["has_result"]:
+            continue
+        label = _GRADE_BUCKET_LABELS.get(r["boat1_grade"])
+        if label:
+            buckets[label].append(r["actual_payout"] or 0)
+
+    result = []
+    for label in ["A1", "A2", "B級(B1/B2)"]:
+        payouts = buckets[label]
+        n = len(payouts)
+        result.append({
+            "label": label,
+            "n_races": n,
+            "avg_payout": round(sum(payouts) / n) if n else None,
+            "okuma_rate": round(100 * sum(1 for p in payouts if p >= 10000) / n, 1) if n else None,
+        })
+    return result
 
 
 def get_today_okuma_count(date: str = None):

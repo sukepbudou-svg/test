@@ -427,6 +427,10 @@ PT_MIN_SCORE = 7
 # 「選出時に見ていたエッジ」と「STATSで検証するエッジ」が食い違ってしまう）。
 TAKEOUT_RATE_3REN = 0.25
 
+# grade_num(src/features/builder.pyのgrade_map)の逆引き。1号艇の級別×実配当額の
+# 相関検証(web/database.pyのget_boat1_grade_payout_stats())で使う（2026-10-20追加）。
+_GRADE_NUM_TO_LABEL = {4: "A1", 3: "A2", 2: "B1", 1: "B2"}
+
 
 def _calc_race_pt(race_row: pd.Series, weather: dict = None, by_prob: "pd.DataFrame | None" = None) -> dict:
     """
@@ -1059,6 +1063,8 @@ def get_recommendations(
         # ── 参戦ライン判定（荒れPTスコア方式） ──
         _gate = _calc_race_pt(race_row, weather, by_prob)
         _gate_score = _gate["score"]
+        _boat1_grade_num = _safe_float(race_row.get("boat1_grade_num"))
+        _boat1_grade = _GRADE_NUM_TO_LABEL.get(int(_boat1_grade_num) if _boat1_grade_num is not None else 0, "")
 
         if _gate["entry"]:
             _okuma_label = "神熱"
@@ -1096,6 +1102,7 @@ def get_recommendations(
                 "arare_score":        _gate_score,
                 "arare_reasons":      _gate["reason_text"],
                 "boat1_risk":         _calc_boat1_risk(race_row),
+                "boat1_grade":        _boat1_grade,
                 "okuma_signal_count": _gate_score,
                 "bet_type":           bet_type,
                 # 2026-10-19: 5点目の選出方式を条件ベースから歪み検知方式

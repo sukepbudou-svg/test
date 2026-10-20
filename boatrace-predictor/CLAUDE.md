@@ -474,6 +474,18 @@ Harville変換（3つの確率を掛け合わせる）で過信が増幅され�
 的中には表記に「★」を追加する（`arare_reasons`に「1号B級」が含まれるかで判定。A級の的中は
 従来通り変更なし）。この的中チップの一覧だけに適用し、各レース詳細の的中バッジ等は対象外。
 
+### 1号艇級別×実配当額の相関検証（2026-10-20追加）
+「1号艇がB級のときほどレースが荒れて配当が高くなるはず」という上記の仮説を、より直接的に
+検証するための集計。1号艇の級（A1/A2/B1/B2）を`predictions`テーブルに新しい列
+`boat1_grade`として保存する（`src/model/predictor.py`の`_GRADE_NUM_TO_LABEL`で
+`boat1_grade_num`から逆引き。`src/features/builder.py`の`grade_map`と対になる定義な
+ので、片方を変える場合は両方を確認すること）。的中したかどうかとは無関係に、レースの
+実際の配当額だけを見る集計（会場別万舟ランキングと同じ考え方）で、A1・A2・B級(B1/B2)の
+3グループ別に「レース数・平均配当額・万舟率」を`web/database.py`の
+`get_boat1_grade_payout_stats()`で算出し、`/stats`ページに「1号艇級別×実配当額」
+セクションとして表示する。`boat1_grade`も2026-10-20以降のデータにしか入らないため、
+それより前のデータは自動的に対象外になる。
+
 ## 注意事項
 - Google Sheets APIは不要（sheets.pyはあるが `auto_runner.py` でオプション扱い）
 - Sheetsを使う場合のみ `.env` に `SPREADSHEET_ID` と `GOOGLE_CREDENTIALS_PATH` が必要
