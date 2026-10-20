@@ -50,7 +50,8 @@ def init_db():
                     "bet_type TEXT DEFAULT '3連単'",
                     "strategy_version TEXT",
                     "actual_payout_3ren INTEGER DEFAULT 0",
-                    "day_race_no INTEGER"]:
+                    "day_race_no INTEGER",
+                    "venue_day_rank INTEGER"]:
             try:
                 conn.execute(f"ALTER TABLE predictions ADD COLUMN {col}")
             except Exception:
@@ -105,8 +106,8 @@ def save_prediction(rec: dict):
               (date, venue_name, race_no, race_time, race_grade, combination, odds, odds_value,
                arare_score, arare_reasons, bet_label, tier,
                prob, expected_roi, nigerate_str, boat1_risk, okuma_signal_count, bet_type,
-               strategy_version, day_race_no)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               strategy_version, day_race_no, venue_day_rank)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             date, venue, race_no,
             str(rec.get("race_time", "")),
@@ -124,6 +125,7 @@ def save_prediction(rec: dict):
             str(rec.get("bet_type", "3連単")),
             str(rec.get("strategy_version", "8")),
             rec.get("day_race_no"),
+            rec.get("venue_day_rank"),
         ))
 
 
@@ -338,6 +340,81 @@ def get_venue_okuma_ranking():
         })
     result.sort(key=lambda x: (-x["okuma_rate"], -x["n_okuma"]))
     return result
+
+
+def compute_today_venue_rank_map(today_venue_names) -> dict:
+    """その日開催する会場だけを対象に、会場別万舟ランキング（集計中・全期間ベース）の
+    順位を1位から振り直したマップ {venue_name: 当日順位} を返す（2026-10-20追加）。
+    「参戦ライン」新戦略（1号艇B級 × 当日上位N会場）の検証用。ランキングに乗っていない
+    （集計対象の結果がまだ無い）会場は末尾に順位を振る。auto_runner側で1日1回だけ
+    呼び出し、その日の間は結果に関わらずこの順位を固定して使う
+    （集計中のランキングが日中に変動しても気にしない、との方針）。"""
+    ranking = get_venue_okuma_ranking()
+    ranked_names = [r["venue_name"] for r in ranking]
+    today_set = set(today_venue_names)
+    rank_map = {}
+    rank = 1
+    for vn in ranked_names:
+        if vn in today_set:
+            rank_map[vn] = rank
+            rank += 1
+    for vn in today_venue_names:
+        if vn not in rank_map:
+            rank_map[vn] = rank
+            rank += 1
+    return rank_map
+
+
+def get_b_class_venue_rank_curve():
+    """新たな参戦ライン仮説の検証用集計（2026-10-20追加・現行PT方式とは完全に別枠）。
+    「1号艇がB級（B1/B2）」のレースのみを対象に、当日の会場順位（venue_day_rank。
+    会場別万舟ランキングをその日開催する会場だけで振り直した順位）が1位〜N位に
+    収まる会場の累積パターンを、N=1から当日最大順位まで集計する（レース単位）。
+    venue_day_rankは2026-10-20以降に予想保存時へ付与する新しい列のため、それより
+    前のデータはNULLとなり自動的に対象外になる（strategy_versionでの絞り込みは不要）。
+    """
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT date, venue_name, race_no,
+                   MAX(venue_day_rank) as venue_day_rank,
+                   COUNT(*) as n_bets,
+                   MAX(is_hit) as race_hit,
+                   SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_return,
+                   MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
+            FROM predictions
+            WHERE bet_type='3連単' AND venue_day_rank IS NOT NULL
+              AND arare_reasons LIKE '%1号B級%'
+            GROUP BY date, venue_name, race_no
+        """).fetchall()
+    rows = [dict(r) for r in rows]
+    if not rows:
+        return []
+
+    by_rank: dict[int, list] = {}
+    for r in rows:
+        by_rank.setdefault(r["venue_day_rank"], []).append(r)
+    max_rank = max(by_rank.keys())
+
+    curve = []
+    cum_races = cum_races_resulted = cum_race_hits = cum_bets_resulted = cum_return = 0
+    for n in range(1, max_rank + 1):
+        for r in by_rank.get(n, []):
+            cum_races += 1
+            if r["has_result"]:
+                cum_races_resulted += 1
+                cum_race_hits += r["race_hit"] or 0
+                cum_bets_resulted += r["n_bets"]
+                cum_return += r["race_return"] or 0
+        curve.append({
+            "top_n": n,
+            "n_races": cum_races,
+            "n_races_resulted": cum_races_resulted,
+            "n_race_hits": cum_race_hits,
+            "hit_rate": round(100 * cum_race_hits / cum_races_resulted, 1) if cum_races_resulted else None,
+            "roi_pct": round(100 * cum_return / (cum_bets_resulted * 100), 1) if cum_bets_resulted else None,
+        })
+    return curve
 
 
 def get_today_okuma_count(date: str = None):

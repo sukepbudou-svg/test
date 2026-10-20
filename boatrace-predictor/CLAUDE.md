@@ -446,6 +446,34 @@ Harville変換（3つの確率を掛け合わせる）で過信が増幅され�
 （`check_venue_cancelled()`自体は残っているが未使用）。再度有効化する場合は、
 実際の開催中止ページの文言を確認したうえで`_CANCELLED_KEYWORDS`を見直すこと。
 
+## 新戦略の検証: 1号艇B級×会場当日順位（2026-10-20追加）
+現行PT方式（荒れPT・オッズ帯5点）とは完全に別枠で、ユーザーが考案した新しい参戦ライン
+仮説を検証するための集計。条件は2つ:
+1. **1号艇がB級（B1/B2、grade_num≤2）** - `_calc_race_pt`が既に判定済みで、該当すると
+   `arare_reasons`に必ず「1号B級」という文言が入る（PT合計が参戦ラインに届かなくても
+   この個別条件の判定自体は毎回記録される）ため、新しい列を追加せず
+   `arare_reasons LIKE '%1号B級%'`で判定できる。
+2. **会場別万舟ランキング（集計中・全期間ベース、`get_venue_okuma_ranking()`）を
+   その日開催する会場だけで当日限定の順位に振り直したもの（venue_day_rank）が
+   1位〜N位に収まるか** - `predictions`テーブルに新しい列`venue_day_rank`を追加し、
+   `src/scheduler/auto_runner.py`の`run_auto()`冒頭（番組表取得・schedule作成の直後、
+   予想ループが始まる前）で`web/database.py`の`compute_today_venue_rank_map()`を
+   1日1回だけ呼び出して固定し、その日のうちは集計中のランキングが変動しても
+   振り直さずそのまま使う（ユーザー了承済み: 日中の順位変動は気にしなくて良い、
+   という方針）。`_predict_one_race()`に`venue_day_rank`引数を追加し、
+   `save_prediction()`で保存する各買い目行に付与する。
+
+集計本体は`web/database.py`の`get_b_class_venue_rank_curve()`。「1号艇B級」のレースのみを
+対象に、当日順位1位〜N位（N=1から当日最大順位まで）の累積パターンでレース数・的中率・
+回収率を算出する（レース単位。回収率だけは実際の賭け金額=買い目点数×100円を使う）。
+`venue_day_rank`は2026-10-20以降に保存される行にしか入らない新しい列なので、それより前の
+データは自動的にNULLとなり対象外になる（strategy_versionでの絞り込みは不要）。
+`/stats`ページに「新戦略: 1号艇B級×会場当日順位」セクションとして表示する。
+
+また、TODAY画面の「◎ 本日の的中」欄（的中したレースのチップ一覧）で、1号艇がB級だった
+的中には表記に「★」を追加する（`arare_reasons`に「1号B級」が含まれるかで判定。A級の的中は
+従来通り変更なし）。この的中チップの一覧だけに適用し、各レース詳細の的中バッジ等は対象外。
+
 ## 注意事項
 - Google Sheets APIは不要（sheets.pyはあるが `auto_runner.py` でオプション扱い）
 - Sheetsを使う場合のみ `.env` に `SPREADSHEET_ID` と `GOOGLE_CREDENTIALS_PATH` が必要

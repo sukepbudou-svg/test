@@ -558,6 +558,48 @@ footer{
   </div>
 </div>
 
+<!-- ── 新戦略: 1号艇B級×会場当日順位 ── -->
+<div class="section">
+  <h2>新戦略: 1号艇B級×会場当日順位<span class="new-badge">10/20〜 新集計</span></h2>
+  <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
+    現行PT方式とは完全に別枠の参戦ライン仮説を検証する集計。「1号艇がB級（B1/B2）」の
+    レースだけを対象に、その日開催する会場を「会場別万舟ランキング（集計中）」で当日限定の
+    順位（1位〜）に振り直し、上位1位〜N位までの会場に参戦した場合の累積成績をNごとに表示する。
+    カウント単位はレース（1レースに複数点の買い目があっても1レースとして数える）。
+    2026-10-20以降に記録されたレースのみが対象（それより前のデータには当日順位が無いため）。
+  </p>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>会場 当日順位</th>
+        <th>レース数</th>
+        <th>結果済</th>
+        <th>的中数</th>
+        <th>的中率</th>
+        <th>回収率</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for c in b_class_rank_curve %}
+      <tr>
+        <td>1〜{{ c.top_n }}位</td>
+        <td>{{ c.n_races }}</td>
+        <td>{{ c.n_races_resulted }}</td>
+        <td>{{ c.n_race_hits }}</td>
+        <td>{% if c.hit_rate is not none %}{{ c.hit_rate }}%{% else %}—{% endif %}</td>
+        <td class="{% if c.roi_pct is none %}{% elif c.roi_pct >= 100 %}roi-good{% elif c.roi_pct >= 50 %}roi-neutral{% else %}roi-bad{% endif %}">
+          {% if c.roi_pct is not none %}{{ c.roi_pct }}%{% else %}—{% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
 <!-- ── 参戦ライン候補別 累積成績 ── -->
 <div class="section">
   <h2>参戦ライン候補別 累積成績（PT≥X の場合）<span class="new-badge">10/16〜 新集計</span></h2>

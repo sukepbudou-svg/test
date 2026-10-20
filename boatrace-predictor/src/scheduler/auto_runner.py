@@ -209,6 +209,15 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
         )
         return
 
+    # その日開催する会場を「会場別万舟ランキング（集計中）」で当日限定の順位に
+    # 振り直す（venue_day_rank、2026-10-20追加）。1日1回だけ計算し、以後は
+    # 集計中のランキングが日中に変動しても振り直さず固定して使う
+    # （ユーザー了承済み: 日中の順位変動は気にしなくて良いとのこと）。
+    from web.database import compute_today_venue_rank_map
+    _today_venue_names = sorted({r["venue_name"] for r in schedule})
+    venue_day_rank_map = compute_today_venue_rank_map(_today_venue_names)
+    print(f"  本日の会場別順位（万舟ランキング基準）: {venue_day_rank_map}\n")
+
     # 2026-09-09に追加した開催中止会場の自動除外機能は、実際のページ文言を検証
     # できないまま実装したところ、2026-09-11に開催中の江戸川を誤って「中止」と
     # 判定し、実在するレースの予想を丸ごと取りこぼす事故が発生したため無効化した。
@@ -302,6 +311,7 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                             db_save_fn=save_prediction,
                             db_sync_fn=sync_race_predictions,
                             day_race_no=day_race_no,
+                            venue_day_rank=venue_day_rank_map.get(race["venue_name"]),
                         )
                         race["pred_rows"] = pred_rows or []
                         race["daily_race_count"] = daily_race_count
@@ -375,6 +385,7 @@ def _predict_one_race(
     db_save_fn=None,
     db_sync_fn=None,
     day_race_no: int = None,
+    venue_day_rank: int = None,
 ) -> list:
     """1レース分の予想を実行してDB(+オプションでSheets)に書き込む。予想行リストを返す"""
     import pandas as pd
@@ -449,6 +460,7 @@ def _predict_one_race(
         row_dict = rec.to_dict()
         row_dict["race_time"] = race_time_str
         row_dict["day_race_no"] = day_race_no
+        row_dict["venue_day_rank"] = venue_day_rank
         # DBに保存（常時）
         if db_save_fn:
             try:

@@ -951,7 +951,7 @@ footer{
       {% if b.is_hit %}
       <span class="hit-chip {{ 'hit-chip-3ren-shinnetsu' if _clbl == '神熱' else 'hit-chip-3ren' }}"
             onclick="scrollToRaceHit('{{ race.venue_name }}', {{ race.race_no }})">
-        {{ race.venue_name }} {{ race.race_no }}R
+        {{ race.venue_name }} {{ race.race_no }}R{% if race.arare_reasons and '1号B級' in race.arare_reasons %} ★{% endif %}
         <b>{{ b.combination }}</b>
         {% if b.actual_payout %}¥{{ "{:,}".format(b.actual_payout) }}{% endif %}
       </span>
