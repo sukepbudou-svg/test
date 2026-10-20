@@ -209,6 +209,25 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
         )
         return
 
+    # 荒天等で当日急に中止になった会場を、その場限りで手動除外するための仕組み
+    # （2026-10-21追加）。2026-09-09に追加した自動検知(check_venue_cancelled)は
+    # 実際のページ文言を検証できないまま実装したため2026-09-11に誤検知で実在する
+    # 江戸川を取りこぼす事故を起こし無効化済み（上記コメント参照）。自動検知を
+    # 再度有効化する代わりに、ユーザーが実際に中止と確認した会場だけを、その日の
+    # 起動時に環境変数SKIP_VENUESで明示的に指定して除外する方式にした。
+    # Windowsでの使い方: その日のコマンドプロンプトで
+    #   set SKIP_VENUES=江戸川
+    #   python main.py --mode auto
+    # と実行する（複数会場はカンマ区切り）。環境変数はそのコマンドプロンプトの
+    # ウィンドウを閉じれば消えるため、翌日新しく開いたウィンドウでは何も指定しない
+    # 限り自動的に全会場が対象に戻る（恒久的な変更ではない）。
+    _skip_venues = {v.strip() for v in os.environ.get("SKIP_VENUES", "").split(",") if v.strip()}
+    if _skip_venues:
+        _before = len(schedule)
+        schedule = [r for r in schedule if r["venue_name"] not in _skip_venues]
+        print(f"  [SKIP_VENUES] 本日限定で除外: {sorted(_skip_venues)}"
+              f"（{_before}→{len(schedule)}レース）\n")
+
     # その日開催する会場を「会場別万舟ランキング（集計中）」で当日限定の順位に
     # 振り直す（venue_day_rank、2026-10-20追加）。1日1回だけ計算し、以後は
     # 集計中のランキングが日中に変動しても振り直さず固定して使う
