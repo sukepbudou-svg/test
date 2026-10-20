@@ -424,6 +424,34 @@ def get_b_class_venue_rank_curve():
 _GRADE_BUCKET_LABELS = {"A1": "A1", "A2": "A2", "B1": "B級(B1/B2)", "B2": "B級(B1/B2)"}
 
 
+def get_boat1_b_class_hit_stats():
+    """的中したレースのうち、1号艇がB級（B1/B2）だったレースが何件あったかを集計する
+    （2026-10-20追加）。的中関連の集計なので現行PT(PT_RESET_FILTER=strategy_version='8')
+    のみ対象。1号艇B級の判定はarare_reasonsに含まれる「1号B級」という文言で行うため
+    （2026-10-16のPT方式差し戻し以降、該当すれば常に記録されている既存の判定文言）、
+    2026-10-20に追加したboat1_grade列より前のデータも2026-10-16以降なら遡って
+    対象になる（A1/A2の区別はできないが、B級かどうかだけなら判定できる）。"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT date, venue_name, race_no,
+                   MAX(is_hit) as race_hit,
+                   MAX(CASE WHEN arare_reasons LIKE '%1号B級%' THEN 1 ELSE 0 END) as is_b_class,
+                   MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
+            FROM predictions
+            WHERE {PT_RESET_FILTER} AND bet_type='3連単'
+            GROUP BY date, venue_name, race_no
+        """).fetchall()
+    hits = [dict(r) for r in rows if r["has_result"] and r["race_hit"]]
+    n_hits = len(hits)
+    n_hits_b_class = sum(1 for r in hits if r["is_b_class"])
+    return {
+        "n_hits": n_hits,
+        "n_hits_b_class": n_hits_b_class,
+        "b_class_rate": round(100 * n_hits_b_class / n_hits, 1) if n_hits else None,
+    }
+
+
 def get_boat1_grade_payout_stats():
     """1号艇の級別（A1/A2/B級）によってレースの実配当額に差があるか検証する集計
     （2026-10-20追加）。的中したかどうか（自分の買い目が当たったか）とは無関係に、

@@ -600,6 +600,27 @@ footer{
   </div>
 </div>
 
+<!-- ── 的中レースの1号艇B級内訳 ── -->
+<div class="section">
+  <h2>的中レースの1号艇B級内訳<span class="new-badge">10/16〜 新集計</span></h2>
+  <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
+    現在のPT方式（10/16〜）で的中したレースのうち、1号艇がB級（B1/B2）だったレースが
+    何件あったかの集計。1号艇B級の判定は2026-10-16以降のarare_reasonsから遡って
+    できるため、2026-10-20に追加したboat1_grade列より前のデータも含む。
+  </p>
+  <div class="kpi-row">
+    <div class="kpi">
+      <div class="kpi-label">的中レース数</div>
+      <div class="kpi-value white">{{ boat1_b_class_hit_stats.n_hits }}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">うち1号艇B級</div>
+      <div class="kpi-value {% if boat1_b_class_hit_stats.n_hits_b_class > 0 %}green{% else %}white{% endif %}">{{ boat1_b_class_hit_stats.n_hits_b_class }}</div>
+      <div class="kpi-sub">{% if boat1_b_class_hit_stats.b_class_rate is not none %}{{ boat1_b_class_hit_stats.b_class_rate }}%{% else %}—{% endif %}</div>
+    </div>
+  </div>
+</div>
+
 <!-- ── 1号艇級別×実配当額 ── -->
 <div class="section">
   <h2>1号艇級別×実配当額<span class="new-badge">10/20〜 新集計</span></h2>
