@@ -109,6 +109,8 @@ def create_app():
                     "nigerate_str": p["nigerate_str"],
                     "boat1_risk": p["boat1_risk"],
                     "day_race_no": p.get("day_race_no"),
+                    "boat1_grade": p.get("boat1_grade"),
+                    "venue_day_rank": p.get("venue_day_rank"),
                     "bets": [],
                 }
             races[key]["bets"].append(p)

@@ -172,6 +172,8 @@ def get_recent_activity(date: str = None, limit: int = 8):
         rows = conn.execute("""
             SELECT venue_name, race_no, arare_score,
                    MAX(bet_label) as bet_label,
+                   MAX(boat1_grade) as boat1_grade,
+                   MAX(venue_day_rank) as venue_day_rank,
                    MAX(created_at) as created_at
             FROM predictions
             WHERE date = ?
