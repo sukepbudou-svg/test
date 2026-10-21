@@ -561,25 +561,45 @@ def get_today_okuma_count(date: str = None):
     """本日、全会場通しで実際に万舟(実配当≥1万円)になったレース数をカウントする。
     的中したかどうか（自分の買い目が当たったか）とは無関係に、レースの実際の結果
     だけを見る集計。strategy_versionとも無関係（選出方式が変わっても意味は変わらない
-    ため、リセット対象にしない）。"""
+    ため、リセット対象にしない）。
+    2026-10-21: 「1号艇がB級のときほど荒れて万舟が出やすいか」を当日ベースで把握
+    できるよう、1号艇B級に絞った内訳と、さらに会場の当日順位1〜5位にも絞った内訳を
+    追加した（boat1_grade/venue_day_rankは2026-10-20以降のデータにしか入らない）。"""
     init_db()
     if date is None:
         date = datetime.now().strftime("%Y-%m-%d")
     with get_conn() as conn:
-        row = conn.execute("""
-            SELECT COUNT(*) as n_races_resulted,
-                   SUM(CASE WHEN actual_payout >= 10000 THEN 1 ELSE 0 END) as n_okuma
-            FROM (
-                SELECT date, venue_name, race_no, MAX(actual_payout) as actual_payout
-                FROM predictions
-                WHERE date=? AND bet_type='3連単' AND result_recorded_at IS NOT NULL
-                GROUP BY date, venue_name, race_no
-            )
-        """, (date,)).fetchone()
-    row = dict(row) if row else {}
+        rows = conn.execute("""
+            SELECT MAX(actual_payout) as actual_payout,
+                   MAX(boat1_grade) as boat1_grade,
+                   MAX(venue_day_rank) as venue_day_rank
+            FROM predictions
+            WHERE date=? AND bet_type='3連単' AND result_recorded_at IS NOT NULL
+            GROUP BY date, venue_name, race_no
+        """, (date,)).fetchall()
+    rows = [dict(r) for r in rows]
+
+    def _count(races):
+        n = len(races)
+        n_okuma = sum(1 for r in races if (r["actual_payout"] or 0) >= 10000)
+        return n, n_okuma
+
+    n_races_resulted, n_okuma = _count(rows)
+    b_rows = [r for r in rows if r["boat1_grade"] in ("B1", "B2")]
+    n_races_b_class, n_okuma_b_class = _count(b_rows)
+    b_top5_rows = [
+        r for r in b_rows
+        if r["venue_day_rank"] is not None and r["venue_day_rank"] <= 5
+    ]
+    n_races_b_top5, n_okuma_b_top5 = _count(b_top5_rows)
+
     return {
-        "n_races_resulted": row.get("n_races_resulted") or 0,
-        "n_okuma": row.get("n_okuma") or 0,
+        "n_races_resulted": n_races_resulted,
+        "n_okuma": n_okuma,
+        "n_races_b_class": n_races_b_class,
+        "n_okuma_b_class": n_okuma_b_class,
+        "n_races_b_top5": n_races_b_top5,
+        "n_okuma_b_top5": n_okuma_b_top5,
     }
 
 

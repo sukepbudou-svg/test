@@ -421,6 +421,8 @@ nav a.active{
 }
 .vor-name{color:var(--white);min-width:52px;flex-shrink:0;}
 .vor-stat{color:#ffcc00;flex-shrink:0;}
+.vor-stat.lbl-shinnetsu{color:#ffcc00;}
+.vor-stat.lbl-pink{color:#ff4da6;}
 .vor-rate{color:var(--dim2);font-size:10px;margin-left:2px;}
 
 /* ══════════════ 本日の進行状況 ══════════════ */
@@ -972,6 +974,14 @@ footer{
       <div class="vor-progress-sub">
         <span class="vor-stat">万舟 {{ today_okuma.n_okuma }}回</span>
         <span class="vor-rate">({{ today_okuma.n_races_resulted }}レース中・実結果ベース)</span>
+      </div>
+      <div class="vor-progress-sub">
+        <span class="vor-stat lbl-shinnetsu">万舟(B級) {{ today_okuma.n_okuma_b_class }}回</span>
+        <span class="vor-rate">({{ today_okuma.n_races_b_class }}レース中)</span>
+      </div>
+      <div class="vor-progress-sub">
+        <span class="vor-stat lbl-pink">万舟(B級×1〜5位) {{ today_okuma.n_okuma_b_top5 }}回</span>
+        <span class="vor-rate">({{ today_okuma.n_races_b_top5 }}レース中)</span>
       </div>
     </div>
 
