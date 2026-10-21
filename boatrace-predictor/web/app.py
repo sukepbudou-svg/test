@@ -15,7 +15,7 @@ from web.database import (
     get_payout_distribution,
     get_pt_score_stats, get_pt_daily_entry_stats, get_pt_summary, get_pt_threshold_curve,
     get_pt_all_time_streaks,
-    get_pt_calibration_stats, get_venue_okuma_ranking, get_race_position_distribution,
+    get_venue_okuma_ranking, get_race_position_distribution,
     get_today_okuma_count,
     get_pt_condition_breakdown, get_odds_band_stats, get_edge_vs_market_stats,
     get_b_class_venue_rank_curve, get_boat1_grade_payout_stats, get_boat1_b_class_hit_stats,
@@ -157,7 +157,6 @@ def create_app():
         pt_daily_entry = get_pt_daily_entry_stats()
         pt_summary = get_pt_summary()
         pt_threshold_curve = get_pt_threshold_curve()
-        pt_calibration = get_pt_calibration_stats()
         pt_condition_breakdown = get_pt_condition_breakdown()
         odds_band_stats = get_odds_band_stats()
         edge_vs_market_stats = get_edge_vs_market_stats()
@@ -176,7 +175,6 @@ def create_app():
                                pt_daily_entry=pt_daily_entry,
                                pt_summary=pt_summary,
                                pt_threshold_curve=pt_threshold_curve,
-                               pt_calibration=pt_calibration,
                                pt_condition_breakdown=pt_condition_breakdown,
                                odds_band_stats=odds_band_stats,
                                edge_vs_market_stats=edge_vs_market_stats,
