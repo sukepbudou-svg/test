@@ -235,6 +235,11 @@ nav a.active{
   border:1px solid rgba(255,204,0,0.35);
   box-shadow:0 0 10px rgba(255,204,0,0.12);
 }
+.tc-row-pink{
+  background:rgba(255,77,166,0.08);
+  border:1px solid rgba(255,77,166,0.35);
+  box-shadow:0 0 10px rgba(255,77,166,0.12);
+}
 .tc-row-total{
   background:rgba(79,143,255,0.06);
   border:1px solid rgba(79,143,255,0.25);
@@ -299,6 +304,7 @@ nav a.active{
 .tc-label.lbl-kokusen{color:#ffaa55;}
 .tc-label.lbl-chuana{color:#40c8e0;}
 .tc-label.lbl-shinnetsu{color:#ffcc00;}
+.tc-label.lbl-pink{color:#ff4da6;}
 .tc-label.lbl-skip{color:#556;}
 .tc-num{
   font-size:20px;font-weight:700;text-align:right;
@@ -308,6 +314,7 @@ nav a.active{
 .tc-num.lbl-kokusen{color:#ffaa55;text-shadow:0 0 10px rgba(255,170,85,0.5);}
 .tc-num.lbl-chuana{color:#40c8e0;text-shadow:0 0 10px rgba(64,200,224,0.5);}
 .tc-num.lbl-shinnetsu{color:#ffcc00;text-shadow:0 0 10px rgba(255,204,0,0.6);}
+.tc-num.lbl-pink{color:#ff4da6;text-shadow:0 0 10px rgba(255,77,166,0.6);}
 .tc-num.lbl-skip{color:#334;}
 .tc-sep{color:rgba(255,255,255,0.12);font-size:13px;text-align:center;}
 .tc-hit{
@@ -884,11 +891,10 @@ footer{
   </div>
 
   <div class="today-counts">
-    {% for s in pt_counts %}
-    {% set is_shinnetsu = s.pt >= pt_min_score %}
-    <div class="tc-row {% if is_shinnetsu %}tc-row-shinnetsu{% endif %}" style="cursor:pointer;" onclick="togglePtDetail({{ s.pt }})">
-      <span class="tc-label {% if is_shinnetsu %}lbl-shinnetsu{% else %}lbl-skip{% endif %}">PT{{ s.pt }}</span>
-      <span class="tc-num {% if is_shinnetsu %}lbl-shinnetsu{% else %}lbl-skip{% endif %}">{{ s.races }}</span>
+    {% for s in grade_counts %}
+    <div class="tc-row {% if s.color == 'shinnetsu' %}tc-row-shinnetsu{% elif s.color == 'pink' %}tc-row-pink{% endif %}" style="cursor:pointer;" onclick="togglePtDetail('{{ s.tier }}')">
+      <span class="tc-label lbl-{{ s.color }}">{{ s.label }}</span>
+      <span class="tc-num lbl-{{ s.color }}">{{ s.races }}</span>
       <span class="tc-sep">|</span>
       <span class="tc-hit {% if s.hits > 0 %}has-hit{% endif %}">◎ {{ s.hits }}</span>
       <span class="tc-freq">{% if s.hits_per is not none %}{{ s.hits_per }}回に1回{% else %}—{% endif %}</span>
@@ -900,9 +906,8 @@ footer{
         {% if s.pnl >= 0 %}+{% endif %}¥{{ "{:,}".format(s.pnl) }}
       </span>
     </div>
-    <div class="tc-detail" id="pt-detail-{{ s.pt }}" style="display:none;">
-      {% for race in race_list %}
-        {% if race.arare_score == s.pt %}
+    <div class="tc-detail" id="pt-detail-{{ s.tier }}" style="display:none;">
+      {% for race in s.race_objs %}
         {% set rr = namespace(found=none, hit=false, payout=0, combo='') %}
         {% for b in race.bets %}
           {% if b.result_recorded_at and rr.found is none %}
@@ -911,7 +916,8 @@ footer{
           {% endif %}
           {% if b.is_hit %}{% set rr.hit = true %}{% set rr.payout = b.actual_payout %}{% endif %}
         {% endfor %}
-        <div class="tc-detail-row {% if rr.hit %}{% if is_shinnetsu %}tc-detail-hit-shinnetsu{% else %}tc-detail-hit{% endif %}{% endif %}"
+        {% if s.color == 'skip' %}{% set _dhit_cls = "tc-detail-hit" %}{% else %}{% set _dhit_cls = "tc-detail-hit-" ~ s.color %}{% endif %}
+        <div class="tc-detail-row {% if rr.hit %}{{ _dhit_cls }}{% endif %}"
              onclick="event.stopPropagation(); scrollToRace('{{ race.venue_name }}', {{ race.race_no }})">
           <span class="tc-detail-race">{{ race.venue_name }} {{ race.race_no }}R</span>
           {% if rr.found is none %}
@@ -922,23 +928,22 @@ footer{
             <span class="tc-detail-result tc-detail-miss">✗ {{ rr.combo }} ¥{{ "{:,}".format(rr.found.actual_payout) }}</span>
           {% endif %}
         </div>
-        {% endif %}
       {% endfor %}
     </div>
     {% endfor %}
-    {% if pt_total %}
+    {% if grade_total %}
     <div class="tc-row tc-row-total">
       <span class="tc-label tc-total-label">本日合計</span>
-      <span class="tc-num tc-total-label">{{ pt_total.races }}</span>
+      <span class="tc-num tc-total-label">{{ grade_total.races }}</span>
       <span class="tc-sep">|</span>
-      <span class="tc-hit {% if pt_total.hits > 0 %}has-hit{% endif %}">◎ {{ pt_total.hits }}</span>
-      <span class="tc-freq">{% if pt_total.hits_per is not none %}{{ pt_total.hits_per }}回に1回{% else %}—{% endif %}</span>
+      <span class="tc-hit {% if grade_total.hits > 0 %}has-hit{% endif %}">◎ {{ grade_total.hits }}</span>
+      <span class="tc-freq">{% if grade_total.hits_per is not none %}{{ grade_total.hits_per }}回に1回{% else %}—{% endif %}</span>
       <span class="tc-sep">|</span>
-      <span class="tc-streak {% if pt_total.miss_streak >= 5 %}tc-streak-hot{% elif pt_total.miss_streak >= 1 %}tc-streak-warn{% endif %}">
-        {% if pt_total.miss_streak == 0 %}0連{% else %}{{ pt_total.miss_streak }}連外{% endif %}
+      <span class="tc-streak {% if grade_total.miss_streak >= 5 %}tc-streak-hot{% elif grade_total.miss_streak >= 1 %}tc-streak-warn{% endif %}">
+        {% if grade_total.miss_streak == 0 %}0連{% else %}{{ grade_total.miss_streak }}連外{% endif %}
       </span>
-      <span class="tc-pnl {% if pt_total.pnl >= 0 %}tc-pnl-pos{% else %}tc-pnl-neg{% endif %}">
-        {% if pt_total.pnl >= 0 %}+{% endif %}¥{{ "{:,}".format(pt_total.pnl) }}
+      <span class="tc-pnl {% if grade_total.pnl >= 0 %}tc-pnl-pos{% else %}tc-pnl-neg{% endif %}">
+        {% if grade_total.pnl >= 0 %}+{% endif %}¥{{ "{:,}".format(grade_total.pnl) }}
       </span>
     </div>
     {% endif %}

@@ -820,23 +820,93 @@ def get_pt_score_stats():
     return result
 
 
-def get_pt_all_time_streaks():
-    """PT値ごと・全体の、日付をまたいだ全期間での現在の連続不的中数（PT_RESET_FILTER限定）
-    TODAY画面のPT別集計で「当日分だけ」ではなく前日以前も込みで連続不的中を数えるために使う。
-    的中関連の集計なので、オッズ帯・選出方式を刷新した2026-09-04以降のみを対象にする。"""
+def _grade_tier_key(boat1_grade: str) -> str | None:
+    """1号艇の級(A1/A2/B1/B2)からTODAY画面の1号艇級別集計タイアーを決める共通ロジック
+    （2026-10-21、PT別集計を置き換えるために追加）。B1・B2はまとめて1タイアーにする。
+    不明・未設定（2026-10-20より前のデータ）はNoneで対象外にする。"""
+    if boat1_grade in ("B1", "B2"):
+        return "B1B2_ALL"
+    if boat1_grade in ("A1", "A2"):
+        return boat1_grade
+    return None
+
+
+def get_grade_tier_all_time_streaks():
+    """1号艇級別タイアー(A1/A2/B1B2_ALL/B1B2_TOP5)ごと・全体の、日付をまたいだ全期間
+    での現在の連続不的中数（PT_RESET_FILTER限定・2026-10-21追加）。TODAY画面の1号艇級別
+    集計で「当日分だけ」ではなく前日以前も込みで連続不的中を数えるために使う。
+    B1B2_TOP5はB1B2_ALLの内数（当日順位1〜5位のみに絞った別系列）であり、overallの
+    算出には二重計上しないよう含めない（B1B2_ALL側に既に含まれているため）。
+    boat1_gradeは2026-10-20以降のデータにしか入らないため、それより前は対象外。"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute(f"""
-            SELECT MAX(arare_score) as pt, MAX(is_hit) as is_hit
+            SELECT MAX(boat1_grade) as boat1_grade,
+                   MAX(venue_day_rank) as venue_day_rank,
+                   MAX(is_hit) as is_hit
             FROM predictions
             WHERE {PT_RESET_FILTER} AND bet_type='3連単' AND result_recorded_at IS NOT NULL
+              AND boat1_grade IS NOT NULL AND boat1_grade != ''
             GROUP BY date, venue_name, race_no
             ORDER BY MAX(id) DESC
         """).fetchall()
     rows = [dict(r) for r in rows]
-    by_pt = _calc_streaks(rows, lambda r: r["pt"])
+    rows = [r for r in rows if _grade_tier_key(r["boat1_grade"]) is not None]
+
+    by_tier = _calc_streaks(rows, lambda r: _grade_tier_key(r["boat1_grade"]))
+    top5_rows = [
+        r for r in rows
+        if r["boat1_grade"] in ("B1", "B2")
+        and r["venue_day_rank"] is not None and r["venue_day_rank"] <= 5
+    ]
+    by_tier["B1B2_TOP5"] = _calc_streaks(top5_rows, lambda r: True).get(True, 0)
     overall = _calc_streaks(rows, lambda r: True)
-    return {"by_pt": by_pt, "overall": overall.get(True, 0)}
+    return {"by_tier": by_tier, "overall": overall.get(True, 0)}
+
+
+def get_grade_tier_stats():
+    """1号艇級別タイアー(A1/A2/B1B2_ALL/B1B2_TOP5/OVERALL)ごとの全期間の的中率・
+    「何回に1回」集計（PT_RESET_FILTER限定・2026-10-21追加）。TODAY画面の1号艇級別
+    集計の「回に1回」表示に使う。OVERALLはB1B2_TOP5を二重計上しないようA1+A2+B1B2_ALL
+    のみで算出する（B1B2_TOP5はB1B2_ALLの内数のため）。"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT date, venue_name, race_no,
+                   MAX(boat1_grade) as boat1_grade,
+                   MAX(venue_day_rank) as venue_day_rank,
+                   MAX(is_hit) as race_hit,
+                   MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
+            FROM predictions
+            WHERE {PT_RESET_FILTER} AND bet_type='3連単'
+              AND boat1_grade IS NOT NULL AND boat1_grade != ''
+            GROUP BY date, venue_name, race_no
+        """).fetchall()
+    rows = [dict(r) for r in rows if r["has_result"]]
+
+    def _mk(races):
+        n = len(races)
+        hits = sum(r["race_hit"] or 0 for r in races)
+        return {
+            "n_races_resulted": n,
+            "n_race_hits": hits,
+            "hits_per": round(n / hits, 1) if hits else None,
+        }
+
+    a1 = [r for r in rows if r["boat1_grade"] == "A1"]
+    a2 = [r for r in rows if r["boat1_grade"] == "A2"]
+    b_all = [r for r in rows if r["boat1_grade"] in ("B1", "B2")]
+    b_top5 = [
+        r for r in b_all
+        if r["venue_day_rank"] is not None and r["venue_day_rank"] <= 5
+    ]
+    overall = a1 + a2 + b_all
+
+    return {
+        "A1": _mk(a1), "A2": _mk(a2),
+        "B1B2_ALL": _mk(b_all), "B1B2_TOP5": _mk(b_top5),
+        "OVERALL": _mk(overall),
+    }
 
 
 def get_pt_daily_entry_stats():

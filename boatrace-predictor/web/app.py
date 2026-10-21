@@ -14,7 +14,7 @@ from web.database import (
     get_recent_activity, get_activity_watermark,
     get_payout_distribution,
     get_pt_score_stats, get_pt_daily_entry_stats, get_pt_summary, get_pt_threshold_curve,
-    get_pt_all_time_streaks,
+    get_grade_tier_stats, get_grade_tier_all_time_streaks,
     get_venue_okuma_ranking, get_race_position_distribution,
     get_today_okuma_count,
     get_pt_condition_breakdown, get_odds_band_stats, get_edge_vs_market_stats,
@@ -24,66 +24,83 @@ from web.database import (
 from src.model.predictor import PT_MIN_SCORE
 
 
-def _build_pt_counts(race_list, all_time_streaks=None, all_time_pt_stats=None):
-    """TODAY画面のPT別集計を計算する（1点=100円換算・的中控除後の収支は当日分、
-    連続不的中数・何回に1回は前日以前も込みの全期間分）
+# TODAY画面「本日の進行状況」の1号艇級別集計（2026-10-21、PT別集計を置き換え）。
+# B1B2_TOP5はB1B2_ALLの内数（当日順位1〜5位の会場だけに絞った別系列）であり、
+# 本日合計の算出では二重計上しないようA1+A2+B1B2_ALLのみを合算する。
+_GRADE_TIER_META = [
+    {"tier": "A1", "label": "A1", "color": "skip"},
+    {"tier": "A2", "label": "A2", "color": "skip"},
+    {"tier": "B1B2_ALL", "label": "B1B2(全順位)", "color": "shinnetsu"},
+    {"tier": "B1B2_TOP5", "label": "B1B2(本日1〜5位)", "color": "pink"},
+]
+
+
+def _sum_races(races):
+    """レースのリストから(件数, 的中数, 掛け金, 払戻)を集計する共通ロジック"""
+    n_races = len(races)
+    n_hits = 0
+    cost = 0
+    ret = 0
+    for race in races:
+        race_hit = False
+        for b in race["bets"]:
+            cost += 100
+            if b.get("is_hit"):
+                race_hit = True
+                ret += b.get("actual_payout") or 0
+        if race_hit:
+            n_hits += 1
+    return n_races, n_hits, cost, ret
+
+
+def _build_grade_counts(race_list, all_time_streaks=None, all_time_grade_stats=None):
+    """TODAY画面の1号艇級別集計を計算する（2026-10-21、PT別集計(_build_pt_counts)を
+    置き換え）。A1・A2・B1B2(全順位)・B1B2(本日順位1〜5位)の4行+本日合計を返す
+    （1点=100円換算・的中控除後の収支は当日分、連続不的中数・何回に1回は前日以前も
+    込みの全期間分）。
     Args:
-        all_time_streaks: get_pt_all_time_streaks()の戻り値
-            {"by_pt": {pt: streak}, "overall": streak}。指定なければ連続不的中数は0扱い。
-        all_time_pt_stats: get_pt_score_stats()の戻り値（PT毎のn_races_resulted/n_race_hits
-            から「何回に1回」を全期間ベースで算出するために使う）。指定なければ計算不可扱い。
-    Returns: (pt_counts: list[dict], pt_total: dict)
+        all_time_streaks: get_grade_tier_all_time_streaks()の戻り値
+        all_time_grade_stats: get_grade_tier_stats()の戻り値（「何回に1回」用）
+    Returns: (grade_counts: list[dict], grade_total: dict)
     """
-    all_time_streaks = all_time_streaks or {"by_pt": {}, "overall": 0}
-    by_pt_streak = all_time_streaks.get("by_pt", {})
-    all_time_pt_stats = all_time_pt_stats or []
-    by_pt_alltime = {s["pt"]: s for s in all_time_pt_stats}
-    total_alltime_races = sum(s.get("n_races_resulted") or 0 for s in all_time_pt_stats)
-    total_alltime_hits = sum(s.get("n_race_hits") or 0 for s in all_time_pt_stats)
+    all_time_streaks = all_time_streaks or {"by_tier": {}, "overall": 0}
+    by_tier_streak = all_time_streaks.get("by_tier", {})
+    all_time_grade_stats = all_time_grade_stats or {}
 
-    groups = {}
-    for race in race_list:
-        pt = race["arare_score"]
-        groups.setdefault(pt, []).append(race)
+    a1_races = [r for r in race_list if r.get("boat1_grade") == "A1"]
+    a2_races = [r for r in race_list if r.get("boat1_grade") == "A2"]
+    b_all_races = [r for r in race_list if r.get("boat1_grade") in ("B1", "B2")]
+    b_top5_races = [
+        r for r in b_all_races
+        if r.get("venue_day_rank") is not None and r["venue_day_rank"] <= 5
+    ]
+    tier_races = {
+        "A1": a1_races, "A2": a2_races,
+        "B1B2_ALL": b_all_races, "B1B2_TOP5": b_top5_races,
+    }
 
-    pt_counts = []
-    total_races = total_hits = total_cost = total_return = 0
-
-    for pt in sorted(groups.keys(), reverse=True):
-        races = groups[pt]
-        n_races = len(races)
-        n_hits = 0
-        cost = 0
-        ret = 0
-        for race in races:
-            race_hit = False
-            for b in race["bets"]:
-                cost += 100
-                if b.get("is_hit"):
-                    race_hit = True
-                    ret += b.get("actual_payout") or 0
-            if race_hit:
-                n_hits += 1
-        pnl = ret - cost
-
-        pt_counts.append({
-            "pt": pt, "races": n_races, "hits": n_hits,
-            "cost": cost, "return": ret, "pnl": pnl,
-            "miss_streak": by_pt_streak.get(pt, 0),
-            "hits_per": by_pt_alltime.get(pt, {}).get("race_hits_per"),
+    grade_counts = []
+    for meta in _GRADE_TIER_META:
+        tier = meta["tier"]
+        n_races, n_hits, cost, ret = _sum_races(tier_races[tier])
+        alltime = all_time_grade_stats.get(tier, {})
+        grade_counts.append({
+            "tier": tier, "label": meta["label"], "color": meta["color"],
+            "races": n_races, "hits": n_hits,
+            "cost": cost, "return": ret, "pnl": ret - cost,
+            "miss_streak": by_tier_streak.get(tier, 0),
+            "hits_per": alltime.get("hits_per"),
+            "race_objs": tier_races[tier],
         })
-        total_races += n_races
-        total_hits += n_hits
-        total_cost += cost
-        total_return += ret
 
-    pt_total = {
+    total_races, total_hits, total_cost, total_return = _sum_races(a1_races + a2_races + b_all_races)
+    grade_total = {
         "races": total_races, "hits": total_hits,
         "cost": total_cost, "return": total_return, "pnl": total_return - total_cost,
         "miss_streak": all_time_streaks.get("overall", 0),
-        "hits_per": round(total_alltime_races / total_alltime_hits, 1) if total_alltime_hits else None,
+        "hits_per": all_time_grade_stats.get("OVERALL", {}).get("hits_per"),
     }
-    return pt_counts, pt_total
+    return grade_counts, grade_total
 
 
 def create_app():
@@ -124,7 +141,9 @@ def create_app():
             venues[vn].append(race)
         venue_list = [{"venue_name": k, "races": v} for k, v in venues.items()]
         venue_okuma_ranking = get_venue_okuma_ranking()
-        pt_counts, pt_total = _build_pt_counts(race_list, get_pt_all_time_streaks(), get_pt_score_stats())
+        grade_counts, grade_total = _build_grade_counts(
+            race_list, get_grade_tier_all_time_streaks(), get_grade_tier_stats()
+        )
         race_position_distribution = get_race_position_distribution()
         today_okuma = get_today_okuma_count(date)
         # 「現在何R目か」は記録済みレース数(race_list|length)ではなく、本日の全番組表
@@ -133,8 +152,8 @@ def create_app():
         day_race_nos = [r["day_race_no"] for r in race_list if r.get("day_race_no") is not None]
         today_progress = max(day_race_nos) if day_race_nos else len(race_list)
         return render_template("index.html", date=date, race_list=race_list, venue_list=venue_list,
-                               pt_min_score=PT_MIN_SCORE, venue_okuma_ranking=venue_okuma_ranking,
-                               pt_counts=pt_counts, pt_total=pt_total,
+                               venue_okuma_ranking=venue_okuma_ranking,
+                               grade_counts=grade_counts, grade_total=grade_total,
                                race_position_distribution=race_position_distribution,
                                today_progress=today_progress, today_okuma=today_okuma)
 
