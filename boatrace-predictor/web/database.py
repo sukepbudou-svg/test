@@ -75,6 +75,63 @@ def init_db():
         # 行を'8'に戻し、リセット前のデータと再び地続きにする（既に'9'が無ければ無害な空振り）。
         conn.execute("UPDATE predictions SET strategy_version='8' WHERE strategy_version='9'")
 
+        _backfill_venue_day_rank(conn)
+
+
+def _backfill_venue_day_rank(conn):
+    """venue_day_rank列(2026-10-20新設)がNULLの過去データ（2026-10-16〜10-19、
+    1号艇B級の判定自体はarare_reasonsの文言から遡って判定できる期間）に、現在の
+    会場別万舟ランキングを使って当日順位を遡って埋める（1回限りの移行処理、
+    2026-10-21追加）。「新戦略 日別サマリー」等をできる限り10/16まで遡って見たい、
+    との要望に対応。venue_day_rankが既に入っている行は対象外のため無害に繰り返せる。
+    init_db()から同じconnを使って呼ばれるため、get_venue_okuma_ranking()等
+    （内部でinit_db()を呼ぶため再帰してしまう）は使わずSQLを直接実行する。
+    （注: boat1_grade列はA1/A2/B1/B2の区別までは遡って復元できないため対象外。
+    「1号艇級別×実配当額」等の集計は引き続き2026-10-20以降のみが対象）"""
+    null_dates = [r["date"] for r in conn.execute(
+        "SELECT DISTINCT date FROM predictions WHERE venue_day_rank IS NULL"
+    ).fetchall()]
+    if not null_dates:
+        return
+    rank_rows = conn.execute(f"""
+        SELECT venue_name,
+               COUNT(*) as n_races,
+               SUM(CASE WHEN actual_payout >= 10000 THEN 1 ELSE 0 END) as n_okuma
+        FROM (
+            SELECT date, venue_name, race_no, MAX(actual_payout) as actual_payout
+            FROM predictions
+            WHERE bet_type='3連単' AND result_recorded_at IS NOT NULL AND {PT_ACCUMULATE_FILTER}
+            GROUP BY date, venue_name, race_no
+        )
+        GROUP BY venue_name
+    """).fetchall()
+    ranked_names = [
+        r["venue_name"] for r in sorted(
+            (dict(r) for r in rank_rows),
+            key=lambda x: (-(x["n_okuma"] / x["n_races"] if x["n_races"] else 0), -x["n_okuma"])
+        )
+    ]
+    for date in null_dates:
+        today_venues = [r["venue_name"] for r in conn.execute(
+            "SELECT DISTINCT venue_name FROM predictions WHERE date=? AND venue_day_rank IS NULL",
+            (date,)
+        ).fetchall()]
+        rank_map = {}
+        rank = 1
+        for vn in ranked_names:
+            if vn in today_venues:
+                rank_map[vn] = rank
+                rank += 1
+        for vn in today_venues:
+            if vn not in rank_map:
+                rank_map[vn] = rank
+                rank += 1
+        for vn, r in rank_map.items():
+            conn.execute(
+                "UPDATE predictions SET venue_day_rank=? WHERE date=? AND venue_name=? AND venue_day_rank IS NULL",
+                (r, date, vn)
+            )
+
 
 def save_race_preview(date: str, rows: list):
     """朝一プレビュー（2026-10-21追加）: 番組表ダウンロード直後、各レースの実際の
