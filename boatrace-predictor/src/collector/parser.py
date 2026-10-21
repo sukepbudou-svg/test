@@ -106,29 +106,41 @@ def parse_program(txt_path: Path) -> pd.DataFrame:
         )
         if boat_match and venue_code and race_no:
             g = boat_match.groups()
-            records.append({
-                "date": date_str,
-                "venue_code": venue_code,
-                "venue_name": VENUE_CODES.get(venue_code, "不明"),
-                "race_no": race_no,
-                "boat_no": int(g[0]),
-                "racer_no": int(g[1]),
-                "racer_name": g[2].strip(),
-                "age": int(g[3]),
-                "branch": g[4].strip(),
-                "weight": int(g[5]),
-                "grade": g[6],
-                "national_win_rate": float(g[7]),
-                "national_2rate": float(g[8]),
-                "local_win_rate": float(g[9]),
-                "local_2rate": float(g[10]),
-                "motor_no": int(g[11]),
-                "motor_2rate": float(g[12]),
-                "boat_no_equip": int(g[13]),
-                "boat_2rate": float(g[14]),
-                "scheduled_time": scheduled_time,
-                "meet_grade": meet_grade,
-            })
+            try:
+                record = {
+                    "date": date_str,
+                    "venue_code": venue_code,
+                    "venue_name": VENUE_CODES.get(venue_code, "不明"),
+                    "race_no": race_no,
+                    "boat_no": int(g[0]),
+                    "racer_no": int(g[1]),
+                    "racer_name": g[2].strip(),
+                    "age": int(g[3]),
+                    "branch": g[4].strip(),
+                    "weight": int(g[5]),
+                    "grade": g[6],
+                    "national_win_rate": float(g[7]),
+                    "national_2rate": float(g[8]),
+                    "local_win_rate": float(g[9]),
+                    "local_2rate": float(g[10]),
+                    "motor_no": int(g[11]),
+                    "motor_2rate": float(g[12]),
+                    "boat_no_equip": int(g[13]),
+                    "boat_2rate": float(g[14]),
+                    "scheduled_time": scheduled_time,
+                    "meet_grade": meet_grade,
+                }
+            except ValueError:
+                # 2026-10-22: まれに数値フィールド間の空白が想定と異なり、正規表現が
+                # 複数の数値を1つに連結して取り込んでしまう行があり（例:
+                # "50.4110.00100.00"）、float変換で例外が起きてプログラム全体が
+                # 落ちる不具合があった。1行の不整合で当日の予想が全く動かなく
+                # なる方が深刻なため、その行だけ警告を出してスキップし、残りの
+                # 行は通常通り処理を続ける。
+                print(f"[WARN] 番組表パース失敗（この行はスキップ）: "
+                      f"{venue_code} {race_no}R: {line.strip()!r}")
+                continue
+            records.append(record)
 
     df = pd.DataFrame(records)
     has_time = df["scheduled_time"].notna().any() if "scheduled_time" in df.columns else False
