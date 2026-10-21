@@ -895,14 +895,23 @@ def _classify_pt_pattern(reasons: str) -> str:
     """arare_reasons（レース単位の加点理由テキスト）の文言から、荒れPTのA〜C区分
     のうちどれが加点に寄与したかを判定する（DBに区分ごとのフラグを持たせていないため）。
     2026-10-16にPTの計算式を刷新したため区分も合わせて更新（A:1号艇の弱さ/
-    B:外艇の脅威/C:環境条件）。"""
+    B:外艇の脅威/C:環境条件）。
+
+    2026-10-21: Cから「一般戦」を除外した。一般戦（meet_grade_num<=1、SG/G1/G2/G3
+    以外の通常開催）は大多数のレースで該当する、ほぼ常にTrueになる条件のため、
+    これを含めるとCが参戦ラインに乗った全レースでほぼ必ず発火してしまい、
+    「Aだけ」「Bだけ」「A+Bだけ」というパターンが実質観測不可能になっていた
+    （PT_MIN_SCORE到達には他の条件との組み合わせが必要なため）。除外後はCが
+    本来の「風・波・荒れ会場」という環境要因だけを反映するようになり、A単独・
+    B単独・A+B単独のパターンも実際に出現し得るようになる（PTスコア自体への
+    一般戦の加点は変更せず、この区分判定だけの変更）。"""
     reasons = reasons or ""
     cats = []
     if "1号ST" in reasons or "1号M" in reasons or "1号B級" in reasons or "1号2率" in reasons:
         cats.append("A")
     if "展示最速" in reasons or "号A1" in reasons or "ST速" in reasons:
         cats.append("B")
-    if "風速" in reasons or "波高" in reasons or "荒れ会場" in reasons or "江戸川" in reasons or "一般戦" in reasons:
+    if "風速" in reasons or "波高" in reasons or "荒れ会場" in reasons or "江戸川" in reasons:
         cats.append("C")
     return "+".join(cats) if cats else "(該当なし)"
 
