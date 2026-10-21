@@ -237,6 +237,30 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
     venue_day_rank_map = compute_today_venue_rank_map(_today_venue_names)
     print(f"  本日の会場別順位（万舟ランキング基準）: {venue_day_rank_map}\n")
 
+    # 朝一プレビュー（2026-10-21追加）: 1号艇の級は番組表に最初から入っている
+    # 静的情報（展示タイム等の直前情報とは違う）なので、各レースの実際の予想
+    # （発走10分前に生成）を待たずに、番組表から直接1号艇の級を先読みして
+    # race_previewテーブルに保存する。ユーザーが「朝一の時点で今日のB級レースを
+    # 全部一覧でプレビューしたい」と要望したため追加。
+    from web.database import save_race_preview
+    _boat1_grade_by_key = {
+        (str(row.get("venue_code", "")).zfill(2), int(row.get("race_no", 0) or 0)): row.get("grade", "")
+        for _, row in df_program[df_program.get("boat_no") == 1].iterrows()
+    } if "boat_no" in df_program.columns else {}
+    _preview_rows = [
+        {
+            "venue_name": race["venue_name"],
+            "race_no": race["race_no"],
+            "race_time": race.get("scheduled_time_str", ""),
+            "boat1_grade": _boat1_grade_by_key.get((race["venue_code"], race["race_no"]), ""),
+            "venue_day_rank": venue_day_rank_map.get(race["venue_name"]),
+        }
+        for race in schedule
+    ]
+    save_race_preview(today.strftime("%Y-%m-%d"), _preview_rows)
+    _b_class_preview_count = sum(1 for r in _preview_rows if r["boat1_grade"] in ("B1", "B2"))
+    print(f"  朝一プレビュー保存: {len(_preview_rows)}レース分（1号艇B級: {_b_class_preview_count}レース）\n")
+
     # 2026-09-09に追加した開催中止会場の自動除外機能は、実際のページ文言を検証
     # できないまま実装したところ、2026-09-11に開催中の江戸川を誤って「中止」と
     # 判定し、実在するレースの予想を丸ごと取りこぼす事故が発生したため無効化した。

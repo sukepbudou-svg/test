@@ -44,6 +44,18 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_pred_date ON predictions(date);
             CREATE INDEX IF NOT EXISTS idx_pred_venue_race ON predictions(date, venue_name, race_no);
+
+            CREATE TABLE IF NOT EXISTS race_preview (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                venue_name TEXT,
+                race_no INTEGER,
+                race_time TEXT,
+                boat1_grade TEXT,
+                venue_day_rank INTEGER,
+                UNIQUE(date, venue_name, race_no)
+            );
+            CREATE INDEX IF NOT EXISTS idx_preview_date ON race_preview(date);
         """)
         # 既存DBへのマイグレーション
         for col in ["race_time TEXT", "race_grade TEXT", "okuma_signal_count INTEGER DEFAULT 0",
@@ -62,6 +74,46 @@ def init_db():
         # ユーザーから「データが消えた」との指摘を受けて即日revert。その間に'9'で保存された
         # 行を'8'に戻し、リセット前のデータと再び地続きにする（既に'9'が無ければ無害な空振り）。
         conn.execute("UPDATE predictions SET strategy_version='8' WHERE strategy_version='9'")
+
+
+def save_race_preview(date: str, rows: list):
+    """朝一プレビュー（2026-10-21追加）: 番組表ダウンロード直後、各レースの実際の
+    予想（発走10分前に生成）を待たずに、1号艇の級・会場の当日順位を先読みして
+    保存する。1号艇の級は番組表に最初から入っている静的情報のため、朝のうちに
+    全レース分わかる（展示タイム等の直前情報とは違う）。
+    rows: [{"venue_name", "race_no", "race_time", "boat1_grade", "venue_day_rank"}, ...]
+    同じ(date, venue_name, race_no)は上書き（再起動しても最新の番組表内容に揃う）。"""
+    init_db()
+    with get_conn() as conn:
+        for r in rows:
+            conn.execute("""
+                INSERT INTO race_preview (date, venue_name, race_no, race_time, boat1_grade, venue_day_rank)
+                VALUES (?,?,?,?,?,?)
+                ON CONFLICT(date, venue_name, race_no) DO UPDATE SET
+                    race_time=excluded.race_time,
+                    boat1_grade=excluded.boat1_grade,
+                    venue_day_rank=excluded.venue_day_rank
+            """, (
+                date, r.get("venue_name", ""), int(r.get("race_no", 0) or 0),
+                str(r.get("race_time", "")), str(r.get("boat1_grade", "")),
+                r.get("venue_day_rank"),
+            ))
+
+
+def get_race_preview(date: str = None):
+    """朝一プレビュー（get_race_preview_summaryと対で使う、2026-10-21追加）の
+    当日分を取得する。"""
+    init_db()
+    if date is None:
+        date = datetime.now().strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT venue_name, race_no, race_time, boat1_grade, venue_day_rank
+            FROM race_preview
+            WHERE date = ?
+            ORDER BY race_time, venue_name, race_no
+        """, (date,)).fetchall()
+    return [dict(r) for r in rows]
 
 
 def sync_race_predictions(date: str, venue_name: str, race_no: int, combinations: list):

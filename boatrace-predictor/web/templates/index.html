@@ -444,6 +444,32 @@ nav a.active{
   display:flex;align-items:baseline;gap:4px;
 }
 
+/* ══════════════ 本日のB級レース（朝一プレビュー） ══════════════ */
+.vor-preview{margin-top:16px;}
+.vor-preview-toggle{cursor:pointer;}
+.vor-preview-toggle:hover .vor-rate{color:var(--white);}
+.vor-preview-list{
+  margin-top:6px;
+  max-height:220px;overflow-y:auto;
+  display:flex;flex-direction:column;gap:3px;
+  padding-right:2px;
+}
+.vor-preview-row{
+  display:flex;align-items:center;gap:8px;
+  padding:3px 6px;border-radius:4px;
+  background:rgba(255,255,255,0.03);
+  font-family:var(--font-mono);font-size:11px;
+}
+.vor-preview-time{color:var(--dim2);min-width:34px;flex-shrink:0;}
+.vor-preview-venue{color:var(--white);flex:1;}
+.vor-preview-grade{font-weight:700;flex-shrink:0;}
+.vor-preview-grade.lbl-shinnetsu{color:#ffcc00;}
+.vor-preview-grade.lbl-pink{color:#ff4da6;}
+.vor-preview-empty{
+  font-family:var(--font-mono);font-size:11px;color:var(--dim2);
+  padding:6px 4px;
+}
+
 /* ══════════════ レース位置別 的中分布 ══════════════ */
 .vor-position-dist{margin-top:16px;}
 .vor-pos-grid{
@@ -985,6 +1011,29 @@ footer{
       </div>
     </div>
 
+    <div class="vor-preview">
+      <div class="vor-title">本日のB級レース（朝一プレビュー）</div>
+      <div class="vor-progress-sub vor-preview-toggle" onclick="togglePreviewList()">
+        <span class="vor-stat lbl-shinnetsu">B級 {{ preview_b_class|length }}レース</span>
+        <span class="vor-rate" id="preview-toggle-arrow">▾クリックで一覧</span>
+      </div>
+      <div class="vor-progress-sub">
+        <span class="vor-stat lbl-pink">B級×1〜5位 {{ preview_b_top5|length }}レース</span>
+      </div>
+      <div class="vor-preview-list" id="b-preview-list" style="display:none;">
+        {% for r in preview_b_class %}
+        {% set is_top5 = r.venue_day_rank is not none and r.venue_day_rank <= 5 %}
+        <div class="vor-preview-row">
+          <span class="vor-preview-time">{{ r.race_time }}</span>
+          <span class="vor-preview-venue">{{ r.venue_name }} {{ r.race_no }}R</span>
+          <span class="vor-preview-grade {{ 'lbl-pink' if is_top5 else 'lbl-shinnetsu' }}">{{ r.boat1_grade }}級</span>
+        </div>
+        {% else %}
+        <div class="vor-preview-empty">本日のB級レースはまだありません</div>
+        {% endfor %}
+      </div>
+    </div>
+
     <div class="vor-position-dist">
       <div class="vor-title">レース位置別 的中分布（集計中・全会場通し番号）</div>
       {% if race_position_distribution %}
@@ -1256,6 +1305,15 @@ footer{
     const el = document.getElementById('venue-detail-' + venue);
     if(!el) return;
     el.style.display = (el.style.display === 'none') ? 'flex' : 'none';
+  };
+
+  window.togglePreviewList = function(){
+    const el = document.getElementById('b-preview-list');
+    const arrow = document.getElementById('preview-toggle-arrow');
+    if(!el) return;
+    const isOpen = el.style.display !== 'none';
+    el.style.display = isOpen ? 'none' : 'flex';
+    if(arrow) arrow.textContent = isOpen ? '▾クリックで一覧' : '▴閉じる';
   };
 
   window.toggleConfirm = function(key, el){

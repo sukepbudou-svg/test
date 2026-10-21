@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, Response, stream_with_context
 from web.database import (
-    get_today_predictions,
+    get_today_predictions, get_race_preview,
     get_daily_summary, get_consecutive_misses, init_db, update_result,
     get_venue_stats, get_venue_detail, get_all_streaks,
     get_recent_activity, get_activity_watermark,
@@ -151,11 +151,21 @@ def create_app():
         # 正しい「当日何レース目か」を維持できる。day_race_no未設定の日は件数で代替。
         day_race_nos = [r["day_race_no"] for r in race_list if r.get("day_race_no") is not None]
         today_progress = max(day_race_nos) if day_race_nos else len(race_list)
+        # 朝一プレビュー（2026-10-21追加）: 発走10分前の実際の予想を待たずに、
+        # 番組表から先読みした1号艇B級レース一覧（auto_runner起動時にrace_previewへ
+        # 保存される）。当日順位1〜5位かどうかも合わせて渡す。
+        race_preview = get_race_preview(date)
+        preview_b_class = [r for r in race_preview if r.get("boat1_grade") in ("B1", "B2")]
+        preview_b_top5 = [
+            r for r in preview_b_class
+            if r.get("venue_day_rank") is not None and r["venue_day_rank"] <= 5
+        ]
         return render_template("index.html", date=date, race_list=race_list, venue_list=venue_list,
                                venue_okuma_ranking=venue_okuma_ranking,
                                grade_counts=grade_counts, grade_total=grade_total,
                                race_position_distribution=race_position_distribution,
-                               today_progress=today_progress, today_okuma=today_okuma)
+                               today_progress=today_progress, today_okuma=today_okuma,
+                               preview_b_class=preview_b_class, preview_b_top5=preview_b_top5)
 
     @app.route("/stats")
     def stats():

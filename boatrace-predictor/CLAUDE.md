@@ -611,6 +611,32 @@ STATSページだけで行う方針のため。対象は活動ログ（左カラ
 B級行はゴールド（`vor-stat.lbl-shinnetsu`）、B級×1〜5位行はピンク
 （`vor-stat.lbl-pink`、いずれも新設のCSS）にした。
 
+### 本日のB級レース朝一プレビュー機能を追加（2026-10-21）
+1号艇の級（A1/A2/B1/B2）は番組表に最初から入っている静的情報で、展示タイム等の
+直前情報とは違い、各レースの実際の予想（発走10分前に生成）を待たなくても朝の
+番組表ダウンロード時点で全レース分わかる。ユーザーから「朝一の時点で今日のB級
+レースを全部一覧でプレビューしたい、できればクリックで開く形式で、件数も一目で
+確認したい」との要望があり追加した。
+
+- **新テーブル`race_preview`**（`web/database.py`の`init_db()`）: date・venue_name・
+  race_no・race_time・boat1_grade・venue_day_rankを持つ。`(date, venue_name, race_no)`
+  でUNIQUE制約・upsert（`save_race_preview()`）のため、同日中に再起動しても
+  同じ内容で上書きされるだけで安全。
+- **`src/scheduler/auto_runner.py`の`run_auto()`冒頭**（`venue_day_rank_map`計算の
+  直後、予想ループが始まる前）で、`df_program`（番組表のDataFrame）から各レースの
+  `boat_no==1`の行の`grade`を直接取り出し、`venue_day_rank_map`と合わせて
+  `race_preview`へ1日1回保存する（予想生成のフル処理は不要、番組表の読み取り
+  だけで済む軽い処理）。
+- **`web/app.py`の`index()`ルート**で`get_race_preview(date)`を呼び、
+  `boat1_grade in ('B1','B2')`で絞った`preview_b_class`、さらに
+  `venue_day_rank<=5`で絞った`preview_b_top5`をテンプレートに渡す。
+- **UI**: TODAY画面の「本日の進行状況」の下に「本日のB級レース（朝一プレビュー）」
+  を新設。件数（B級／B級×1〜5位）を常時表示し、クリックで一覧（発走時刻・会場・
+  レース番号・級、当日順位1〜5位の行はピンクで強調）を開閉する
+  （`togglePreviewList()`、`#b-preview-list`）。一覧はまだ実際の予想が出ていない
+  レースも含むため、`race-mini`要素へのスクロール連動（`scrollToRace`）は付けて
+  いない（存在しない可能性があるため）。
+
 ## 注意事項
 - Google Sheets APIは不要（sheets.pyはあるが `auto_runner.py` でオプション扱い）
 - Sheetsを使う場合のみ `.env` に `SPREADSHEET_ID` と `GOOGLE_CREDENTIALS_PATH` が必要
