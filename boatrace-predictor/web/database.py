@@ -419,6 +419,69 @@ def get_b_class_venue_rank_curve():
     return curve
 
 
+def _b_class_daily_summary_sql(max_rank: int = None):
+    """「1号艇B級」のレースを日別に集計する共通ロジック（2026-10-21追加）。
+    max_rank指定時は当日順位がmax_rank以内の会場のレースのみに絞る。
+    get_b_class_venue_rank_curve()（全期間の累積・順位別カーブ）とは別に、
+    実際の掛け金・的中金額の日々の推移を記録・確認するための日別サマリー。
+    venue_day_rankは2026-10-20以降のデータにしか入らないため、それより前の
+    日付は自動的に対象外になる。"""
+    init_db()
+    rank_clause = "AND venue_day_rank <= ?" if max_rank is not None else ""
+    params = [max_rank] if max_rank is not None else []
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT date,
+                   COUNT(*) as n_races,
+                   SUM(has_result) as n_races_resulted,
+                   SUM(race_hit) as n_race_hits,
+                   SUM(CASE WHEN has_result=1 THEN n_bets ELSE 0 END) as n_bets_resulted,
+                   SUM(CASE WHEN has_result=1 THEN race_return ELSE 0 END) as hit_amount
+            FROM (
+                SELECT date, venue_name, race_no,
+                       COUNT(*) as n_bets,
+                       MAX(is_hit) as race_hit,
+                       SUM(CASE WHEN is_hit=1 THEN actual_payout ELSE 0 END) as race_return,
+                       MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
+                FROM predictions
+                WHERE bet_type='3連単' AND venue_day_rank IS NOT NULL
+                  AND arare_reasons LIKE '%1号B級%'
+                  {rank_clause}
+                GROUP BY date, venue_name, race_no
+            )
+            GROUP BY date
+            ORDER BY date DESC
+        """, params).fetchall()
+
+    result = []
+    for r in rows:
+        r = dict(r)
+        n_bets_resulted = r["n_bets_resulted"] or 0
+        hit_amount = r["hit_amount"] or 0
+        stake = n_bets_resulted * 100
+        result.append({
+            "date": r["date"],
+            "n_races": r["n_races"],
+            "n_races_resulted": r["n_races_resulted"] or 0,
+            "n_race_hits": r["n_race_hits"] or 0,
+            "stake": stake,
+            "hit_amount": hit_amount,
+            "pnl": hit_amount - stake,
+        })
+    return result
+
+
+def get_b_class_daily_summary_top5():
+    """「1号艇B級×当日順位1〜5位」の日別サマリー（掛け金・的中金額、2026-10-21追加）。"""
+    return _b_class_daily_summary_sql(max_rank=5)
+
+
+def get_b_class_daily_summary_all():
+    """「1号艇B級」（会場の当日順位は問わず全て）の日別サマリー
+    （掛け金・的中金額、2026-10-21追加）。"""
+    return _b_class_daily_summary_sql(max_rank=None)
+
+
 # 1号艇の級別（A1/A2/B1・B2）とレースの実配当額の相関検証（2026-10-20追加）。
 # B1とB2は「新戦略: 1号艇B級×会場当日順位」と同じ基準でまとめて1枠にする。
 _GRADE_BUCKET_LABELS = {"A1": "A1", "A2": "A2", "B1": "B級(B1/B2)", "B2": "B級(B1/B2)"}
