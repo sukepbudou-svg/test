@@ -219,6 +219,31 @@ def get_today_venue_ranking(date: str = None):
     return [dict(r) for r in rows]
 
 
+def force_refresh_today_venue_values(date: str, venue_day_rank_map: dict, b_class_eligibility_map: dict):
+    """FORCE_RANK_REFRESH環境変数指定時の1回限りの強制上書き（2026-10-24追加）。
+    通常はvenue_day_rank・b_class_rank5_ok/b_class_rank3_okを当日最初の起動時の
+    データのまま固定するが（日中一貫性のため）、同じ日のうちに判定ロジック自体を
+    変更した場合（例: SG/G1除外ロジックの追加）に、ユーザーが明示的に「今日は
+    最新の状態で上書きしてほしい」と指定したときだけ、既に記録済みの当日分
+    （race_preview・predictions）をこの関数で新しい値に一括上書きする。
+    venue_day_rank_map/b_class_eligibility_mapはauto_runner.pyが新規計算した
+    その日の最新の値（{venue_name: rank}/{venue_name: {"top5":0|1,"top3":0|1}}）。"""
+    init_db()
+    with get_conn() as conn:
+        for vn, rank in venue_day_rank_map.items():
+            elig = b_class_eligibility_map.get(vn, {})
+            conn.execute("""
+                UPDATE race_preview
+                SET venue_day_rank=?, b_class_rank5_ok=?, b_class_rank3_ok=?
+                WHERE date=? AND venue_name=?
+            """, (rank, elig.get("top5"), elig.get("top3"), date, vn))
+            conn.execute("""
+                UPDATE predictions
+                SET venue_day_rank=?, b_class_rank5_ok=?, b_class_rank3_ok=?
+                WHERE date=? AND venue_name=?
+            """, (rank, elig.get("top5"), elig.get("top3"), date, vn))
+
+
 def sync_race_predictions(date: str, venue_name: str, race_no: int, combinations: list):
     """このレースの最新予想に含まれない、まだ結果が付いていない古い予想行を削除する
     （オッズ変動等で選出組み合わせが再計算ごとに変わり、買い目が際限なく積み上がるのを防ぐ）"""

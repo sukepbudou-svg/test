@@ -273,7 +273,15 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
             for vn, r in rank_map.items()
         }
 
-    if _existing_ranking:
+    # FORCE_RANK_REFRESH環境変数（2026-10-24追加）: 通常は当日最初の起動時の
+    # データをそのまま再利用し固定するが、同じ日のうちに判定ロジック自体を
+    # 更新した場合（例: SG/G1除外ロジックの追加）、ユーザーが「今日だけは最新の
+    # 状態で上書きしてほしい」と明示的に望んだ場合のみ、この環境変数を立てて
+    # 強制的に再計算・上書きできるようにする。SKIP_VENUESと同じ考え方で、
+    # その起動限りの一時的な指定（環境変数はコマンドプロンプトを閉じれば消える）。
+    _force_rank_refresh = os.environ.get("FORCE_RANK_REFRESH", "").strip() not in ("", "0")
+
+    if _existing_ranking and not _force_rank_refresh:
         venue_day_rank_map = {r["venue_name"]: r["venue_day_rank"] for r in _existing_ranking}
         b_class_eligibility_map = {
             r["venue_name"]: {"top5": r["b_class_rank5_ok"], "top3": r["b_class_rank3_ok"]}
@@ -298,7 +306,14 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
             _mg_rows = df_program[df_program["venue_name"] == vn]["meet_grade"]
             _venue_meet_grade[vn] = str(_mg_rows.iloc[0]) if not _mg_rows.empty else "一般"
         b_class_eligibility_map = _build_b_class_eligibility(venue_day_rank_map, _venue_meet_grade)
-        print(f"  本日の会場別順位（万舟ランキング基準・新規計算）: {venue_day_rank_map}\n")
+        if _existing_ranking and _force_rank_refresh:
+            # 既に記録済みの当日分（race_preview・predictions）を最新の値で
+            # 一括上書きする（1回限りの強制リフレッシュ）
+            from web.database import force_refresh_today_venue_values
+            force_refresh_today_venue_values(_today_str, venue_day_rank_map, b_class_eligibility_map)
+            print(f"  [FORCE_RANK_REFRESH] 本日分を最新の状態に上書きしました: {venue_day_rank_map}\n")
+        else:
+            print(f"  本日の会場別順位（万舟ランキング基準・新規計算）: {venue_day_rank_map}\n")
         print(f"  SG/G1除外後の実質トップ5/トップ3判定: {b_class_eligibility_map}\n")
 
     # 朝一プレビュー（2026-10-21追加）: 1号艇の級は番組表に最初から入っている
