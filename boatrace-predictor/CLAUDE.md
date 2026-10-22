@@ -738,6 +738,13 @@ TODAY画面の`.today-counts`（本日の進行状況ウィジェット）の「
   （KPIボックス2個の追加と、新規`kpi-value.indigo`/`kpi-value.magenta`のCSS
   追加のみ）。
 
+### 朝一プレビューの件数に必要軍資金（レース数×500円）を表示（2026-10-22）
+TODAY画面「本日のB級レース（朝一プレビュー）」のB級/B級×1〜5位/B級×1〜3位の
+各件数表示に、「レース数×500円」で計算した金額を併記するようにした
+（1レースにつき5点×100円=500円を賭ける前提のため）。一目で必要な軍資金を
+把握するための表示で、新しいバックエンドデータは不要（`index.html`側で
+`preview_b_class|length * 500`のようにJinjaで直接計算するだけ）。
+
 ## 注意事項
 - Google Sheets APIは不要（sheets.pyはあるが `auto_runner.py` でオプション扱い）
 - Sheetsを使う場合のみ `.env` に `SPREADSHEET_ID` と `GOOGLE_CREDENTIALS_PATH` が必要

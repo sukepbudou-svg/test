@@ -1082,14 +1082,14 @@ footer{
     <div class="vor-preview">
       <div class="vor-title">本日のB級レース（朝一プレビュー）</div>
       <div class="vor-progress-sub vor-preview-toggle" onclick="togglePreviewList()">
-        <span class="vor-stat lbl-shinnetsu">B級 {{ preview_b_class|length }}レース</span>
+        <span class="vor-stat lbl-shinnetsu">B級 {{ preview_b_class|length }}レース ¥{{ "{:,}".format(preview_b_class|length * 500) }}</span>
         <span class="vor-rate" id="preview-toggle-arrow">▾クリックで一覧</span>
       </div>
       <div class="vor-progress-sub">
-        <span class="vor-stat lbl-pink">B級×1〜5位 {{ preview_b_top5|length }}レース</span>
+        <span class="vor-stat lbl-pink">B級×1〜5位 {{ preview_b_top5|length }}レース ¥{{ "{:,}".format(preview_b_top5|length * 500) }}</span>
       </div>
       <div class="vor-progress-sub">
-        <span class="vor-stat lbl-magenta">B級×1〜3位 {{ preview_b_top3|length }}レース</span>
+        <span class="vor-stat lbl-magenta">B級×1〜3位 {{ preview_b_top3|length }}レース ¥{{ "{:,}".format(preview_b_top3|length * 500) }}</span>
       </div>
       <div class="vor-preview-list" id="b-preview-list" style="display:none;">
         {% for r in preview_b_class %}
