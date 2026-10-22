@@ -558,6 +558,47 @@ footer{
   </div>
 </div>
 
+<!-- ── 新戦略: 日別サマリー（1号艇B級×当日順位1〜3位） ── -->
+<div class="section">
+  <h2>新戦略 日別サマリー: 1号艇B級×当日順位1〜3位<span class="new-badge">10/22〜 新集計</span></h2>
+  <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
+    「1号艇B級」かつ「当日順位1〜3位の会場」のレースに絞った場合の、日別の掛け金・
+    的中金額・収支。1〜5位版よりさらに絞った場合の参考に。
+  </p>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>日付</th>
+        <th>レース数</th>
+        <th>結果済</th>
+        <th>的中数</th>
+        <th>掛け金</th>
+        <th>的中金額</th>
+        <th>収支</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for d in b_class_daily_top3 %}
+      <tr>
+        <td>{{ d.date }}</td>
+        <td>{{ d.n_races }}</td>
+        <td>{{ d.n_races_resulted }}</td>
+        <td>{{ d.n_race_hits }}</td>
+        <td>¥{{ "{:,}".format(d.stake) }}</td>
+        <td>¥{{ "{:,}".format(d.hit_amount) }}</td>
+        <td class="{% if d.pnl > 0 %}roi-good{% elif d.pnl < 0 %}roi-bad{% else %}roi-neutral{% endif %}">
+          {% if d.pnl > 0 %}+{% endif %}¥{{ "{:,}".format(d.pnl) }}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
 <!-- ── 新戦略: 日別サマリー（1号艇B級×当日順位1〜5位） ── -->
 <div class="section">
   <h2>新戦略 日別サマリー: 1号艇B級×当日順位1〜5位<span class="new-badge">10/20〜 新集計</span></h2>

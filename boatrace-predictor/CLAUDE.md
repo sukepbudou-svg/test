@@ -683,6 +683,41 @@ rgba版`124,92,255`）に変更した**。`index.html`内の`#ff4da6`/`rgba(255,
 今後色を見直す際は同じ考え方で候補を探すこと。ユーザーからは「今後また色は
 変更するかもしれない」と言われているため、再度変更の相談が来る可能性がある。
 
+## B1B2(本日1〜3位)タイアーと当日順位ランキング表示を追加（2026-10-22）
+既存の「B1B2(本日1〜5位)」よりさらに絞った「当日順位1〜3位」のタイアーを追加
+してほしい、という要望に対応。B1B2_TOP3はB1B2_TOP5同様にB1B2_ALLの内数（当日
+順位1〜3位の会場だけに絞った別系列）で、本日合計の算出には含めない（二重計上
+回避、従来通りA1+A2+B1B2_ALLのみ）。
+
+- **色は新設のマゼンタ（`#ff1fc9`、rgba版`255,31,201`）**。既存配色（赤・橙・
+  水色・金・インディゴ）と系統が被らない色として選定（B1B2トップ5の配色候補
+  比較時に出した候補1「鮮やかなマゼンタ」を採用）。`tc-row-magenta`/
+  `tc-label.lbl-magenta`/`tc-num.lbl-magenta`/`tc-detail-hit-magenta`/
+  `vor-stat.lbl-magenta`の各CSSクラスを新設。
+- **バックエンド**: `get_grade_tier_all_time_streaks()`・`get_grade_tier_stats()`
+  （`web/database.py`）にB1B2_TOP3を追加（max_rankを5→3に変えた同じロジックを
+  ループで両方処理するよう汎用化）。`get_today_okuma_count()`に
+  `n_races_b_top3`/`n_okuma_b_top3`を追加。`get_b_class_daily_summary_top3()`
+  （`_b_class_daily_summary_sql(max_rank=3)`）を新設。
+- **反映箇所**: TODAY画面の「本日の進行状況」の5行目に追加（`_GRADE_TIER_META`、
+  `web/app.py`）、「万舟(B級×1〜3位)」行、「本日のB級レース（朝一プレビュー）」の
+  「B級×1〜3位」件数行、STATSページの「新戦略 日別サマリー: 1号艇B級×当日順位
+  1〜3位」セクション（1〜5位版の前に配置）。なお「新戦略: 1号艇B級×会場当日順位」
+  の累積カーブ（`get_b_class_venue_rank_curve`）はN=1〜最大順位を元々全て表示して
+  いるため、N=3の行は既に含まれており追加不要。
+
+### 本日の会場 当日順位ランキング表示を追加
+TODAY画面の`.today-counts`（本日の進行状況ウィジェット）の「本日合計」行の下に、
+その日開催する会場を当日順位1位から並べた一覧を追加した（ユーザーの指摘通り、
+元々その位置は中央カラムの中で縦方向に余白ができやすい箇所だったため、そこを
+埋める形で追加）。フォントサイズは左カラムの「本日の会場」タグ一覧
+（`.vjl-tag`）と同じ11pxに揃えた。会場名をクリックすると、その会場のB級
+レース一覧（朝一プレビューの`preview_b_class`を会場名でJinja側フィルタ）が
+開閉する（`toggleVenueRankDetail()`、`#venue-rank-detail-{{venue_name}}`）。
+データは`web/database.py`の新設`get_today_venue_ranking(date)`
+（`race_preview`テーブルを会場別にグループ化し`venue_day_rank`順に並べる）
+から取得する。
+
 ## 注意事項
 - Google Sheets APIは不要（sheets.pyはあるが `auto_runner.py` でオプション扱い）
 - Sheetsを使う場合のみ `.env` に `SPREADSHEET_ID` と `GOOGLE_CREDENTIALS_PATH` が必要

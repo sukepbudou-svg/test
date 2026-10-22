@@ -173,6 +173,24 @@ def get_race_preview(date: str = None):
     return [dict(r) for r in rows]
 
 
+def get_today_venue_ranking(date: str = None):
+    """本日開催する会場を当日順位（1位〜）順に並べたリストを返す（2026-10-22追加）。
+    race_previewから会場ごとの当日順位（venue_day_rank、同じ会場内では常に同じ値）を
+    重複排除して取得する。TODAY画面の「本日の会場 当日順位」一覧用。"""
+    init_db()
+    if date is None:
+        date = datetime.now().strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT venue_name, MAX(venue_day_rank) as venue_day_rank
+            FROM race_preview
+            WHERE date = ? AND venue_day_rank IS NOT NULL
+            GROUP BY venue_name
+            ORDER BY venue_day_rank
+        """, (date,)).fetchall()
+    return [dict(r) for r in rows]
+
+
 def sync_race_predictions(date: str, venue_name: str, race_no: int, combinations: list):
     """このレースの最新予想に含まれない、まだ結果が付いていない古い予想行を削除する
     （オッズ変動等で選出組み合わせが再計算ごとに変わり、買い目が際限なく積み上がるのを防ぐ）"""
@@ -582,6 +600,11 @@ def _b_class_daily_summary_sql(max_rank: int = None):
     return result
 
 
+def get_b_class_daily_summary_top3():
+    """「1号艇B級×当日順位1〜3位」の日別サマリー（掛け金・的中金額、2026-10-22追加）。"""
+    return _b_class_daily_summary_sql(max_rank=3)
+
+
 def get_b_class_daily_summary_top5():
     """「1号艇B級×当日順位1〜5位」の日別サマリー（掛け金・的中金額、2026-10-21追加）。"""
     return _b_class_daily_summary_sql(max_rank=5)
@@ -673,7 +696,8 @@ def get_today_okuma_count(date: str = None):
     ため、リセット対象にしない）。
     2026-10-21: 「1号艇がB級のときほど荒れて万舟が出やすいか」を当日ベースで把握
     できるよう、1号艇B級に絞った内訳と、さらに会場の当日順位1〜5位にも絞った内訳を
-    追加した（boat1_grade/venue_day_rankは2026-10-20以降のデータにしか入らない）。"""
+    追加した（boat1_grade/venue_day_rankは2026-10-20以降のデータにしか入らない）。
+    2026-10-22: 当日順位1〜3位にも絞った内訳を追加。"""
     init_db()
     if date is None:
         date = datetime.now().strftime("%Y-%m-%d")
@@ -701,6 +725,11 @@ def get_today_okuma_count(date: str = None):
         if r["venue_day_rank"] is not None and r["venue_day_rank"] <= 5
     ]
     n_races_b_top5, n_okuma_b_top5 = _count(b_top5_rows)
+    b_top3_rows = [
+        r for r in b_rows
+        if r["venue_day_rank"] is not None and r["venue_day_rank"] <= 3
+    ]
+    n_races_b_top3, n_okuma_b_top3 = _count(b_top3_rows)
 
     return {
         "n_races_resulted": n_races_resulted,
@@ -709,6 +738,8 @@ def get_today_okuma_count(date: str = None):
         "n_okuma_b_class": n_okuma_b_class,
         "n_races_b_top5": n_races_b_top5,
         "n_okuma_b_top5": n_okuma_b_top5,
+        "n_races_b_top3": n_races_b_top3,
+        "n_okuma_b_top3": n_okuma_b_top3,
     }
 
 
@@ -961,10 +992,11 @@ def _grade_tier_key(boat1_grade: str) -> str | None:
 
 
 def get_grade_tier_all_time_streaks():
-    """1号艇級別タイアー(A1/A2/B1B2_ALL/B1B2_TOP5)ごと・全体の、日付をまたいだ全期間
-    での現在の連続不的中数（PT_RESET_FILTER限定・2026-10-21追加）。TODAY画面の1号艇級別
-    集計で「当日分だけ」ではなく前日以前も込みで連続不的中を数えるために使う。
-    B1B2_TOP5はB1B2_ALLの内数（当日順位1〜5位のみに絞った別系列）であり、overallの
+    """1号艇級別タイアー(A1/A2/B1B2_ALL/B1B2_TOP5/B1B2_TOP3)ごと・全体の、日付を
+    またいだ全期間での現在の連続不的中数（PT_RESET_FILTER限定・2026-10-21追加、
+    B1B2_TOP3は2026-10-22追加）。TODAY画面の1号艇級別集計で「当日分だけ」ではなく
+    前日以前も込みで連続不的中を数えるために使う。B1B2_TOP5・B1B2_TOP3はいずれも
+    B1B2_ALLの内数（当日順位1〜5位・1〜3位のみに絞った別系列）であり、overallの
     算出には二重計上しないよう含めない（B1B2_ALL側に既に含まれているため）。
     boat1_gradeは2026-10-20以降のデータにしか入らないため、それより前は対象外。"""
     init_db()
@@ -983,21 +1015,23 @@ def get_grade_tier_all_time_streaks():
     rows = [r for r in rows if _grade_tier_key(r["boat1_grade"]) is not None]
 
     by_tier = _calc_streaks(rows, lambda r: _grade_tier_key(r["boat1_grade"]))
-    top5_rows = [
-        r for r in rows
-        if r["boat1_grade"] in ("B1", "B2")
-        and r["venue_day_rank"] is not None and r["venue_day_rank"] <= 5
-    ]
-    by_tier["B1B2_TOP5"] = _calc_streaks(top5_rows, lambda r: True).get(True, 0)
+    for max_rank, tier_name in [(5, "B1B2_TOP5"), (3, "B1B2_TOP3")]:
+        top_rows = [
+            r for r in rows
+            if r["boat1_grade"] in ("B1", "B2")
+            and r["venue_day_rank"] is not None and r["venue_day_rank"] <= max_rank
+        ]
+        by_tier[tier_name] = _calc_streaks(top_rows, lambda r: True).get(True, 0)
     overall = _calc_streaks(rows, lambda r: True)
     return {"by_tier": by_tier, "overall": overall.get(True, 0)}
 
 
 def get_grade_tier_stats():
-    """1号艇級別タイアー(A1/A2/B1B2_ALL/B1B2_TOP5/OVERALL)ごとの全期間の的中率・
-    「何回に1回」集計（PT_RESET_FILTER限定・2026-10-21追加）。TODAY画面の1号艇級別
-    集計の「回に1回」表示に使う。OVERALLはB1B2_TOP5を二重計上しないようA1+A2+B1B2_ALL
-    のみで算出する（B1B2_TOP5はB1B2_ALLの内数のため）。"""
+    """1号艇級別タイアー(A1/A2/B1B2_ALL/B1B2_TOP5/B1B2_TOP3/OVERALL)ごとの全期間の
+    的中率・「何回に1回」集計（PT_RESET_FILTER限定・2026-10-21追加、B1B2_TOP3は
+    2026-10-22追加）。TODAY画面の1号艇級別集計の「回に1回」表示に使う。OVERALLは
+    B1B2_TOP5・B1B2_TOP3を二重計上しないようA1+A2+B1B2_ALLのみで算出する
+    （いずれもB1B2_ALLの内数のため）。"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute(f"""
@@ -1029,11 +1063,15 @@ def get_grade_tier_stats():
         r for r in b_all
         if r["venue_day_rank"] is not None and r["venue_day_rank"] <= 5
     ]
+    b_top3 = [
+        r for r in b_all
+        if r["venue_day_rank"] is not None and r["venue_day_rank"] <= 3
+    ]
     overall = a1 + a2 + b_all
 
     return {
         "A1": _mk(a1), "A2": _mk(a2),
-        "B1B2_ALL": _mk(b_all), "B1B2_TOP5": _mk(b_top5),
+        "B1B2_ALL": _mk(b_all), "B1B2_TOP5": _mk(b_top5), "B1B2_TOP3": _mk(b_top3),
         "OVERALL": _mk(overall),
     }
 

@@ -240,6 +240,11 @@ nav a.active{
   border:1px solid rgba(124,92,255,0.35);
   box-shadow:0 0 10px rgba(124,92,255,0.12);
 }
+.tc-row-magenta{
+  background:rgba(255,31,201,0.08);
+  border:1px solid rgba(255,31,201,0.35);
+  box-shadow:0 0 10px rgba(255,31,201,0.12);
+}
 .tc-row-total{
   background:rgba(79,143,255,0.06);
   border:1px solid rgba(79,143,255,0.25);
@@ -261,6 +266,28 @@ nav a.active{
   font-family:var(--font-mono);font-size:10px;
   color:var(--dim2);white-space:nowrap;
 }
+
+/* ══════════════ 本日の会場 当日順位ランキング ══════════════ */
+.vor-rank-list{margin-top:10px;}
+.vor-rank-grid{
+  display:flex;flex-wrap:wrap;gap:5px;
+  font-family:var(--font-mono);
+}
+.vor-rank-tag{
+  font-size:11px;
+  padding:4px 10px;border-radius:4px;
+  cursor:pointer;white-space:nowrap;
+  color:var(--dim2);
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.08);
+  transition:all .15s;
+}
+.vor-rank-tag:hover{background:rgba(255,255,255,0.08);color:var(--white);border-color:rgba(255,255,255,0.2);}
+.vor-rank-num{
+  display:inline-block;min-width:14px;
+  font-weight:700;color:var(--white);margin-right:4px;
+}
+
 .tc-detail{
   display:flex;flex-direction:column;gap:3px;
   padding:2px 4px 8px 14px;
@@ -299,12 +326,20 @@ nav a.active{
 .tc-detail-hit-pink .tc-detail-result{
   color:#7c5cff;text-shadow:0 0 6px rgba(124,92,255,0.6);
 }
+.tc-detail-hit-magenta{
+  background:linear-gradient(135deg,rgba(0,255,170,0.08),rgba(255,31,201,0.16));
+  border-color:rgba(255,31,201,0.5);
+}
+.tc-detail-hit-magenta .tc-detail-result{
+  color:#ff1fc9;text-shadow:0 0 6px rgba(255,31,201,0.6);
+}
 .tc-label{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .tc-label.lbl-puchun{color:#ff6b6b;}
 .tc-label.lbl-kokusen{color:#ffaa55;}
 .tc-label.lbl-chuana{color:#40c8e0;}
 .tc-label.lbl-shinnetsu{color:#ffcc00;}
 .tc-label.lbl-pink{color:#7c5cff;}
+.tc-label.lbl-magenta{color:#ff1fc9;}
 .tc-label.lbl-skip{color:#556;}
 .tc-num{
   font-size:20px;font-weight:700;text-align:right;
@@ -315,6 +350,7 @@ nav a.active{
 .tc-num.lbl-chuana{color:#40c8e0;text-shadow:0 0 10px rgba(64,200,224,0.5);}
 .tc-num.lbl-shinnetsu{color:#ffcc00;text-shadow:0 0 10px rgba(255,204,0,0.6);}
 .tc-num.lbl-pink{color:#7c5cff;text-shadow:0 0 10px rgba(124,92,255,0.6);}
+.tc-num.lbl-magenta{color:#ff1fc9;text-shadow:0 0 10px rgba(255,31,201,0.6);}
 .tc-num.lbl-skip{color:#334;}
 .tc-sep{color:rgba(255,255,255,0.12);font-size:13px;text-align:center;}
 .tc-hit{
@@ -423,6 +459,7 @@ nav a.active{
 .vor-stat{color:#ffcc00;flex-shrink:0;}
 .vor-stat.lbl-shinnetsu{color:#ffcc00;}
 .vor-stat.lbl-pink{color:#7c5cff;}
+.vor-stat.lbl-magenta{color:#ff1fc9;}
 .vor-rate{color:var(--dim2);font-size:10px;margin-left:2px;}
 
 /* ══════════════ 本日の進行状況 ══════════════ */
@@ -920,7 +957,7 @@ footer{
 
   <div class="today-counts">
     {% for s in grade_counts %}
-    <div class="tc-row {% if s.color == 'shinnetsu' %}tc-row-shinnetsu{% elif s.color == 'pink' %}tc-row-pink{% endif %}" style="cursor:pointer;" onclick="togglePtDetail('{{ s.tier }}')">
+    <div class="tc-row {% if s.color == 'shinnetsu' %}tc-row-shinnetsu{% elif s.color == 'pink' %}tc-row-pink{% elif s.color == 'magenta' %}tc-row-magenta{% endif %}" style="cursor:pointer;" onclick="togglePtDetail('{{ s.tier }}')">
       <span class="tc-label lbl-{{ s.color }}">{{ s.label }}</span>
       <span class="tc-num lbl-{{ s.color }}">{{ s.races }}</span>
       <span class="tc-sep">|</span>
@@ -975,6 +1012,33 @@ footer{
       </span>
     </div>
     {% endif %}
+
+    {% if today_venue_ranking %}
+    <div class="vor-rank-list">
+      <div class="vor-title">本日の会場 当日順位</div>
+      <div class="vor-rank-grid">
+        {% for v in today_venue_ranking %}
+        <span class="vor-rank-tag" onclick="toggleVenueRankDetail('{{ v.venue_name }}')">
+          <span class="vor-rank-num">{{ v.venue_day_rank }}</span>{{ v.venue_name }}
+        </span>
+        {% endfor %}
+      </div>
+      {% for v in today_venue_ranking %}
+      <div class="tc-detail" id="venue-rank-detail-{{ v.venue_name }}" style="display:none;">
+        {% for r in preview_b_class if r.venue_name == v.venue_name %}
+        {% set _is_top5 = r.venue_day_rank is not none and r.venue_day_rank <= 5 %}
+        <div class="vor-preview-row">
+          <span class="vor-preview-time">{{ r.race_time }}</span>
+          <span class="vor-preview-venue">{{ r.venue_name }} {{ r.race_no }}R</span>
+          <span class="vor-preview-grade {{ 'lbl-pink' if _is_top5 else 'lbl-shinnetsu' }}">{{ r.boat1_grade }}級</span>
+        </div>
+        {% else %}
+        <div class="vor-preview-empty">この会場のB級レースはありません</div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
 
   <div class="venue-okuma-ranking">
@@ -1009,6 +1073,10 @@ footer{
         <span class="vor-stat lbl-pink">万舟(B級×1〜5位) {{ today_okuma.n_okuma_b_top5 }}回</span>
         <span class="vor-rate">({{ today_okuma.n_races_b_top5 }}レース中)</span>
       </div>
+      <div class="vor-progress-sub">
+        <span class="vor-stat lbl-magenta">万舟(B級×1〜3位) {{ today_okuma.n_okuma_b_top3 }}回</span>
+        <span class="vor-rate">({{ today_okuma.n_races_b_top3 }}レース中)</span>
+      </div>
     </div>
 
     <div class="vor-preview">
@@ -1019,6 +1087,9 @@ footer{
       </div>
       <div class="vor-progress-sub">
         <span class="vor-stat lbl-pink">B級×1〜5位 {{ preview_b_top5|length }}レース</span>
+      </div>
+      <div class="vor-progress-sub">
+        <span class="vor-stat lbl-magenta">B級×1〜3位 {{ preview_b_top3|length }}レース</span>
       </div>
       <div class="vor-preview-list" id="b-preview-list" style="display:none;">
         {% for r in preview_b_class %}
@@ -1314,6 +1385,12 @@ footer{
     const isOpen = el.style.display !== 'none';
     el.style.display = isOpen ? 'none' : 'flex';
     if(arrow) arrow.textContent = isOpen ? '▾クリックで一覧' : '▴閉じる';
+  };
+
+  window.toggleVenueRankDetail = function(venue){
+    const el = document.getElementById('venue-rank-detail-' + venue);
+    if(!el) return;
+    el.style.display = (el.style.display === 'none') ? 'flex' : 'none';
   };
 
   window.toggleConfirm = function(key, el){

@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, Response, stream_with_context
 from web.database import (
-    get_today_predictions, get_race_preview,
+    get_today_predictions, get_race_preview, get_today_venue_ranking,
     get_daily_summary, get_consecutive_misses, init_db, update_result,
     get_venue_stats, get_venue_detail, get_all_streaks,
     get_recent_activity, get_activity_watermark,
@@ -19,19 +19,21 @@ from web.database import (
     get_today_okuma_count,
     get_pt_condition_breakdown, get_odds_band_stats, get_edge_vs_market_stats,
     get_b_class_venue_rank_curve, get_boat1_grade_payout_stats, get_boat1_b_class_hit_stats,
-    get_b_class_daily_summary_top5, get_b_class_daily_summary_all,
+    get_b_class_daily_summary_top3, get_b_class_daily_summary_top5, get_b_class_daily_summary_all,
 )
 from src.model.predictor import PT_MIN_SCORE
 
 
 # TODAY画面「本日の進行状況」の1号艇級別集計（2026-10-21、PT別集計を置き換え）。
-# B1B2_TOP5はB1B2_ALLの内数（当日順位1〜5位の会場だけに絞った別系列）であり、
-# 本日合計の算出では二重計上しないようA1+A2+B1B2_ALLのみを合算する。
+# B1B2_TOP5・B1B2_TOP3はいずれもB1B2_ALLの内数（当日順位1〜5位・1〜3位の会場だけに
+# 絞った別系列）であり、本日合計の算出では二重計上しないようA1+A2+B1B2_ALLのみを
+# 合算する。B1B2_TOP3は2026-10-22追加（colorの"magenta"は2026-10-22新設の配色）。
 _GRADE_TIER_META = [
     {"tier": "A1", "label": "A1", "color": "skip"},
     {"tier": "A2", "label": "A2", "color": "skip"},
     {"tier": "B1B2_ALL", "label": "B1B2(全順位)", "color": "shinnetsu"},
     {"tier": "B1B2_TOP5", "label": "B1B2(本日1〜5位)", "color": "pink"},
+    {"tier": "B1B2_TOP3", "label": "B1B2(本日1〜3位)", "color": "magenta"},
 ]
 
 
@@ -74,9 +76,13 @@ def _build_grade_counts(race_list, all_time_streaks=None, all_time_grade_stats=N
         r for r in b_all_races
         if r.get("venue_day_rank") is not None and r["venue_day_rank"] <= 5
     ]
+    b_top3_races = [
+        r for r in b_all_races
+        if r.get("venue_day_rank") is not None and r["venue_day_rank"] <= 3
+    ]
     tier_races = {
         "A1": a1_races, "A2": a2_races,
-        "B1B2_ALL": b_all_races, "B1B2_TOP5": b_top5_races,
+        "B1B2_ALL": b_all_races, "B1B2_TOP5": b_top5_races, "B1B2_TOP3": b_top3_races,
     }
 
     grade_counts = []
@@ -160,12 +166,20 @@ def create_app():
             r for r in preview_b_class
             if r.get("venue_day_rank") is not None and r["venue_day_rank"] <= 5
         ]
+        preview_b_top3 = [
+            r for r in preview_b_class
+            if r.get("venue_day_rank") is not None and r["venue_day_rank"] <= 3
+        ]
+        # 本日の会場 当日順位ランキング（2026-10-22追加）。クリックするとその会場の
+        # B級レース一覧(preview_b_class)を開く。
+        today_venue_ranking = get_today_venue_ranking(date)
         return render_template("index.html", date=date, race_list=race_list, venue_list=venue_list,
                                venue_okuma_ranking=venue_okuma_ranking,
                                grade_counts=grade_counts, grade_total=grade_total,
                                race_position_distribution=race_position_distribution,
                                today_progress=today_progress, today_okuma=today_okuma,
-                               preview_b_class=preview_b_class, preview_b_top5=preview_b_top5)
+                               preview_b_class=preview_b_class, preview_b_top5=preview_b_top5,
+                               preview_b_top3=preview_b_top3, today_venue_ranking=today_venue_ranking)
 
     @app.route("/stats")
     def stats():
@@ -195,6 +209,7 @@ def create_app():
         b_class_rank_curve = get_b_class_venue_rank_curve()
         boat1_grade_payout_stats = get_boat1_grade_payout_stats()
         boat1_b_class_hit_stats = get_boat1_b_class_hit_stats()
+        b_class_daily_top3 = get_b_class_daily_summary_top3()
         b_class_daily_top5 = get_b_class_daily_summary_top5()
         b_class_daily_all = get_b_class_daily_summary_all()
 
@@ -215,6 +230,7 @@ def create_app():
                                b_class_rank_curve=b_class_rank_curve,
                                boat1_grade_payout_stats=boat1_grade_payout_stats,
                                boat1_b_class_hit_stats=boat1_b_class_hit_stats,
+                               b_class_daily_top3=b_class_daily_top3,
                                b_class_daily_top5=b_class_daily_top5,
                                b_class_daily_all=b_class_daily_all,
                                pt_min_score=PT_MIN_SCORE)
