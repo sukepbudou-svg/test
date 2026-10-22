@@ -229,13 +229,37 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
               f"（{_before}→{len(schedule)}レース）\n")
 
     # その日開催する会場を「会場別万舟ランキング（集計中）」で当日限定の順位に
-    # 振り直す（venue_day_rank、2026-10-20追加）。1日1回だけ計算し、以後は
+    # 振り直す（venue_day_rank、2026-10-20追加）。当日1回だけ計算し、以後は
     # 集計中のランキングが日中に変動しても振り直さず固定して使う
     # （ユーザー了承済み: 日中の順位変動は気にしなくて良いとのこと）。
-    from web.database import compute_today_venue_rank_map
+    # 2026-10-23: 「当日1回だけ」を実際にその日の暦日単位で保証するよう修正。
+    # 従来はプロセス起動のたびに毎回計算し直していたため、同じ日のうちに
+    # ツールを一度止めて再起動すると、会場別万舟ランキングが日中に増えた分だけ
+    # 順位が変わってしまうことがあった（「本日の会場 当日順位」「本日の進行状況」
+    # 「本日のB級レース(朝一プレビュー)」が再起動のたびにブレてしまう）。
+    # race_previewに当日分のデータが既にあればその順位をそのまま再利用し、
+    # 無ければ（その日最初の起動）新規に計算する。「会場別万舟ランキング
+    # （集計中）」自体の表示は従来通り常に最新のライブ集計のまま（こちらは
+    # 固定しない。ユーザーからも「収集したデータをそのまま反映してくれたら
+    # いい」と明示的に了承済み）。
+    from web.database import compute_today_venue_rank_map, get_today_venue_ranking
     _today_venue_names = sorted({r["venue_name"] for r in schedule})
-    venue_day_rank_map = compute_today_venue_rank_map(_today_venue_names)
-    print(f"  本日の会場別順位（万舟ランキング基準）: {venue_day_rank_map}\n")
+    _today_str = today.strftime("%Y-%m-%d")
+    _existing_ranking = get_today_venue_ranking(_today_str)
+    if _existing_ranking:
+        venue_day_rank_map = {r["venue_name"]: r["venue_day_rank"] for r in _existing_ranking}
+        _missing = [v for v in _today_venue_names if v not in venue_day_rank_map]
+        if _missing:
+            # SKIP_VENUESの指定が途中で変わった等、当日最初の順位付けに
+            # 含まれていなかった会場が後から出てきた場合は、既存の順位の
+            # 続きとして追加する
+            _next_rank = max(venue_day_rank_map.values(), default=0) + 1
+            for vn, r in compute_today_venue_rank_map(_missing).items():
+                venue_day_rank_map[vn] = _next_rank + r - 1
+        print(f"  本日の会場別順位（当日最初の起動時のデータを再利用・固定）: {venue_day_rank_map}\n")
+    else:
+        venue_day_rank_map = compute_today_venue_rank_map(_today_venue_names)
+        print(f"  本日の会場別順位（万舟ランキング基準・新規計算）: {venue_day_rank_map}\n")
 
     # 朝一プレビュー（2026-10-21追加）: 1号艇の級は番組表に最初から入っている
     # 静的情報（展示タイム等の直前情報とは違う）なので、各レースの実際の予想
