@@ -616,6 +616,62 @@ def get_b_class_daily_summary_all():
     return _b_class_daily_summary_sql(max_rank=None)
 
 
+def _b_class_daily_hit_detail_sql(max_rank: int = None):
+    """新戦略の日別サマリーで、日付をクリックすると見られる「その日に的中した
+    レースの内訳（会場・レース番号・買い目・金額）」を日付ごとにまとめて返す
+    共通ロジック（2026-10-23追加）。_b_class_daily_summary_sql()と同じ対象条件
+    （1号艇B級、max_rank指定時は当日順位をさらに絞る）で、的中したレースだけを
+    抽出する。
+    Returns: {date: [{"venue_name", "race_no", "combination", "actual_payout"}, ...]}
+    """
+    init_db()
+    rank_clause = "AND venue_day_rank <= ?" if max_rank is not None else ""
+    params = [max_rank] if max_rank is not None else []
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT date, venue_name, race_no,
+                   MAX(actual_combination) as combination,
+                   MAX(actual_payout) as actual_payout,
+                   MAX(is_hit) as race_hit
+            FROM predictions
+            WHERE bet_type='3連単' AND venue_day_rank IS NOT NULL
+              AND arare_reasons LIKE '%1号B級%'
+              AND result_recorded_at IS NOT NULL
+              {rank_clause}
+            GROUP BY date, venue_name, race_no
+        """, params).fetchall()
+
+    out: dict[str, list] = {}
+    for r in rows:
+        r = dict(r)
+        if not r["race_hit"]:
+            continue
+        out.setdefault(r["date"], []).append({
+            "venue_name": r["venue_name"],
+            "race_no": r["race_no"],
+            "combination": r["combination"],
+            "actual_payout": r["actual_payout"] or 0,
+        })
+    for date in out:
+        out[date].sort(key=lambda h: (h["venue_name"], h["race_no"]))
+    return out
+
+
+def get_b_class_daily_hit_detail_top3():
+    """日別サマリー(B級×1〜3位)の日付クリック用、的中レース内訳（2026-10-23追加）。"""
+    return _b_class_daily_hit_detail_sql(max_rank=3)
+
+
+def get_b_class_daily_hit_detail_top5():
+    """日別サマリー(B級×1〜5位)の日付クリック用、的中レース内訳（2026-10-23追加）。"""
+    return _b_class_daily_hit_detail_sql(max_rank=5)
+
+
+def get_b_class_daily_hit_detail_all():
+    """日別サマリー(B級・全順位)の日付クリック用、的中レース内訳（2026-10-23追加）。"""
+    return _b_class_daily_hit_detail_sql(max_rank=None)
+
+
 def get_boat1_b_class_hit_stats():
     """的中したレースのうち、1号艇がB級（B1/B2）だったレースが何件あったかを集計する
     （2026-10-20追加）。的中関連の集計なので現行PT(PT_RESET_FILTER=strategy_version='8')

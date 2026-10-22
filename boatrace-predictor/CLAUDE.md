@@ -769,6 +769,24 @@ B級レース（朝一プレビュー）」の集計が再起動のたびにブ�
 なので、今回の修正の影響を受けない（ユーザーからも「収集したデータをそのまま
 反映してくれたらいい」と明示的に了承済み）。
 
+## 新戦略の日別サマリーに日付クリックで的中詳細を表示（2026-10-23）
+STATSページの「新戦略 日別サマリー」3表（B級×1〜3位・B級×1〜5位・B級(全順位)）
+は集計結果（件数・掛け金・的中金額等）しか見えず、「具体的にどの会場のどの
+レースが的中したか」が分からなかったため、日付の行をクリックすると的中レース
+一覧（会場・レース番号・買い目・配当額）が開閉できるようにした。
+
+- `web/database.py`に`_b_class_daily_hit_detail_sql(max_rank)`を新設
+  （`_b_class_daily_summary_sql()`と同じ対象条件で、的中したレースだけを
+  日付をキーにした辞書で返す）。`get_b_class_daily_hit_detail_top3/top5/all()`
+  の3つのラッパーを追加。
+- `stats.html`側は、各テーブルの`<tr>`行に`onclick="toggleDailyHitDetail('top3-'
+  + 日付)"`（表ごとに`top3`/`top5`/`all`のプレフィックスを付けてDOM ID衝突を
+  回避）を付け、直後に`display:none`の詳細行（`daily-hit-detail-{プレフィックス}-
+  {日付}`というID）を追加。クリックで`table-row`⇄`none`をトグルする
+  `toggleDailyHitDetail()`をJSに追加。
+- 的中が無い日をクリックした場合は「的中レースはありません」と表示する
+  （クリック自体は常に機能し、0件でも開閉できる）。
+
 ## 注意事項
 - Google Sheets APIは不要（sheets.pyはあるが `auto_runner.py` でオプション扱い）
 - Sheetsを使う場合のみ `.env` に `SPREADSHEET_ID` と `GOOGLE_CREDENTIALS_PATH` が必要

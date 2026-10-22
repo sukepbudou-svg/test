@@ -194,6 +194,29 @@ table.data-table tbody tr:hover td{background:rgba(79,143,255,0.04)}
 .roi-bad{color:var(--red)}
 .roi-neutral{color:var(--white)}
 
+/* ── 日別サマリー: 日付クリックで開く的中詳細 ── */
+.date-clickable{cursor:pointer;}
+.date-clickable:hover{text-decoration:underline;text-underline-offset:3px;}
+.daily-hit-detail{
+  display:flex;flex-direction:column;gap:4px;
+  padding:8px 12px;
+  background:rgba(255,255,255,0.02);
+}
+.daily-hit-row{
+  display:flex;align-items:center;gap:12px;
+  font-family:var(--font-mono);font-size:11px;
+  padding:4px 8px;border-radius:4px;
+  background:rgba(0,255,170,0.06);
+  border:1px solid rgba(0,255,170,0.2);
+}
+.daily-hit-venue{color:var(--white);min-width:120px;}
+.daily-hit-combo{font-family:var(--font-logo);letter-spacing:2px;color:var(--green);}
+.daily-hit-payout{margin-left:auto;color:var(--green);font-weight:700;}
+.daily-hit-empty{
+  font-family:var(--font-mono);font-size:11px;color:var(--dim2);
+  padding:6px 8px;
+}
+
 /* ── 収支グラフ ── */
 .chart-wrap{
   background:var(--card);border:1px solid var(--card-border);
@@ -582,8 +605,8 @@ footer{
     </thead>
     <tbody>
     {% for d in b_class_daily_top3 %}
-      <tr>
-        <td>{{ d.date }}</td>
+      <tr onclick="toggleDailyHitDetail('top3-{{ d.date }}')">
+        <td class="date-clickable">{{ d.date }}</td>
         <td>{{ d.n_races }}</td>
         <td>{{ d.n_races_resulted }}</td>
         <td>{{ d.n_race_hits }}</td>
@@ -591,6 +614,21 @@ footer{
         <td>¥{{ "{:,}".format(d.hit_amount) }}</td>
         <td class="{% if d.pnl > 0 %}roi-good{% elif d.pnl < 0 %}roi-bad{% else %}roi-neutral{% endif %}">
           {% if d.pnl > 0 %}+{% endif %}¥{{ "{:,}".format(d.pnl) }}
+        </td>
+      </tr>
+      <tr id="daily-hit-detail-top3-{{ d.date }}" style="display:none;">
+        <td colspan="7" style="padding:0;">
+          <div class="daily-hit-detail">
+          {% for h in b_class_daily_hits_top3.get(d.date, []) %}
+            <div class="daily-hit-row">
+              <span class="daily-hit-venue">{{ h.venue_name }} {{ h.race_no }}R</span>
+              <span class="daily-hit-combo">{{ h.combination }}</span>
+              <span class="daily-hit-payout">¥{{ "{:,}".format(h.actual_payout) }}</span>
+            </div>
+          {% else %}
+            <div class="daily-hit-empty">的中レースはありません</div>
+          {% endfor %}
+          </div>
         </td>
       </tr>
     {% else %}
@@ -623,8 +661,8 @@ footer{
     </thead>
     <tbody>
     {% for d in b_class_daily_top5 %}
-      <tr>
-        <td>{{ d.date }}</td>
+      <tr onclick="toggleDailyHitDetail('top5-{{ d.date }}')">
+        <td class="date-clickable">{{ d.date }}</td>
         <td>{{ d.n_races }}</td>
         <td>{{ d.n_races_resulted }}</td>
         <td>{{ d.n_race_hits }}</td>
@@ -632,6 +670,21 @@ footer{
         <td>¥{{ "{:,}".format(d.hit_amount) }}</td>
         <td class="{% if d.pnl > 0 %}roi-good{% elif d.pnl < 0 %}roi-bad{% else %}roi-neutral{% endif %}">
           {% if d.pnl > 0 %}+{% endif %}¥{{ "{:,}".format(d.pnl) }}
+        </td>
+      </tr>
+      <tr id="daily-hit-detail-top5-{{ d.date }}" style="display:none;">
+        <td colspan="7" style="padding:0;">
+          <div class="daily-hit-detail">
+          {% for h in b_class_daily_hits_top5.get(d.date, []) %}
+            <div class="daily-hit-row">
+              <span class="daily-hit-venue">{{ h.venue_name }} {{ h.race_no }}R</span>
+              <span class="daily-hit-combo">{{ h.combination }}</span>
+              <span class="daily-hit-payout">¥{{ "{:,}".format(h.actual_payout) }}</span>
+            </div>
+          {% else %}
+            <div class="daily-hit-empty">的中レースはありません</div>
+          {% endfor %}
+          </div>
         </td>
       </tr>
     {% else %}
@@ -664,8 +717,8 @@ footer{
     </thead>
     <tbody>
     {% for d in b_class_daily_all %}
-      <tr>
-        <td>{{ d.date }}</td>
+      <tr onclick="toggleDailyHitDetail('all-{{ d.date }}')">
+        <td class="date-clickable">{{ d.date }}</td>
         <td>{{ d.n_races }}</td>
         <td>{{ d.n_races_resulted }}</td>
         <td>{{ d.n_race_hits }}</td>
@@ -673,6 +726,21 @@ footer{
         <td>¥{{ "{:,}".format(d.hit_amount) }}</td>
         <td class="{% if d.pnl > 0 %}roi-good{% elif d.pnl < 0 %}roi-bad{% else %}roi-neutral{% endif %}">
           {% if d.pnl > 0 %}+{% endif %}¥{{ "{:,}".format(d.pnl) }}
+        </td>
+      </tr>
+      <tr id="daily-hit-detail-all-{{ d.date }}" style="display:none;">
+        <td colspan="7" style="padding:0;">
+          <div class="daily-hit-detail">
+          {% for h in b_class_daily_hits_all.get(d.date, []) %}
+            <div class="daily-hit-row">
+              <span class="daily-hit-venue">{{ h.venue_name }} {{ h.race_no }}R</span>
+              <span class="daily-hit-combo">{{ h.combination }}</span>
+              <span class="daily-hit-payout">¥{{ "{:,}".format(h.actual_payout) }}</span>
+            </div>
+          {% else %}
+            <div class="daily-hit-empty">的中レースはありません</div>
+          {% endfor %}
+          </div>
         </td>
       </tr>
     {% else %}
@@ -1155,6 +1223,12 @@ function closeVenueModal(){
   document.getElementById('venue-modal').classList.remove('open');
 }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeVenueModal(); });
+
+function toggleDailyHitDetail(key){
+  const row = document.getElementById('daily-hit-detail-' + key);
+  if(!row) return;
+  row.style.display = (row.style.display === 'none') ? 'table-row' : 'none';
+}
 
 function labelClass(lbl){
   if(lbl==='プチュン') return 'lbl-bet';
