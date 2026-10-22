@@ -246,20 +246,60 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
     _today_venue_names = sorted({r["venue_name"] for r in schedule})
     _today_str = today.strftime("%Y-%m-%d")
     _existing_ranking = get_today_venue_ranking(_today_str)
+
+    # SG/G1開催会場を除いた「実質トップ5/トップ3」判定（2026-10-24追加）。
+    # SG/G1開催会場は1号艇が構造的にB級になり得ないため、venue_day_rank(生の
+    # 当日順位)だけで上位5/3位を切ると、その中にSG/G1会場が混ざった分だけ
+    # 実質的な会場数が減ってしまう。SG/G1会場を除いて非SG/G1の会場がちょうど
+    # 5(3)会場集まるまでカットオフを広げ、そのカットオフ以内かどうかを
+    # 会場ごとに判定する（venue_day_rank自体は変更しない。これは「本日の会場
+    # 当日順位」表示や累積カーブ用に生の値のまま残す別の値）。
+    _EXCLUDED_MEET_GRADES = {"SG", "G1"}
+
+    def _effective_cutoff(rank_map, grade_map, target_n):
+        count = 0
+        for vn in sorted(rank_map, key=lambda v: rank_map[v]):
+            if grade_map.get(vn, "一般") not in _EXCLUDED_MEET_GRADES:
+                count += 1
+            if count == target_n:
+                return rank_map[vn]
+        return max(rank_map.values(), default=target_n)
+
+    def _build_b_class_eligibility(rank_map, grade_map):
+        cutoff5 = _effective_cutoff(rank_map, grade_map, 5)
+        cutoff3 = _effective_cutoff(rank_map, grade_map, 3)
+        return {
+            vn: {"top5": 1 if r <= cutoff5 else 0, "top3": 1 if r <= cutoff3 else 0}
+            for vn, r in rank_map.items()
+        }
+
     if _existing_ranking:
         venue_day_rank_map = {r["venue_name"]: r["venue_day_rank"] for r in _existing_ranking}
+        b_class_eligibility_map = {
+            r["venue_name"]: {"top5": r["b_class_rank5_ok"], "top3": r["b_class_rank3_ok"]}
+            for r in _existing_ranking
+        }
         _missing = [v for v in _today_venue_names if v not in venue_day_rank_map]
         if _missing:
             # SKIP_VENUESの指定が途中で変わった等、当日最初の順位付けに
             # 含まれていなかった会場が後から出てきた場合は、既存の順位の
-            # 続きとして追加する
+            # 続きとして追加する。SG/G1カットオフは当日最初の計算時点の
+            # ものから動かさないため、追加分の会場は実質トップ5/トップ3には
+            # 含めない（安全側に倒す。もともと稀なケースのため単純な扱いとする）
             _next_rank = max(venue_day_rank_map.values(), default=0) + 1
             for vn, r in compute_today_venue_rank_map(_missing).items():
                 venue_day_rank_map[vn] = _next_rank + r - 1
+                b_class_eligibility_map[vn] = {"top5": 0, "top3": 0}
         print(f"  本日の会場別順位（当日最初の起動時のデータを再利用・固定）: {venue_day_rank_map}\n")
     else:
         venue_day_rank_map = compute_today_venue_rank_map(_today_venue_names)
+        _venue_meet_grade = {}
+        for vn in _today_venue_names:
+            _mg_rows = df_program[df_program["venue_name"] == vn]["meet_grade"]
+            _venue_meet_grade[vn] = str(_mg_rows.iloc[0]) if not _mg_rows.empty else "一般"
+        b_class_eligibility_map = _build_b_class_eligibility(venue_day_rank_map, _venue_meet_grade)
         print(f"  本日の会場別順位（万舟ランキング基準・新規計算）: {venue_day_rank_map}\n")
+        print(f"  SG/G1除外後の実質トップ5/トップ3判定: {b_class_eligibility_map}\n")
 
     # 朝一プレビュー（2026-10-21追加）: 1号艇の級は番組表に最初から入っている
     # 静的情報（展示タイム等の直前情報とは違う）なので、各レースの実際の予想
@@ -278,6 +318,8 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
             "race_time": race.get("scheduled_time_str", ""),
             "boat1_grade": _boat1_grade_by_key.get((race["venue_code"], race["race_no"]), ""),
             "venue_day_rank": venue_day_rank_map.get(race["venue_name"]),
+            "b_class_rank5_ok": b_class_eligibility_map.get(race["venue_name"], {}).get("top5"),
+            "b_class_rank3_ok": b_class_eligibility_map.get(race["venue_name"], {}).get("top3"),
         }
         for race in schedule
     ]
@@ -379,6 +421,8 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                             db_sync_fn=sync_race_predictions,
                             day_race_no=day_race_no,
                             venue_day_rank=venue_day_rank_map.get(race["venue_name"]),
+                            b_class_rank5_ok=b_class_eligibility_map.get(race["venue_name"], {}).get("top5"),
+                            b_class_rank3_ok=b_class_eligibility_map.get(race["venue_name"], {}).get("top3"),
                         )
                         race["pred_rows"] = pred_rows or []
                         race["daily_race_count"] = daily_race_count
@@ -453,6 +497,8 @@ def _predict_one_race(
     db_sync_fn=None,
     day_race_no: int = None,
     venue_day_rank: int = None,
+    b_class_rank5_ok: int = None,
+    b_class_rank3_ok: int = None,
 ) -> list:
     """1レース分の予想を実行してDB(+オプションでSheets)に書き込む。予想行リストを返す"""
     import pandas as pd
@@ -528,6 +574,8 @@ def _predict_one_race(
         row_dict["race_time"] = race_time_str
         row_dict["day_race_no"] = day_race_no
         row_dict["venue_day_rank"] = venue_day_rank
+        row_dict["b_class_rank5_ok"] = b_class_rank5_ok
+        row_dict["b_class_rank3_ok"] = b_class_rank3_ok
         # DBに保存（常時）
         if db_save_fn:
             try:

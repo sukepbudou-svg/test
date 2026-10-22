@@ -21,6 +21,7 @@ from web.database import (
     get_b_class_venue_rank_curve, get_boat1_grade_payout_stats, get_boat1_b_class_hit_stats,
     get_b_class_daily_summary_top3, get_b_class_daily_summary_top5, get_b_class_daily_summary_all,
     get_b_class_daily_hit_detail_top3, get_b_class_daily_hit_detail_top5, get_b_class_daily_hit_detail_all,
+    _b_class_rank_ok,
 )
 from src.model.predictor import PT_MIN_SCORE
 
@@ -73,14 +74,8 @@ def _build_grade_counts(race_list, all_time_streaks=None, all_time_grade_stats=N
     a1_races = [r for r in race_list if r.get("boat1_grade") == "A1"]
     a2_races = [r for r in race_list if r.get("boat1_grade") == "A2"]
     b_all_races = [r for r in race_list if r.get("boat1_grade") in ("B1", "B2")]
-    b_top5_races = [
-        r for r in b_all_races
-        if r.get("venue_day_rank") is not None and r["venue_day_rank"] <= 5
-    ]
-    b_top3_races = [
-        r for r in b_all_races
-        if r.get("venue_day_rank") is not None and r["venue_day_rank"] <= 3
-    ]
+    b_top5_races = [r for r in b_all_races if _b_class_rank_ok(r, 5)]
+    b_top3_races = [r for r in b_all_races if _b_class_rank_ok(r, 3)]
     tier_races = {
         "A1": a1_races, "A2": a2_races,
         "B1B2_ALL": b_all_races, "B1B2_TOP5": b_top5_races, "B1B2_TOP3": b_top3_races,
@@ -135,6 +130,8 @@ def create_app():
                     "day_race_no": p.get("day_race_no"),
                     "boat1_grade": p.get("boat1_grade"),
                     "venue_day_rank": p.get("venue_day_rank"),
+                    "b_class_rank5_ok": p.get("b_class_rank5_ok"),
+                    "b_class_rank3_ok": p.get("b_class_rank3_ok"),
                     "bets": [],
                 }
             races[key]["bets"].append(p)
@@ -163,14 +160,8 @@ def create_app():
         # 保存される）。当日順位1〜5位かどうかも合わせて渡す。
         race_preview = get_race_preview(date)
         preview_b_class = [r for r in race_preview if r.get("boat1_grade") in ("B1", "B2")]
-        preview_b_top5 = [
-            r for r in preview_b_class
-            if r.get("venue_day_rank") is not None and r["venue_day_rank"] <= 5
-        ]
-        preview_b_top3 = [
-            r for r in preview_b_class
-            if r.get("venue_day_rank") is not None and r["venue_day_rank"] <= 3
-        ]
+        preview_b_top5 = [r for r in preview_b_class if _b_class_rank_ok(r, 5)]
+        preview_b_top3 = [r for r in preview_b_class if _b_class_rank_ok(r, 3)]
         # 本日の会場 当日順位ランキング（2026-10-22追加）。クリックするとその会場の
         # B級レース一覧(preview_b_class)を開く。
         today_venue_ranking = get_today_venue_ranking(date)

@@ -64,11 +64,27 @@ def init_db():
                     "actual_payout_3ren INTEGER DEFAULT 0",
                     "day_race_no INTEGER",
                     "venue_day_rank INTEGER",
-                    "boat1_grade TEXT"]:
+                    "boat1_grade TEXT",
+                    "b_class_rank5_ok INTEGER",
+                    "b_class_rank3_ok INTEGER"]:
             try:
                 conn.execute(f"ALTER TABLE predictions ADD COLUMN {col}")
             except Exception:
                 pass
+        for col in ["b_class_rank5_ok INTEGER", "b_class_rank3_ok INTEGER"]:
+            try:
+                conn.execute(f"ALTER TABLE race_preview ADD COLUMN {col}")
+            except Exception:
+                pass
+        # b_class_rank5_ok / b_class_rank3_ok（2026-10-24追加）: SG/G1開催会場は
+        # 1号艇が構造的にB級になり得ないため、venue_day_rank(生の当日順位)だけで
+        # 上位5/3位を切ると、その中にSG/G1会場が混ざった分だけ実質的な会場数が
+        # 減ってしまう。auto_runner.py側でSG/G1会場を除いて非SG/G1の会場がちょうど
+        # 5(3)会場集まるまでカットオフを広げた「実質トップ5/トップ3」かどうかの
+        # フラグを会場ごとに1日1回計算し、この列に保存する（venue_day_rank自体は
+        # 「本日の会場 当日順位」表示用に生の値のまま変更しない）。NULL（この機能
+        # より前のデータ）の場合は、集計側がvenue_day_rank<=5/3の生の判定に
+        # フォールバックする（過去データを遡って集計し直す必要はないとの方針）。
         # 2026-10-19: 5点目のみの選出方式変更でstrategy_versionを'8'→'9'に上げたところ、
         # 的中関連の統計が1〜4点目（無変更）の直近データまで巻き込んでリセットされてしまい、
         # ユーザーから「データが消えた」との指摘を受けて即日revert。その間に'9'で保存された
@@ -138,22 +154,28 @@ def save_race_preview(date: str, rows: list):
     予想（発走10分前に生成）を待たずに、1号艇の級・会場の当日順位を先読みして
     保存する。1号艇の級は番組表に最初から入っている静的情報のため、朝のうちに
     全レース分わかる（展示タイム等の直前情報とは違う）。
-    rows: [{"venue_name", "race_no", "race_time", "boat1_grade", "venue_day_rank"}, ...]
-    同じ(date, venue_name, race_no)は上書き（再起動しても最新の番組表内容に揃う）。"""
+    rows: [{"venue_name", "race_no", "race_time", "boat1_grade", "venue_day_rank",
+            "b_class_rank5_ok", "b_class_rank3_ok"}, ...]
+    （b_class_rank5_ok/b_class_rank3_okはSG/G1開催会場を除いた実質トップ5/トップ3
+    判定フラグ、2026-10-24追加）。同じ(date, venue_name, race_no)は上書き（再起動
+    しても最新の番組表内容に揃う）。"""
     init_db()
     with get_conn() as conn:
         for r in rows:
             conn.execute("""
-                INSERT INTO race_preview (date, venue_name, race_no, race_time, boat1_grade, venue_day_rank)
-                VALUES (?,?,?,?,?,?)
+                INSERT INTO race_preview (date, venue_name, race_no, race_time, boat1_grade,
+                    venue_day_rank, b_class_rank5_ok, b_class_rank3_ok)
+                VALUES (?,?,?,?,?,?,?,?)
                 ON CONFLICT(date, venue_name, race_no) DO UPDATE SET
                     race_time=excluded.race_time,
                     boat1_grade=excluded.boat1_grade,
-                    venue_day_rank=excluded.venue_day_rank
+                    venue_day_rank=excluded.venue_day_rank,
+                    b_class_rank5_ok=excluded.b_class_rank5_ok,
+                    b_class_rank3_ok=excluded.b_class_rank3_ok
             """, (
                 date, r.get("venue_name", ""), int(r.get("race_no", 0) or 0),
                 str(r.get("race_time", "")), str(r.get("boat1_grade", "")),
-                r.get("venue_day_rank"),
+                r.get("venue_day_rank"), r.get("b_class_rank5_ok"), r.get("b_class_rank3_ok"),
             ))
 
 
@@ -165,7 +187,8 @@ def get_race_preview(date: str = None):
         date = datetime.now().strftime("%Y-%m-%d")
     with get_conn() as conn:
         rows = conn.execute("""
-            SELECT venue_name, race_no, race_time, boat1_grade, venue_day_rank
+            SELECT venue_name, race_no, race_time, boat1_grade, venue_day_rank,
+                   b_class_rank5_ok, b_class_rank3_ok
             FROM race_preview
             WHERE date = ?
             ORDER BY race_time, venue_name, race_no
@@ -176,13 +199,18 @@ def get_race_preview(date: str = None):
 def get_today_venue_ranking(date: str = None):
     """本日開催する会場を当日順位（1位〜）順に並べたリストを返す（2026-10-22追加）。
     race_previewから会場ごとの当日順位（venue_day_rank、同じ会場内では常に同じ値）を
-    重複排除して取得する。TODAY画面の「本日の会場 当日順位」一覧用。"""
+    重複排除して取得する。TODAY画面の「本日の会場 当日順位」一覧用。
+    b_class_rank5_ok/b_class_rank3_ok（2026-10-24追加、SG/G1開催会場を除いた実質
+    トップ5/トップ3判定）も合わせて返す。auto_runner.py側で同じ日の再起動時に
+    この関数の戻り値をそのまま再利用し、判定を当日固定にする。"""
     init_db()
     if date is None:
         date = datetime.now().strftime("%Y-%m-%d")
     with get_conn() as conn:
         rows = conn.execute("""
-            SELECT venue_name, MAX(venue_day_rank) as venue_day_rank
+            SELECT venue_name, MAX(venue_day_rank) as venue_day_rank,
+                   MAX(b_class_rank5_ok) as b_class_rank5_ok,
+                   MAX(b_class_rank3_ok) as b_class_rank3_ok
             FROM race_preview
             WHERE date = ? AND venue_day_rank IS NOT NULL
             GROUP BY venue_name
@@ -234,8 +262,9 @@ def save_prediction(rec: dict):
               (date, venue_name, race_no, race_time, race_grade, combination, odds, odds_value,
                arare_score, arare_reasons, bet_label, tier,
                prob, expected_roi, nigerate_str, boat1_risk, okuma_signal_count, bet_type,
-               strategy_version, day_race_no, venue_day_rank, boat1_grade)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               strategy_version, day_race_no, venue_day_rank, boat1_grade,
+               b_class_rank5_ok, b_class_rank3_ok)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             date, venue, race_no,
             str(rec.get("race_time", "")),
@@ -255,6 +284,8 @@ def save_prediction(rec: dict):
             rec.get("day_race_no"),
             rec.get("venue_day_rank"),
             str(rec.get("boat1_grade", "")),
+            rec.get("b_class_rank5_ok"),
+            rec.get("b_class_rank3_ok"),
         ))
 
 
@@ -301,6 +332,7 @@ def get_recent_activity(date: str = None, limit: int = 8):
                    MAX(bet_label) as bet_label,
                    MAX(boat1_grade) as boat1_grade,
                    MAX(venue_day_rank) as venue_day_rank,
+                   MAX(b_class_rank5_ok) as b_class_rank5_ok,
                    MAX(created_at) as created_at
             FROM predictions
             WHERE date = ?
@@ -550,14 +582,16 @@ def get_b_class_venue_rank_curve():
 
 def _b_class_daily_summary_sql(max_rank: int = None):
     """「1号艇B級」のレースを日別に集計する共通ロジック（2026-10-21追加）。
-    max_rank指定時は当日順位がmax_rank以内の会場のレースのみに絞る。
-    get_b_class_venue_rank_curve()（全期間の累積・順位別カーブ）とは別に、
-    実際の掛け金・的中金額の日々の推移を記録・確認するための日別サマリー。
-    venue_day_rankは2026-10-20以降のデータにしか入らないため、それより前の
-    日付は自動的に対象外になる。"""
+    max_rank指定時は当日順位がmax_rank以内の会場のレースのみに絞る
+    （`b_class_rank{n}_ok`列があればそれを優先し、SG/G1開催会場を除いた実質
+    トップN判定を使う。無い古いデータ(2026-10-24より前)は生のvenue_day_rank<=n
+    にフォールバックする。過去分を遡って再集計はしない方針のため）。
+    get_b_class_venue_rank_curve()（全期間の累積・順位別カーブ、生の順位のまま）
+    とは別に、実際の掛け金・的中金額の日々の推移を記録・確認するための日別
+    サマリー。venue_day_rankは2026-10-20以降のデータにしか入らないため、それより
+    前の日付は自動的に対象外になる。"""
     init_db()
-    rank_clause = "AND venue_day_rank <= ?" if max_rank is not None else ""
-    params = [max_rank] if max_rank is not None else []
+    rank_clause = f"AND {_b_class_rank_sql_clause(max_rank)}" if max_rank is not None else ""
     with get_conn() as conn:
         rows = conn.execute(f"""
             SELECT date,
@@ -580,7 +614,7 @@ def _b_class_daily_summary_sql(max_rank: int = None):
             )
             GROUP BY date
             ORDER BY date DESC
-        """, params).fetchall()
+        """).fetchall()
 
     result = []
     for r in rows:
@@ -625,8 +659,7 @@ def _b_class_daily_hit_detail_sql(max_rank: int = None):
     Returns: {date: [{"venue_name", "race_no", "combination", "actual_payout"}, ...]}
     """
     init_db()
-    rank_clause = "AND venue_day_rank <= ?" if max_rank is not None else ""
-    params = [max_rank] if max_rank is not None else []
+    rank_clause = f"AND {_b_class_rank_sql_clause(max_rank)}" if max_rank is not None else ""
     with get_conn() as conn:
         rows = conn.execute(f"""
             SELECT date, venue_name, race_no,
@@ -639,7 +672,7 @@ def _b_class_daily_hit_detail_sql(max_rank: int = None):
               AND result_recorded_at IS NOT NULL
               {rank_clause}
             GROUP BY date, venue_name, race_no
-        """, params).fetchall()
+        """).fetchall()
 
     out: dict[str, list] = {}
     for r in rows:
@@ -690,6 +723,8 @@ def get_boat1_b_class_hit_stats():
                    MAX(is_hit) as race_hit,
                    MAX(CASE WHEN arare_reasons LIKE '%1号B級%' THEN 1 ELSE 0 END) as is_b_class,
                    MAX(venue_day_rank) as venue_day_rank,
+                   MAX(b_class_rank5_ok) as b_class_rank5_ok,
+                   MAX(b_class_rank3_ok) as b_class_rank3_ok,
                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
             FROM predictions
             WHERE {PT_RESET_FILTER} AND bet_type='3連単'
@@ -702,14 +737,8 @@ def get_boat1_b_class_hit_stats():
         return round(100 * n / n_hits, 1) if n_hits else None
 
     n_hits_b_class = sum(1 for r in hits if r["is_b_class"])
-    n_hits_b_top5 = sum(
-        1 for r in hits
-        if r["is_b_class"] and r["venue_day_rank"] is not None and r["venue_day_rank"] <= 5
-    )
-    n_hits_b_top3 = sum(
-        1 for r in hits
-        if r["is_b_class"] and r["venue_day_rank"] is not None and r["venue_day_rank"] <= 3
-    )
+    n_hits_b_top5 = sum(1 for r in hits if r["is_b_class"] and _b_class_rank_ok(r, 5))
+    n_hits_b_top3 = sum(1 for r in hits if r["is_b_class"] and _b_class_rank_ok(r, 3))
     return {
         "n_hits": n_hits,
         "n_hits_b_class": n_hits_b_class,
@@ -737,6 +766,8 @@ def get_boat1_grade_payout_stats():
             SELECT date, venue_name, race_no,
                    MAX(boat1_grade) as boat1_grade,
                    MAX(venue_day_rank) as venue_day_rank,
+                   MAX(b_class_rank5_ok) as b_class_rank5_ok,
+                   MAX(b_class_rank3_ok) as b_class_rank3_ok,
                    MAX(actual_payout) as actual_payout,
                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
             FROM predictions
@@ -757,8 +788,8 @@ def get_boat1_grade_payout_stats():
 
     a_races = [r for r in rows if r["boat1_grade"] in ("A1", "A2")]
     b_races = [r for r in rows if r["boat1_grade"] in ("B1", "B2")]
-    b_top5 = [r for r in b_races if r["venue_day_rank"] is not None and r["venue_day_rank"] <= 5]
-    b_top3 = [r for r in b_races if r["venue_day_rank"] is not None and r["venue_day_rank"] <= 3]
+    b_top5 = [r for r in b_races if _b_class_rank_ok(r, 5)]
+    b_top3 = [r for r in b_races if _b_class_rank_ok(r, 3)]
 
     return [
         _mk("A級", a_races),
@@ -784,7 +815,9 @@ def get_today_okuma_count(date: str = None):
         rows = conn.execute("""
             SELECT MAX(actual_payout) as actual_payout,
                    MAX(boat1_grade) as boat1_grade,
-                   MAX(venue_day_rank) as venue_day_rank
+                   MAX(venue_day_rank) as venue_day_rank,
+                   MAX(b_class_rank5_ok) as b_class_rank5_ok,
+                   MAX(b_class_rank3_ok) as b_class_rank3_ok
             FROM predictions
             WHERE date=? AND bet_type='3連単' AND result_recorded_at IS NOT NULL
             GROUP BY date, venue_name, race_no
@@ -799,15 +832,9 @@ def get_today_okuma_count(date: str = None):
     n_races_resulted, n_okuma = _count(rows)
     b_rows = [r for r in rows if r["boat1_grade"] in ("B1", "B2")]
     n_races_b_class, n_okuma_b_class = _count(b_rows)
-    b_top5_rows = [
-        r for r in b_rows
-        if r["venue_day_rank"] is not None and r["venue_day_rank"] <= 5
-    ]
+    b_top5_rows = [r for r in b_rows if _b_class_rank_ok(r, 5)]
     n_races_b_top5, n_okuma_b_top5 = _count(b_top5_rows)
-    b_top3_rows = [
-        r for r in b_rows
-        if r["venue_day_rank"] is not None and r["venue_day_rank"] <= 3
-    ]
+    b_top3_rows = [r for r in b_rows if _b_class_rank_ok(r, 3)]
     n_races_b_top3, n_okuma_b_top3 = _count(b_top3_rows)
 
     return {
@@ -1059,6 +1086,24 @@ def get_pt_score_stats():
     return result
 
 
+def _b_class_rank_sql_clause(n: int) -> str:
+    """b_class_rank{n}_ok列（SG/G1開催会場を除いた実質トップN判定、2026-10-24追加）を
+    優先し、NULL（この機能より前のデータ）なら生のvenue_day_rank<=nにフォールバックする
+    SQL条件式を返す。n=5または3のみを想定。"""
+    col = f"b_class_rank{n}_ok"
+    return f"(({col} = 1) OR ({col} IS NULL AND venue_day_rank <= {n}))"
+
+
+def _b_class_rank_ok(row: dict, n: int) -> bool:
+    """_b_class_rank_sql_clause()のPython版。辞書1行に対して同じ判定をする。"""
+    col = f"b_class_rank{n}_ok"
+    val = row.get(col)
+    if val is not None:
+        return bool(val)
+    vdr = row.get("venue_day_rank")
+    return vdr is not None and vdr <= n
+
+
 def _grade_tier_key(boat1_grade: str) -> str | None:
     """1号艇の級(A1/A2/B1/B2)からTODAY画面の1号艇級別集計タイアーを決める共通ロジック
     （2026-10-21、PT別集計を置き換えるために追加）。B1・B2はまとめて1タイアーにする。
@@ -1083,6 +1128,8 @@ def get_grade_tier_all_time_streaks():
         rows = conn.execute(f"""
             SELECT MAX(boat1_grade) as boat1_grade,
                    MAX(venue_day_rank) as venue_day_rank,
+                   MAX(b_class_rank5_ok) as b_class_rank5_ok,
+                   MAX(b_class_rank3_ok) as b_class_rank3_ok,
                    MAX(is_hit) as is_hit
             FROM predictions
             WHERE {PT_RESET_FILTER} AND bet_type='3連単' AND result_recorded_at IS NOT NULL
@@ -1094,11 +1141,10 @@ def get_grade_tier_all_time_streaks():
     rows = [r for r in rows if _grade_tier_key(r["boat1_grade"]) is not None]
 
     by_tier = _calc_streaks(rows, lambda r: _grade_tier_key(r["boat1_grade"]))
-    for max_rank, tier_name in [(5, "B1B2_TOP5"), (3, "B1B2_TOP3")]:
+    for n, tier_name in [(5, "B1B2_TOP5"), (3, "B1B2_TOP3")]:
         top_rows = [
             r for r in rows
-            if r["boat1_grade"] in ("B1", "B2")
-            and r["venue_day_rank"] is not None and r["venue_day_rank"] <= max_rank
+            if r["boat1_grade"] in ("B1", "B2") and _b_class_rank_ok(r, n)
         ]
         by_tier[tier_name] = _calc_streaks(top_rows, lambda r: True).get(True, 0)
     overall = _calc_streaks(rows, lambda r: True)
@@ -1117,6 +1163,8 @@ def get_grade_tier_stats():
             SELECT date, venue_name, race_no,
                    MAX(boat1_grade) as boat1_grade,
                    MAX(venue_day_rank) as venue_day_rank,
+                   MAX(b_class_rank5_ok) as b_class_rank5_ok,
+                   MAX(b_class_rank3_ok) as b_class_rank3_ok,
                    MAX(is_hit) as race_hit,
                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
             FROM predictions
@@ -1138,14 +1186,8 @@ def get_grade_tier_stats():
     a1 = [r for r in rows if r["boat1_grade"] == "A1"]
     a2 = [r for r in rows if r["boat1_grade"] == "A2"]
     b_all = [r for r in rows if r["boat1_grade"] in ("B1", "B2")]
-    b_top5 = [
-        r for r in b_all
-        if r["venue_day_rank"] is not None and r["venue_day_rank"] <= 5
-    ]
-    b_top3 = [
-        r for r in b_all
-        if r["venue_day_rank"] is not None and r["venue_day_rank"] <= 3
-    ]
+    b_top5 = [r for r in b_all if _b_class_rank_ok(r, 5)]
+    b_top3 = [r for r in b_all if _b_class_rank_ok(r, 3)]
     overall = a1 + a2 + b_all
 
     return {

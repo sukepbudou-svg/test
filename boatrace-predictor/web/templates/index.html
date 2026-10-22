@@ -906,7 +906,7 @@ footer{
         {% set vlbl = namespace(tier='skip') %}
         {% for race in venue.races %}
           {% if race.boat1_grade in ('B1', 'B2') %}
-            {% if race.venue_day_rank is not none and race.venue_day_rank <= 5 %}
+            {% if (race.b_class_rank5_ok == 1) or (race.b_class_rank5_ok is none and race.venue_day_rank is not none and race.venue_day_rank <= 5) %}
               {% set vlbl.tier = 'pink' %}
             {% elif vlbl.tier != 'pink' %}
               {% set vlbl.tier = 'shinnetsu' %}
@@ -921,7 +921,7 @@ footer{
     <div class="tc-detail" id="venue-detail-{{ venue.venue_name }}" style="display:none;">
       {% for race in venue.races %}
         {% if race.boat1_grade in ('B1', 'B2') %}
-          {% if race.venue_day_rank is not none and race.venue_day_rank <= 5 %}
+          {% if (race.b_class_rank5_ok == 1) or (race.b_class_rank5_ok is none and race.venue_day_rank is not none and race.venue_day_rank <= 5) %}
             {% set _rhit_cls = "tc-detail-hit-pink" %}
           {% else %}
             {% set _rhit_cls = "tc-detail-hit-shinnetsu" %}
@@ -1026,7 +1026,7 @@ footer{
       {% for v in today_venue_ranking %}
       <div class="tc-detail" id="venue-rank-detail-{{ v.venue_name }}" style="display:none;">
         {% for r in preview_b_class if r.venue_name == v.venue_name %}
-        {% set _is_top5 = r.venue_day_rank is not none and r.venue_day_rank <= 5 %}
+        {% set _is_top5 = (r.b_class_rank5_ok == 1) or (r.b_class_rank5_ok is none and r.venue_day_rank is not none and r.venue_day_rank <= 5) %}
         <div class="vor-preview-row">
           <span class="vor-preview-time">{{ r.race_time }}</span>
           <span class="vor-preview-venue">{{ r.venue_name }} {{ r.race_no }}R</span>
@@ -1093,7 +1093,7 @@ footer{
       </div>
       <div class="vor-preview-list" id="b-preview-list" style="display:none;">
         {% for r in preview_b_class %}
-        {% set is_top5 = r.venue_day_rank is not none and r.venue_day_rank <= 5 %}
+        {% set is_top5 = (r.b_class_rank5_ok == 1) or (r.b_class_rank5_ok is none and r.venue_day_rank is not none and r.venue_day_rank <= 5) %}
         <div class="vor-preview-row">
           <span class="vor-preview-time">{{ r.race_time }}</span>
           <span class="vor-preview-venue">{{ r.venue_name }} {{ r.race_no }}R</span>
@@ -1137,7 +1137,7 @@ footer{
   <div class="hit-chips">
   {% for race in race_list %}
     {% if race.boat1_grade in ('B1', 'B2') %}
-      {% if race.venue_day_rank is not none and race.venue_day_rank <= 5 %}
+      {% if (race.b_class_rank5_ok == 1) or (race.b_class_rank5_ok is none and race.venue_day_rank is not none and race.venue_day_rank <= 5) %}
         {% set _hit_cls = "hit-chip-3ren-pink" %}
       {% else %}
         {% set _hit_cls = "hit-chip-3ren-shinnetsu" %}
@@ -1175,7 +1175,7 @@ footer{
       {% set label_text = '参戦' if lbl == '神熱' else '見送り' %}
       {% set grade_display = race.boat1_grade if race.boat1_grade else '?' %}
       {% if race.boat1_grade in ('B1', 'B2') %}
-        {% if race.venue_day_rank is not none and race.venue_day_rank <= 5 %}
+        {% if (race.b_class_rank5_ok == 1) or (race.b_class_rank5_ok is none and race.venue_day_rank is not none and race.venue_day_rank <= 5) %}
           {% set pt_cls = "pt-pink" %}{% set c_cls = "combo-pink" %}{% set rank_cls = "rank-pink" %}{% set hit_cls = "hit-yes-pink" %}
         {% else %}
           {% set pt_cls = "pt-shinnetsu" %}{% set c_cls = "combo-shinnetsu" %}{% set rank_cls = "rank-shinnetsu" %}{% set hit_cls = "hit-yes-shinnetsu" %}
@@ -1263,9 +1263,10 @@ footer{
   }
   function rowKey(r){ return r.venue_name + '_' + r.race_no; }
 
-  function tierClass(grade, dayRank){
+  function tierClass(grade, dayRank, rank5Ok){
     if(grade === 'B1' || grade === 'B2'){
-      if(dayRank !== null && dayRank !== undefined && dayRank <= 5) return 'lbl-pink';
+      const isTop5 = (rank5Ok === 1) || (rank5Ok === null && dayRank !== null && dayRank !== undefined && dayRank <= 5);
+      if(isTop5) return 'lbl-pink';
       return 'lbl-shinnetsu';
     }
     return 'lbl-skip';
@@ -1292,7 +1293,7 @@ footer{
       const key = rowKey(r);
       const isDone = confirmed.includes(key);
       const t = r.created_at ? r.created_at.slice(11,16) : '';
-      const lc = tierClass(r.boat1_grade, r.venue_day_rank);
+      const lc = tierClass(r.boat1_grade, r.venue_day_rank, r.b_class_rank5_ok);
       const labelText = r.bet_label === '神熱' ? '参戦' : '見送り';
       const gradeDisplay = r.boat1_grade || '?';
       const newCls = (i===0 && isGenuinelyNew) ? ' act-new' : '';
