@@ -305,6 +305,9 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
         for vn in _today_venue_names:
             _mg_rows = df_program[df_program["venue_name"] == vn]["meet_grade"]
             _venue_meet_grade[vn] = str(_mg_rows.iloc[0]) if not _mg_rows.empty else "一般"
+        # 2026-10-24追加: SG/G1判定が実際にどう検出されたかを診断できるよう、
+        # 会場別のグレード判定結果を必ずコンソールに出す（除外対象が無い日も含む）
+        print(f"  会場別グレード判定（SG/G1除外ロジックの入力値）: {_venue_meet_grade}\n")
         b_class_eligibility_map = _build_b_class_eligibility(venue_day_rank_map, _venue_meet_grade)
         if _existing_ranking and _force_rank_refresh:
             # 既に記録済みの当日分（race_preview・predictions）を最新の値で
