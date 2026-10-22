@@ -1062,19 +1062,19 @@ footer{
         <span class="vor-progress-unit">R目</span>
       </div>
       <div class="vor-progress-sub">
-        <span class="vor-stat">万舟 {{ today_okuma.n_okuma }}回</span>
+        <span class="vor-stat">万舟 {{ today_okuma.n_okuma }}回{% if today_okuma.n_okuma %}(1/{{ "%.3f"|format(today_okuma.n_races_resulted / today_okuma.n_okuma) }}){% endif %}</span>
         <span class="vor-rate">({{ today_okuma.n_races_resulted }}レース中・実結果ベース)</span>
       </div>
       <div class="vor-progress-sub">
-        <span class="vor-stat lbl-shinnetsu">万舟(B級) {{ today_okuma.n_okuma_b_class }}回</span>
+        <span class="vor-stat lbl-shinnetsu">万舟(B級) {{ today_okuma.n_okuma_b_class }}回{% if today_okuma.n_okuma_b_class %}(1/{{ "%.3f"|format(today_okuma.n_races_b_class / today_okuma.n_okuma_b_class) }}){% endif %}</span>
         <span class="vor-rate">({{ today_okuma.n_races_b_class }}レース中)</span>
       </div>
       <div class="vor-progress-sub">
-        <span class="vor-stat lbl-pink">万舟(B級×1〜5位) {{ today_okuma.n_okuma_b_top5 }}回</span>
+        <span class="vor-stat lbl-pink">万舟(B級×1〜5位) {{ today_okuma.n_okuma_b_top5 }}回{% if today_okuma.n_okuma_b_top5 %}(1/{{ "%.3f"|format(today_okuma.n_races_b_top5 / today_okuma.n_okuma_b_top5) }}){% endif %}</span>
         <span class="vor-rate">({{ today_okuma.n_races_b_top5 }}レース中)</span>
       </div>
       <div class="vor-progress-sub">
-        <span class="vor-stat lbl-magenta">万舟(B級×1〜3位) {{ today_okuma.n_okuma_b_top3 }}回</span>
+        <span class="vor-stat lbl-magenta">万舟(B級×1〜3位) {{ today_okuma.n_okuma_b_top3 }}回{% if today_okuma.n_okuma_b_top3 %}(1/{{ "%.3f"|format(today_okuma.n_races_b_top3 / today_okuma.n_okuma_b_top3) }}){% endif %}</span>
         <span class="vor-rate">({{ today_okuma.n_races_b_top3 }}レース中)</span>
       </div>
     </div>
