@@ -616,24 +616,24 @@ def get_b_class_daily_summary_all():
     return _b_class_daily_summary_sql(max_rank=None)
 
 
-# 1号艇の級別（A1/A2/B1・B2）とレースの実配当額の相関検証（2026-10-20追加）。
-# B1とB2は「新戦略: 1号艇B級×会場当日順位」と同じ基準でまとめて1枠にする。
-_GRADE_BUCKET_LABELS = {"A1": "A1", "A2": "A2", "B1": "B級(B1/B2)", "B2": "B級(B1/B2)"}
-
-
 def get_boat1_b_class_hit_stats():
     """的中したレースのうち、1号艇がB級（B1/B2）だったレースが何件あったかを集計する
     （2026-10-20追加）。的中関連の集計なので現行PT(PT_RESET_FILTER=strategy_version='8')
     のみ対象。1号艇B級の判定はarare_reasonsに含まれる「1号B級」という文言で行うため
     （2026-10-16のPT方式差し戻し以降、該当すれば常に記録されている既存の判定文言）、
     2026-10-20に追加したboat1_grade列より前のデータも2026-10-16以降なら遡って
-    対象になる（A1/A2の区別はできないが、B級かどうかだけなら判定できる）。"""
+    対象になる（A1/A2の区別はできないが、B級かどうかだけなら判定できる）。
+    2026-10-22: さらに会場の当日順位1〜5位・1〜3位に絞った内訳も追加した
+    （venue_day_rankは2026-10-20以降のデータにしか入らないため、それより前は
+    この2つの内訳には反映されない）。割合はいずれも的中レース数全体(n_hits)に
+    対する比率で統一している。"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute(f"""
             SELECT date, venue_name, race_no,
                    MAX(is_hit) as race_hit,
                    MAX(CASE WHEN arare_reasons LIKE '%1号B級%' THEN 1 ELSE 0 END) as is_b_class,
+                   MAX(venue_day_rank) as venue_day_rank,
                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
             FROM predictions
             WHERE {PT_RESET_FILTER} AND bet_type='3連単'
@@ -641,52 +641,75 @@ def get_boat1_b_class_hit_stats():
         """).fetchall()
     hits = [dict(r) for r in rows if r["has_result"] and r["race_hit"]]
     n_hits = len(hits)
+
+    def _rate(n):
+        return round(100 * n / n_hits, 1) if n_hits else None
+
     n_hits_b_class = sum(1 for r in hits if r["is_b_class"])
+    n_hits_b_top5 = sum(
+        1 for r in hits
+        if r["is_b_class"] and r["venue_day_rank"] is not None and r["venue_day_rank"] <= 5
+    )
+    n_hits_b_top3 = sum(
+        1 for r in hits
+        if r["is_b_class"] and r["venue_day_rank"] is not None and r["venue_day_rank"] <= 3
+    )
     return {
         "n_hits": n_hits,
         "n_hits_b_class": n_hits_b_class,
-        "b_class_rate": round(100 * n_hits_b_class / n_hits, 1) if n_hits else None,
+        "b_class_rate": _rate(n_hits_b_class),
+        "n_hits_b_top5": n_hits_b_top5,
+        "b_top5_rate": _rate(n_hits_b_top5),
+        "n_hits_b_top3": n_hits_b_top3,
+        "b_top3_rate": _rate(n_hits_b_top3),
     }
 
 
 def get_boat1_grade_payout_stats():
-    """1号艇の級別（A1/A2/B級）によってレースの実配当額に差があるか検証する集計
-    （2026-10-20追加）。的中したかどうか（自分の買い目が当たったか）とは無関係に、
-    レースの実際の結果だけを見る集計（会場別万舟ランキングと同じ考え方）。
-    boat1_gradeは2026-10-20以降に予想保存時へ付与する新しい列のため、それより前の
-    データは空文字でこの集計からは自動的に除外される。"""
+    """1号艇の級別によってレースの実配当額に差があるか検証する集計（2026-10-20追加）。
+    的中したかどうか（自分の買い目が当たったか）とは無関係に、レースの実際の結果
+    だけを見る集計（会場別万舟ランキングと同じ考え方）。boat1_gradeは2026-10-20
+    以降に予想保存時へ付与する新しい列のため、それより前のデータは空文字でこの
+    集計からは自動的に除外される。
+    2026-10-22: A1/A2は分けずに「A級」としてまとめ、B級はB級(全順位)に加えて
+    会場の当日順位1〜5位・1〜3位に絞った内訳も追加した（venue_day_rankも
+    2026-10-20以降のデータにしか入らないため、それより前はB級(全順位)の方にしか
+    反映されない）。"""
     init_db()
     with get_conn() as conn:
         rows = conn.execute("""
             SELECT date, venue_name, race_no,
                    MAX(boat1_grade) as boat1_grade,
+                   MAX(venue_day_rank) as venue_day_rank,
                    MAX(actual_payout) as actual_payout,
                    MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
             FROM predictions
             WHERE bet_type='3連単' AND boat1_grade IS NOT NULL AND boat1_grade != ''
             GROUP BY date, venue_name, race_no
         """).fetchall()
+    rows = [dict(r) for r in rows if r["has_result"]]
 
-    buckets: dict[str, list] = {"A1": [], "A2": [], "B級(B1/B2)": []}
-    for r in rows:
-        r = dict(r)
-        if not r["has_result"]:
-            continue
-        label = _GRADE_BUCKET_LABELS.get(r["boat1_grade"])
-        if label:
-            buckets[label].append(r["actual_payout"] or 0)
-
-    result = []
-    for label in ["A1", "A2", "B級(B1/B2)"]:
-        payouts = buckets[label]
+    def _mk(label, races):
+        payouts = [r["actual_payout"] or 0 for r in races]
         n = len(payouts)
-        result.append({
+        return {
             "label": label,
             "n_races": n,
             "avg_payout": round(sum(payouts) / n) if n else None,
             "okuma_rate": round(100 * sum(1 for p in payouts if p >= 10000) / n, 1) if n else None,
-        })
-    return result
+        }
+
+    a_races = [r for r in rows if r["boat1_grade"] in ("A1", "A2")]
+    b_races = [r for r in rows if r["boat1_grade"] in ("B1", "B2")]
+    b_top5 = [r for r in b_races if r["venue_day_rank"] is not None and r["venue_day_rank"] <= 5]
+    b_top3 = [r for r in b_races if r["venue_day_rank"] is not None and r["venue_day_rank"] <= 3]
+
+    return [
+        _mk("A級", a_races),
+        _mk("B級(B1/B2)", b_races),
+        _mk("B級(B1/B2)×1〜5位", b_top5),
+        _mk("B級(B1/B2)×1〜3位", b_top3),
+    ]
 
 
 def get_today_okuma_count(date: str = None):

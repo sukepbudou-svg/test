@@ -116,6 +116,8 @@ h2{
 .kpi-value.orange{color:var(--orange);text-shadow:0 0 12px var(--orange-glow),0 0 28px rgba(255,140,0,0.2)}
 .kpi-value.green{color:var(--green);text-shadow:0 0 12px var(--green-glow),0 0 28px rgba(0,255,170,0.2)}
 .kpi-value.white{color:var(--white);text-shadow:0 0 12px var(--white-glow)}
+.kpi-value.indigo{color:#7c5cff;text-shadow:0 0 12px rgba(124,92,255,0.5),0 0 28px rgba(124,92,255,0.2)}
+.kpi-value.magenta{color:#ff1fc9;text-shadow:0 0 12px rgba(255,31,201,0.5),0 0 28px rgba(255,31,201,0.2)}
 .kpi-sub{font-size:11px;color:var(--dim2);margin-top:6px}
 
 /* ── 連続外れアラート ── */
@@ -687,7 +689,9 @@ footer{
   <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
     現在のPT方式（10/16〜）で的中したレースのうち、1号艇がB級（B1/B2）だったレースが
     何件あったかの集計。1号艇B級の判定は2026-10-16以降のarare_reasonsから遡って
-    できるため、2026-10-20に追加したboat1_grade列より前のデータも含む。
+    できるため、2026-10-20に追加したboat1_grade列より前のデータも含む（ただし
+    B級×1〜5位・B級×1〜3位は会場の当日順位(venue_day_rank)が必要なため、
+    2026-10-20以降のデータのみが対象）。
   </p>
   <div class="kpi-row">
     <div class="kpi">
@@ -699,6 +703,16 @@ footer{
       <div class="kpi-value {% if boat1_b_class_hit_stats.n_hits_b_class > 0 %}green{% else %}white{% endif %}">{{ boat1_b_class_hit_stats.n_hits_b_class }}</div>
       <div class="kpi-sub">{% if boat1_b_class_hit_stats.b_class_rate is not none %}{{ boat1_b_class_hit_stats.b_class_rate }}%{% else %}—{% endif %}</div>
     </div>
+    <div class="kpi">
+      <div class="kpi-label">うちB級×1〜5位</div>
+      <div class="kpi-value {% if boat1_b_class_hit_stats.n_hits_b_top5 > 0 %}indigo{% else %}white{% endif %}">{{ boat1_b_class_hit_stats.n_hits_b_top5 }}</div>
+      <div class="kpi-sub">{% if boat1_b_class_hit_stats.b_top5_rate is not none %}{{ boat1_b_class_hit_stats.b_top5_rate }}%{% else %}—{% endif %}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">うちB級×1〜3位</div>
+      <div class="kpi-value {% if boat1_b_class_hit_stats.n_hits_b_top3 > 0 %}magenta{% else %}white{% endif %}">{{ boat1_b_class_hit_stats.n_hits_b_top3 }}</div>
+      <div class="kpi-sub">{% if boat1_b_class_hit_stats.b_top3_rate is not none %}{{ boat1_b_class_hit_stats.b_top3_rate }}%{% else %}—{% endif %}</div>
+    </div>
   </div>
 </div>
 
@@ -706,10 +720,11 @@ footer{
 <div class="section">
   <h2>1号艇級別×実配当額<span class="new-badge">10/20〜 新集計</span></h2>
   <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
-    1号艇がA1・A2・B級（B1/B2）のどれだったかで、レースの実際の配当額に差があるかを
-    検証する集計。的中したかどうかとは無関係に、レースの実際の結果だけを見る
+    1号艇がA級（A1/A2）かB級（B1/B2）かで、レースの実際の配当額に差があるかを
+    検証する集計。B級はさらに会場の当日順位1〜5位・1〜3位に絞った内訳も見られる。
+    的中したかどうかとは無関係に、レースの実際の結果だけを見る
     （「1号艇B級のときほど荒れて配当が高くなる」という仮説の検証用）。
-    2026-10-20以降に記録されたレースのみが対象。
+    2026-10-20以降に記録されたレースのみが対象（B級×1〜5位・1〜3位も同様）。
   </p>
   <div class="table-wrap">
   <table class="data-table">

@@ -718,6 +718,26 @@ TODAY画面の`.today-counts`（本日の進行状況ウィジェット）の「
 （`race_preview`テーブルを会場別にグループ化し`venue_day_rank`順に並べる）
 から取得する。
 
+## STATSの的中内訳・級別配当額をTOP5/TOP3対応に細分化（2026-10-22）
+「的中レースの1号艇B級内訳」「1号艇級別×実配当額」の2つのSTATSセクションを、
+既存のB1B2(本日1〜5位)/B1B2(本日1〜3位)の粒度に合わせて細分化してほしい、との
+要望に対応。
+
+- **的中レースの1号艇B級内訳**（`get_boat1_b_class_hit_stats()`）: 既存の
+  「的中レース数」「うち1号艇B級」のKPIに加え、「うちB級×1〜5位」「うちB級×
+  1〜3位」の2つを追加（色はTODAY画面と揃えてインディゴ・マゼンタ）。割合は
+  いずれも的中レース数全体(n_hits)に対する比率。B級判定自体は2026-10-16以降
+  arare_reasonsから遡れるが、当日順位による1〜5位・1〜3位の内訳は
+  venue_day_rankが必要なため2026-10-20以降のデータのみが対象。
+- **1号艇級別×実配当額**（`get_boat1_grade_payout_stats()`）: A1/A2を分けずに
+  「A級」1行にまとめ、B級は「B級(B1/B2)」（全順位・既存）に加えて
+  「B級(B1/B2)×1〜5位」「B級(B1/B2)×1〜3位」の2行を新設した（4行構成に変更）。
+  未使用になった`_GRADE_BUCKET_LABELS`定数は削除。
+- テンプレート側（`stats.html`）はどちらもテーブル/KPIループが既に汎用的な
+  構造だったため、ラベル文言とデータ件数が変わるだけで大きな変更は不要だった
+  （KPIボックス2個の追加と、新規`kpi-value.indigo`/`kpi-value.magenta`のCSS
+  追加のみ）。
+
 ## 注意事項
 - Google Sheets APIは不要（sheets.pyはあるが `auto_runner.py` でオプション扱い）
 - Sheetsを使う場合のみ `.env` に `SPREADSHEET_ID` と `GOOGLE_CREDENTIALS_PATH` が必要
