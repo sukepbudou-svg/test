@@ -247,31 +247,52 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
     _today_str = today.strftime("%Y-%m-%d")
     _existing_ranking = get_today_venue_ranking(_today_str)
 
-    # SG/G1開催会場を除いた「実質トップ5/トップ3」判定（2026-10-24追加）。
-    # SG/G1開催会場は1号艇が構造的にB級になり得ないため、venue_day_rank(生の
-    # 当日順位)だけで上位5/3位を切ると、その中にSG/G1会場が混ざった分だけ
-    # 実質的な会場数が減ってしまう。SG/G1会場を除いて非SG/G1の会場がちょうど
-    # 5(3)会場集まるまでカットオフを広げ、そのカットオフ以内かどうかを
-    # 会場ごとに判定する（venue_day_rank自体は変更しない。これは「本日の会場
-    # 当日順位」表示や累積カーブ用に生の値のまま残す別の値）。
-    _EXCLUDED_MEET_GRADES = {"SG", "G1"}
+    # 1号艇B級のレースが1つも無い会場を除いた「実質トップ5/トップ3」判定
+    # （2026-10-24追加。当初はSG/G1という開催グレードの文言を番組表から検索して
+    # 判定していたが、実データで検証したところ検索キーワードが実際の番組表の
+    # 書式に合っておらず、全会場が「一般」と誤判定されてしまう不具合があった。
+    # ユーザー提案により、グレードの文言ではなく「その会場に1号艇B級のレースが
+    # 実際に1つでもあるか」という、既に正しく動いている1号艇の級の抽出結果
+    # (_boat1_grade_by_key、番組表の選手データ行から直接取得)を使って判定する
+    # 方式に変更した。SG/G1に限らずどんな理由であれ1号艇B級のレースが無い会場は
+    # 同じように除外されるため、より汎用的かつ番組表の書式に依存しない）。
+    # 1号艇B級のレースが無い会場を除いて該当する会場がちょうど5(3)会場集まる
+    # までカットオフを広げ、そのカットオフ以内かどうかを会場ごとに判定する
+    # （venue_day_rank自体は変更しない。これは「本日の会場 当日順位」表示や
+    # 累積カーブ用に生の値のまま残す別の値）。
 
-    def _effective_cutoff(rank_map, grade_map, target_n):
+    def _effective_cutoff(rank_map, has_b_class_map, target_n):
         count = 0
         for vn in sorted(rank_map, key=lambda v: rank_map[v]):
-            if grade_map.get(vn, "一般") not in _EXCLUDED_MEET_GRADES:
+            if has_b_class_map.get(vn, True):
                 count += 1
             if count == target_n:
                 return rank_map[vn]
         return max(rank_map.values(), default=target_n)
 
-    def _build_b_class_eligibility(rank_map, grade_map):
-        cutoff5 = _effective_cutoff(rank_map, grade_map, 5)
-        cutoff3 = _effective_cutoff(rank_map, grade_map, 3)
+    def _build_b_class_eligibility(rank_map, has_b_class_map):
+        cutoff5 = _effective_cutoff(rank_map, has_b_class_map, 5)
+        cutoff3 = _effective_cutoff(rank_map, has_b_class_map, 3)
         return {
             vn: {"top5": 1 if r <= cutoff5 else 0, "top3": 1 if r <= cutoff3 else 0}
             for vn, r in rank_map.items()
         }
+
+    # 1号艇の級は番組表に最初から入っている静的情報（展示タイム等の直前情報とは
+    # 違う）なので、予想生成を待たずに番組表から直接抽出できる（朝一プレビュー
+    # 用に2026-10-21から使っている既存の抽出ロジックを、上記のトップ5/トップ3
+    # 判定にも再利用する形）。
+    _boat1_grade_by_key = {
+        (str(row.get("venue_code", "")).zfill(2), int(row.get("race_no", 0) or 0)): row.get("grade", "")
+        for _, row in df_program[df_program.get("boat_no") == 1].iterrows()
+    } if "boat_no" in df_program.columns else {}
+    _venue_has_b_class = {}
+    for vn in _today_venue_names:
+        _venue_races = [r for r in schedule if r["venue_name"] == vn]
+        _venue_has_b_class[vn] = any(
+            _boat1_grade_by_key.get((r["venue_code"], r["race_no"]), "") in ("B1", "B2")
+            for r in _venue_races
+        )
 
     # FORCE_RANK_REFRESH環境変数（2026-10-24追加）: 通常は当日最初の起動時の
     # データをそのまま再利用し固定するが、同じ日のうちに判定ロジック自体を
@@ -291,9 +312,9 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
         if _missing:
             # SKIP_VENUESの指定が途中で変わった等、当日最初の順位付けに
             # 含まれていなかった会場が後から出てきた場合は、既存の順位の
-            # 続きとして追加する。SG/G1カットオフは当日最初の計算時点の
-            # ものから動かさないため、追加分の会場は実質トップ5/トップ3には
-            # 含めない（安全側に倒す。もともと稀なケースのため単純な扱いとする）
+            # 続きとして追加する。カットオフは当日最初の計算時点のものから
+            # 動かさないため、追加分の会場は実質トップ5/トップ3には含めない
+            # （安全側に倒す。もともと稀なケースのため単純な扱いとする）
             _next_rank = max(venue_day_rank_map.values(), default=0) + 1
             for vn, r in compute_today_venue_rank_map(_missing).items():
                 venue_day_rank_map[vn] = _next_rank + r - 1
@@ -301,14 +322,10 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
         print(f"  本日の会場別順位（当日最初の起動時のデータを再利用・固定）: {venue_day_rank_map}\n")
     else:
         venue_day_rank_map = compute_today_venue_rank_map(_today_venue_names)
-        _venue_meet_grade = {}
-        for vn in _today_venue_names:
-            _mg_rows = df_program[df_program["venue_name"] == vn]["meet_grade"]
-            _venue_meet_grade[vn] = str(_mg_rows.iloc[0]) if not _mg_rows.empty else "一般"
-        # 2026-10-24追加: SG/G1判定が実際にどう検出されたかを診断できるよう、
-        # 会場別のグレード判定結果を必ずコンソールに出す（除外対象が無い日も含む）
-        print(f"  会場別グレード判定（SG/G1除外ロジックの入力値）: {_venue_meet_grade}\n")
-        b_class_eligibility_map = _build_b_class_eligibility(venue_day_rank_map, _venue_meet_grade)
+        # 会場別に1号艇B級のレースが実際にあるかどうかをコンソールに出す
+        # （SG/G1等の理由で1号艇B級のレースが1つも無い会場を直接確認できる）
+        print(f"  会場別1号艇B級レース有無: {_venue_has_b_class}\n")
+        b_class_eligibility_map = _build_b_class_eligibility(venue_day_rank_map, _venue_has_b_class)
         if _existing_ranking and _force_rank_refresh:
             # 既に記録済みの当日分（race_preview・predictions）を最新の値で
             # 一括上書きする（1回限りの強制リフレッシュ）
@@ -317,18 +334,15 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
             print(f"  [FORCE_RANK_REFRESH] 本日分を最新の状態に上書きしました: {venue_day_rank_map}\n")
         else:
             print(f"  本日の会場別順位（万舟ランキング基準・新規計算）: {venue_day_rank_map}\n")
-        print(f"  SG/G1除外後の実質トップ5/トップ3判定: {b_class_eligibility_map}\n")
+        print(f"  1号艇B級無し会場を除外後の実質トップ5/トップ3判定: {b_class_eligibility_map}\n")
 
     # 朝一プレビュー（2026-10-21追加）: 1号艇の級は番組表に最初から入っている
     # 静的情報（展示タイム等の直前情報とは違う）なので、各レースの実際の予想
     # （発走10分前に生成）を待たずに、番組表から直接1号艇の級を先読みして
     # race_previewテーブルに保存する。ユーザーが「朝一の時点で今日のB級レースを
-    # 全部一覧でプレビューしたい」と要望したため追加。
+    # 全部一覧でプレビューしたい」と要望したため追加（_boat1_grade_by_keyは
+    # 上記のトップ5/トップ3判定でも使うため、このブロックより前で計算済み）。
     from web.database import save_race_preview
-    _boat1_grade_by_key = {
-        (str(row.get("venue_code", "")).zfill(2), int(row.get("race_no", 0) or 0)): row.get("grade", "")
-        for _, row in df_program[df_program.get("boat_no") == 1].iterrows()
-    } if "boat_no" in df_program.columns else {}
     _preview_rows = [
         {
             "venue_name": race["venue_name"],
