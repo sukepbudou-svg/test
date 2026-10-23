@@ -1074,7 +1074,7 @@ def get_recommendations(
             _label_color = ""
         print(f"  {_label_color}[{_okuma_label}]{_C_RESET} 参戦ライン{PT_MIN_SCORE} / {_gate['reason_text']}")
 
-        def _add_rec(row, tier, label_override=None, bet_type="3連単"):
+        def _add_rec(row, tier, label_override=None, bet_type="3連単", point_label=None):
             f, s, t  = int(row["boat1"]), int(row["boat2"]), int(row["boat3"])
             combo    = f"{f}-{s}-{t}"
             ev_val   = float(row.get("ev", float(row["prob"]) * float(row["odds_value"])))
@@ -1105,6 +1105,13 @@ def get_recommendations(
                 "boat1_grade":        _boat1_grade,
                 "okuma_signal_count": _gate_score,
                 "bet_type":           bet_type,
+                # 2026-10-24: 「5点目は的中しにくいがROI的に機能しているか」を
+                # 単独で検証したいという要望のため、どの選出ロジック（1〜2点目/
+                # 3点目/4点目/5点目）で選ばれたかをオッズ値からの逆算ではなく
+                # 選出ロジック自身がここに直接書き込む（get_odds_band_statsは
+                # 買い目の実際のオッズ値から帯を逆算する方式だったが、5点目は
+                # オッズ帯を区切らず選ぶため実際の選出ロジックとズレる場合がある）。
+                "bet_point_label":    point_label or "",
                 # 2026-10-19: 5点目の選出方式を条件ベースから歪み検知方式
                 # (_pick_edge_based)に変更したが、1〜4点目の選出方法は無変更のため
                 # strategy_versionは上げない（'8'のまま）。的中関連の統計を5点目の
@@ -1142,7 +1149,7 @@ def get_recommendations(
 
             seen_3ren = set()
 
-            def _pick_odds_band(min_odds, max_odds, band_name, n_points=1, exclude_boat1=False):
+            def _pick_odds_band(min_odds, max_odds, band_name, point_label, n_points=1, exclude_boat1=False):
                 """オッズ帯から確率×EVのブレンド(幾何平均)上位n_points点を選出
                 exclude_boat1=True の場合、1着・2着・3着のいずれにも1号艇が入らない
                 組み合わせのみを対象にする（高オッズ帯なのに1号艇が絡み続ける矛盾を避け、
@@ -1174,7 +1181,7 @@ def get_recommendations(
                     if key in seen_3ren:
                         continue
                     seen_3ren.add(key)
-                    _add_rec(row, "神熱", label_override=label_override, bet_type="3連単")
+                    _add_rec(row, "神熱", label_override=label_override, bet_type="3連単", point_label=point_label)
                     print(f"  [{band_name}] {f}-{s}-{t} EV={float(row['ev']):.2f} ブレンド={float(row['blend']):.4f}")
                     picked += 1
                     if picked >= n_points:
@@ -1183,7 +1190,7 @@ def get_recommendations(
                     print(f"  [{band_name}] 候補が全て選出済み→スキップ")
                 return picked
 
-            def _pick_edge_based(band_name):
+            def _pick_edge_based(band_name, point_label):
                 """モデル確率と市場オッズが暗示する確率の歪み（ズレ）が最大の
                 組み合わせを、オッズ帯を区切らずレース全体から選ぶ(2026-10-19改訂)。
                 市場の暗示確率 = (1 - TAKEOUT_RATE_3REN) / オッズ。
@@ -1209,16 +1216,16 @@ def get_recommendations(
                     if key in seen_3ren:
                         continue
                     seen_3ren.add(key)
-                    _add_rec(row, "神熱", label_override=label_override, bet_type="3連単")
+                    _add_rec(row, "神熱", label_override=label_override, bet_type="3連単", point_label=point_label)
                     print(f"  [{band_name}] {f}-{s}-{t} オッズ{float(row['odds_value']):.0f}倍 エッジ={float(row['edge']):.2f}倍")
                     return 1
                 print(f"  [{band_name}] 候補なし→スキップ")
                 return 0
 
-            _pick_odds_band(100.0, 150.0, "1-2点目(100-150倍)", n_points=2)
-            _pick_odds_band(151.0, 250.0, "3点目(151-250倍)", n_points=1)
-            _pick_odds_band(151.0, 250.0, "4点目(151-250倍・1号艇除外)", n_points=1, exclude_boat1=True)
-            _pick_edge_based("5点目(歪み検知・オッズ帯なし)")
+            _pick_odds_band(100.0, 150.0, "1-2点目(100-150倍)", "1-2点目", n_points=2)
+            _pick_odds_band(151.0, 250.0, "3点目(151-250倍)", "3点目", n_points=1)
+            _pick_odds_band(151.0, 250.0, "4点目(151-250倍・1号艇除外)", "4点目", n_points=1, exclude_boat1=True)
+            _pick_edge_based("5点目(歪み検知・オッズ帯なし)", "5点目")
 
         if not _valid.empty:
             print(f"  {_label_color}[{_okuma_label}]{_C_RESET} {_gate['reason_text']} → オッズ帯選出(ブレンド方式+条件ベース5点目)")

@@ -68,7 +68,8 @@ def init_db():
                     "b_class_rank5_ok INTEGER",
                     "b_class_rank3_ok INTEGER",
                     "n_b_class_boats INTEGER",
-                    "b_class_boat_nos TEXT"]:
+                    "b_class_boat_nos TEXT",
+                    "bet_point_label TEXT"]:
             try:
                 conn.execute(f"ALTER TABLE predictions ADD COLUMN {col}")
             except Exception:
@@ -98,6 +99,15 @@ def init_db():
         # 相関するか検証するための列。boat1_gradeと同じく番組表から取得できる
         # 静的情報のため、予想生成を待たずauto_runner.py側で1日1回抽出して保存する。
         # NULL（この機能より前のデータ）は集計対象から自然に除外される。
+
+        # bet_point_label（2026-10-24追加）: 5点のうちどの点目（1-2点目/3点目/
+        # 4点目/5点目）の選出ロジックで選ばれた買い目かを、選出ロジック自身が
+        # 保存時に直接書き込む列。従来のget_odds_band_statsは買い目の実際の
+        # オッズ値から帯を逆算して点目を推定していたが、5点目(歪み検知)は
+        # 2026-10-19以降オッズ帯を区切らず選ぶため、オッズ値からの逆算では
+        # 実際の選出ロジックとズレる場合がある。ユーザーから「5点目単独の
+        # 成績を見て、このまま続けるか他の帯に振り分けるか判断したい」との
+        # 要望があり追加（NULL/空文字（この機能より前のデータ）は集計対象外）。
         _backfill_venue_day_rank(conn)
 
 
@@ -295,8 +305,9 @@ def save_prediction(rec: dict):
                arare_score, arare_reasons, bet_label, tier,
                prob, expected_roi, nigerate_str, boat1_risk, okuma_signal_count, bet_type,
                strategy_version, day_race_no, venue_day_rank, boat1_grade,
-               b_class_rank5_ok, b_class_rank3_ok, n_b_class_boats, b_class_boat_nos)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               b_class_rank5_ok, b_class_rank3_ok, n_b_class_boats, b_class_boat_nos,
+               bet_point_label)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             date, venue, race_no,
             str(rec.get("race_time", "")),
@@ -320,6 +331,7 @@ def save_prediction(rec: dict):
             rec.get("b_class_rank3_ok"),
             rec.get("n_b_class_boats"),
             str(rec.get("b_class_boat_nos", "")) if rec.get("b_class_boat_nos") is not None else None,
+            str(rec.get("bet_point_label", "")),
         ))
 
 
@@ -1693,6 +1705,79 @@ def get_odds_band_stats():
     if other["n_races"]:
         result.append(_to_row("その他（帯外）", other))
     return result
+
+
+def get_bet_point_stats():
+    """買い目の点目（1-2点目/3点目/4点目/5点目）別に、的中率・回収率・万舟率を
+    集計する（2026-10-24追加）。ユーザーから「5点目は的中しにくいが、このまま
+    続けるべきか他の帯に振り分けるべきか」と相談された際に、まずは5点目単独の
+    成績を数字で見られるようにすることを提案し了承を得て実装。
+    get_odds_band_stats()は買い目の実際のオッズ値から帯を逆算して1〜2点目/
+    3〜4点目/5点目を推定していたが、5点目(歪み検知)は2026-10-19以降オッズ帯を
+    区切らず選ぶため、オッズ値からの逆算では実際にどの選出ロジックで選ばれたかと
+    ズレる場合がある。そのため予想保存時にbet_point_label列へ選出ロジック自身が
+    直接書き込むようにし（predictor.pyの_pick_odds_band/_pick_edge_based）、
+    この集計ではオッズ値を見ずその列をそのまま使う。bet_point_labelは
+    2026-10-24以降に保存された買い目にしか入っていないため、それより前のデータ
+    はこの集計からは除外される（遡及集計はできない）。的中関連の集計なので
+    現行PT(strategy_version='8')のみ対象（PT_RESET_FILTER）。
+    カウント単位はレース（1-2点目は同じレースに2点あるので、そのどちらかが
+    当たっていればレース的中として扱う。回収率の計算だけは実際に賭けた金額
+    ＝その点目での買い目の点数×100円を使う）。"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT date, venue_name, race_no, bet_point_label, is_hit, actual_payout, result_recorded_at
+            FROM predictions
+            WHERE {PT_RESET_FILTER} AND bet_type='3連単'
+              AND bet_point_label IS NOT NULL AND bet_point_label != ''
+        """).fetchall()
+
+    race_point = {}
+    for r in rows:
+        r = dict(r)
+        key = (r["date"], r["venue_name"], r["race_no"], r["bet_point_label"])
+        g = race_point.setdefault(key, {"n_bets": 0, "resulted": False, "hit": 0, "payout": 0, "race_payout": 0})
+        g["n_bets"] += 1
+        if r["result_recorded_at"] is not None:
+            g["resulted"] = True
+            g["race_payout"] = r["actual_payout"] or 0
+            if r["is_hit"]:
+                g["hit"] = 1
+                g["payout"] += r["actual_payout"] or 0
+
+    order = ["1-2点目", "3点目", "4点目", "5点目"]
+    buckets = {label: dict(n_races=0, n_races_resulted=0, n_race_hits=0, n_bets_resulted=0,
+                            total_return=0, n_okuma=0) for label in order}
+    for (_date, _venue, _race_no, label), g in race_point.items():
+        b = buckets.setdefault(label, dict(n_races=0, n_races_resulted=0, n_race_hits=0,
+                                            n_bets_resulted=0, total_return=0, n_okuma=0))
+        b["n_races"] += 1
+        if g["resulted"]:
+            b["n_races_resulted"] += 1
+            b["n_race_hits"] += g["hit"]
+            b["n_bets_resulted"] += g["n_bets"]
+            b["total_return"] += g["payout"]
+            if g["race_payout"] >= 10000:
+                b["n_okuma"] += 1
+
+    def _to_row(label, b):
+        n_races_resulted = b["n_races_resulted"]
+        n_bets_resulted = b["n_bets_resulted"]
+        hit_rate = round(100 * b["n_race_hits"] / n_races_resulted, 2) if n_races_resulted else None
+        return {
+            "label": label,
+            "n_races": b["n_races"],
+            "n_races_resulted": n_races_resulted,
+            "n_race_hits": b["n_race_hits"],
+            "hit_rate": hit_rate,
+            "hits_per": round(100 / hit_rate, 1) if hit_rate else None,
+            "roi_pct": round(100 * b["total_return"] / (n_bets_resulted * 100), 1) if n_bets_resulted else None,
+            "n_okuma": b["n_okuma"],
+            "okuma_rate": round(100 * b["n_okuma"] / n_races_resulted, 1) if n_races_resulted else None,
+        }
+
+    return [_to_row(label, buckets[label]) for label in order]
 
 
 def get_race_position_distribution():

@@ -17,7 +17,7 @@ from web.database import (
     get_grade_tier_stats, get_grade_tier_all_time_streaks,
     get_venue_okuma_ranking, get_race_position_distribution,
     get_today_okuma_count,
-    get_pt_condition_breakdown, get_odds_band_stats, get_edge_vs_market_stats,
+    get_pt_condition_breakdown, get_odds_band_stats, get_edge_vs_market_stats, get_bet_point_stats,
     get_b_class_venue_rank_curve, get_boat1_grade_payout_stats, get_boat1_b_class_hit_stats,
     get_b_class_count_payout_stats,
     get_b_class_daily_summary_top3, get_b_class_daily_summary_top5, get_b_class_daily_summary_all,
@@ -199,6 +199,7 @@ def create_app():
         pt_threshold_curve = get_pt_threshold_curve()
         pt_condition_breakdown = get_pt_condition_breakdown()
         odds_band_stats = get_odds_band_stats()
+        bet_point_stats = get_bet_point_stats()
         edge_vs_market_stats = get_edge_vs_market_stats()
         b_class_rank_curve = get_b_class_venue_rank_curve()
         boat1_grade_payout_stats = get_boat1_grade_payout_stats()
@@ -225,6 +226,7 @@ def create_app():
                                pt_threshold_curve=pt_threshold_curve,
                                pt_condition_breakdown=pt_condition_breakdown,
                                odds_band_stats=odds_band_stats,
+                               bet_point_stats=bet_point_stats,
                                edge_vs_market_stats=edge_vs_market_stats,
                                b_class_rank_curve=b_class_rank_curve,
                                boat1_grade_payout_stats=boat1_grade_payout_stats,

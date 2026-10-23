@@ -496,6 +496,53 @@ footer{
   </div>
 </div>
 
+<!-- ── 点目別（選出ロジック直接判定）成績 ── -->
+<div class="section">
+  <h2>点目別成績（1-2/3/4/5点目）<span class="new-badge">10/24〜 新集計</span></h2>
+  <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
+    上の「オッズ帯別成績」は買い目の実際のオッズ値から帯を逆算した推定だが、
+    5点目(歪み検知)はオッズ帯を区切らずに選ぶため、オッズ値からの逆算では
+    実際の選出ロジックとズレる場合がある。この集計は選出ロジック自身が保存時に
+    記録した「どの点目で選ばれたか」をそのまま使うため、特に5点目単独の成績
+    （このまま続けるか、他の帯に振り分けるかの判断材料）を正確に見られる。
+    2026-10-24以降に記録されたレースのみが対象（遡及集計はできない）。
+  </p>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>点目</th>
+        <th>レース数</th>
+        <th>結果済</th>
+        <th>的中数</th>
+        <th>的中率</th>
+        <th>何回に1回</th>
+        <th>回収率</th>
+        <th>万舟率</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for b in bet_point_stats %}
+      <tr>
+        <td>{{ b.label }}</td>
+        <td>{{ b.n_races }}</td>
+        <td>{{ b.n_races_resulted }}</td>
+        <td>{{ b.n_race_hits }}</td>
+        <td>{% if b.hit_rate is not none %}{{ b.hit_rate }}%{% else %}—{% endif %}</td>
+        <td>{% if b.hits_per is not none %}{{ b.hits_per }}回に1回{% else %}—{% endif %}</td>
+        <td class="{% if b.roi_pct is none %}{% elif b.roi_pct >= 100 %}roi-good{% elif b.roi_pct >= 50 %}roi-neutral{% else %}roi-bad{% endif %}">
+          {% if b.roi_pct is not none %}{{ b.roi_pct }}%{% else %}—{% endif %}
+        </td>
+        <td>{% if b.okuma_rate is not none %}{{ b.okuma_rate }}%{% else %}—{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="8" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
 <!-- ── モデル確率 vs 市場オッズ（歪み検知の検証） ── -->
 <div class="section">
   <h2>モデル確率 vs 市場オッズ<span class="new-badge">10/18〜 新集計</span></h2>
