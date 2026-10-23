@@ -12,7 +12,7 @@ from web.database import (
     get_daily_summary, get_consecutive_misses, init_db, update_result,
     get_venue_stats, get_venue_detail, get_all_streaks,
     get_recent_activity, get_activity_watermark,
-    get_payout_distribution,
+    get_payout_distribution, get_okuma_payout_band_stats,
     get_pt_score_stats, get_pt_daily_entry_stats, get_pt_summary, get_pt_threshold_curve,
     get_grade_tier_stats, get_grade_tier_all_time_streaks,
     get_venue_okuma_ranking, get_race_position_distribution,
@@ -189,6 +189,7 @@ def create_app():
         venue_stats = get_venue_stats()
         all_streaks = get_all_streaks()
         payout_dist = get_payout_distribution()
+        okuma_payout_band_stats = get_okuma_payout_band_stats()
 
         # 新PTスコア方式（的中関連はstrategy_version='6'、実結果関連は'5'以降を集計）
         pt_score_stats = get_pt_score_stats()
@@ -215,6 +216,7 @@ def create_app():
                                venue_stats=venue_stats,
                                all_streaks=all_streaks,
                                payout_dist=payout_dist,
+                               okuma_payout_band_stats=okuma_payout_band_stats,
                                pt_score_stats=pt_score_stats,
                                pt_daily_entry=pt_daily_entry,
                                pt_summary=pt_summary,

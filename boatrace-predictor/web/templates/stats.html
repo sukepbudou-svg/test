@@ -820,6 +820,43 @@ footer{
   </div>
 </div>
 
+<!-- ── 万舟 配当額帯別集計 ── -->
+<div class="section">
+  <h2>万舟 配当額帯別集計<span class="new-badge">10/23〜 新集計（10/16〜遡及）</span></h2>
+  <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
+    実際に出現した万舟(実配当≥1万円)が、どの配当額帯（3連単のオッズ換算）に
+    集中しているかを見る集計。的中したかどうかとは無関係に、レースの実際の結果
+    だけを見る（{{ okuma_payout_band_stats.start_date }}以降が対象）。
+  </p>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>配当帯</th>
+        <th>万舟回数</th>
+        <th>万舟内の割合</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for b in okuma_payout_band_stats.bands %}
+      <tr>
+        <td>{{ b.label }}</td>
+        <td>{{ b.n_okuma }}回</td>
+        <td>{% if b.share_pct is not none %}{{ b.share_pct }}%{% else %}—{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="3" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
+    {% endfor %}
+      <tr style="border-top:1px solid var(--border);">
+        <td style="color:var(--dim2);">合計</td>
+        <td style="color:var(--dim2);">{{ okuma_payout_band_stats.n_okuma }}回</td>
+        <td style="color:var(--dim2);">{{ okuma_payout_band_stats.n_races_resulted }}レース中</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
 <!-- ── 参戦ライン候補別 累積成績 ── -->
 <div class="section">
   <h2>参戦ライン候補別 累積成績（PT≥X の場合）<span class="new-badge">10/16〜 新集計</span></h2>

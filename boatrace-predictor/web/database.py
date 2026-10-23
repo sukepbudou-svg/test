@@ -933,6 +933,61 @@ def get_payout_distribution():
     return [dict(r) for r in rows]
 
 
+def get_okuma_payout_band_stats(start_date: str = "2026-10-16"):
+    """実際に出現した万舟(実配当≥1万円)を、配当額帯別（オッズ換算で
+    100〜150倍・151〜250倍・251〜400倍・401倍〜無制限の4帯）に集計する
+    （2026-10-23追加）。的中したかどうか（自分の買い目が当たったか）とは
+    無関係に、レースの実際の結果だけを見る集計（会場別万舟ランキングや
+    1号艇級別×実配当額と同じ考え方）。strategy_versionとも無関係（選出方式が
+    変わっても意味は変わらないため、リセット対象にしない）。
+    3連単の配当は100円単位の賭けなので、配当額(円)=オッズ(倍)×100という
+    対応関係がある。例えば「100〜150倍」は配当10,000〜15,000円に相当する。
+    start_dateは遡って集計を開始する日付（デフォルトは2026-10-16。それより
+    前のデータも残っているが、今回は遡及集計の要望が2026-10-16分からだった
+    ため、過去分を含めるかどうかの境界として引けるようにこの引数にした）。"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT date, venue_name, race_no,
+                   MAX(actual_payout) as actual_payout,
+                   MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
+            FROM predictions
+            WHERE bet_type='3連単' AND date >= ?
+            GROUP BY date, venue_name, race_no
+        """, (start_date,)).fetchall()
+    rows = [dict(r) for r in rows if r["has_result"]]
+
+    n_races_resulted = len(rows)
+    okuma_rows = [r for r in rows if (r["actual_payout"] or 0) >= 10000]
+    n_okuma = len(okuma_rows)
+
+    bands = [
+        ("100〜150倍", 10000, 15000),
+        ("151〜250倍", 15100, 25000),
+        ("251〜400倍", 25100, 40000),
+        ("401倍〜無制限", 40100, None),
+    ]
+    band_stats = []
+    for label, lo, hi in bands:
+        if hi is None:
+            matched = [r for r in okuma_rows if (r["actual_payout"] or 0) >= lo]
+        else:
+            matched = [r for r in okuma_rows if lo <= (r["actual_payout"] or 0) <= hi]
+        n = len(matched)
+        band_stats.append({
+            "label": label,
+            "n_okuma": n,
+            "share_pct": round(100 * n / n_okuma, 1) if n_okuma else None,
+        })
+
+    return {
+        "start_date": start_date,
+        "n_races_resulted": n_races_resulted,
+        "n_okuma": n_okuma,
+        "bands": band_stats,
+    }
+
+
 def get_consecutive_misses():
     """ラベル別の直近連続外れ数（後方互換）"""
     return get_all_streaks()["label"]
