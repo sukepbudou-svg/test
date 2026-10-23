@@ -66,7 +66,9 @@ def init_db():
                     "venue_day_rank INTEGER",
                     "boat1_grade TEXT",
                     "b_class_rank5_ok INTEGER",
-                    "b_class_rank3_ok INTEGER"]:
+                    "b_class_rank3_ok INTEGER",
+                    "n_b_class_boats INTEGER",
+                    "b_class_boat_nos TEXT"]:
             try:
                 conn.execute(f"ALTER TABLE predictions ADD COLUMN {col}")
             except Exception:
@@ -91,6 +93,11 @@ def init_db():
         # 行を'8'に戻し、リセット前のデータと再び地続きにする（既に'9'が無ければ無害な空振り）。
         conn.execute("UPDATE predictions SET strategy_version='8' WHERE strategy_version='9'")
 
+        # n_b_class_boats / b_class_boat_nos（2026-10-23追加）: 1号艇の級だけでなく
+        # 6艇全体の級別構成（B級艇が何艇いるか・どの艇番か）が万舟の出やすさと
+        # 相関するか検証するための列。boat1_gradeと同じく番組表から取得できる
+        # 静的情報のため、予想生成を待たずauto_runner.py側で1日1回抽出して保存する。
+        # NULL（この機能より前のデータ）は集計対象から自然に除外される。
         _backfill_venue_day_rank(conn)
 
 
@@ -288,8 +295,8 @@ def save_prediction(rec: dict):
                arare_score, arare_reasons, bet_label, tier,
                prob, expected_roi, nigerate_str, boat1_risk, okuma_signal_count, bet_type,
                strategy_version, day_race_no, venue_day_rank, boat1_grade,
-               b_class_rank5_ok, b_class_rank3_ok)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+               b_class_rank5_ok, b_class_rank3_ok, n_b_class_boats, b_class_boat_nos)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, (
             date, venue, race_no,
             str(rec.get("race_time", "")),
@@ -311,6 +318,8 @@ def save_prediction(rec: dict):
             str(rec.get("boat1_grade", "")),
             rec.get("b_class_rank5_ok"),
             rec.get("b_class_rank3_ok"),
+            rec.get("n_b_class_boats"),
+            str(rec.get("b_class_boat_nos", "")) if rec.get("b_class_boat_nos") is not None else None,
         ))
 
 
@@ -821,6 +830,52 @@ def get_boat1_grade_payout_stats():
         _mk("B級(B1/B2)", b_races),
         _mk("B級(B1/B2)×1〜5位", b_top5),
         _mk("B級(B1/B2)×1〜3位", b_top3),
+    ]
+
+
+def get_b_class_count_payout_stats():
+    """6艇全体のB級艇数（0〜6艇）によってレースの実際の配当額に差があるかを
+    検証する集計（2026-10-23追加）。1号艇の級だけでなく、2〜6号艇も含めた
+    級別構成が万舟の出やすさと相関するかを見るのが目的。的中したかどうか
+    （自分の買い目が当たったか）とは無関係に、レースの実際の結果だけを見る
+    （1号艇級別×実配当額と同じ考え方）。n_b_class_boatsは2026-10-23以降に
+    予想保存時へ付与する新しい列のため、それより前のデータは自動的にこの
+    集計からは除外される（NULLのまま）。
+    組み合わせそのもの（どの艇番がB級か）まで細分化すると件数が少なすぎて
+    統計的に薄くなるため、まずはB級艇の数だけで0艇/1艇/2艇/3艇以上の4段階に
+    バケット分けする（深掘りが必要になれば別途b_class_boat_nos列を使う）。"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT date, venue_name, race_no,
+                   MAX(n_b_class_boats) as n_b_class_boats,
+                   MAX(actual_payout) as actual_payout,
+                   MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
+            FROM predictions
+            WHERE bet_type='3連単' AND n_b_class_boats IS NOT NULL
+            GROUP BY date, venue_name, race_no
+        """).fetchall()
+    rows = [dict(r) for r in rows if r["has_result"]]
+
+    def _mk(label, races):
+        payouts = [r["actual_payout"] or 0 for r in races]
+        n = len(payouts)
+        return {
+            "label": label,
+            "n_races": n,
+            "avg_payout": round(sum(payouts) / n) if n else None,
+            "okuma_rate": round(100 * sum(1 for p in payouts if p >= 10000) / n, 1) if n else None,
+        }
+
+    buckets = [
+        ("0艇", lambda c: c == 0),
+        ("1艇", lambda c: c == 1),
+        ("2艇", lambda c: c == 2),
+        ("3艇以上", lambda c: c >= 3),
+    ]
+    return [
+        _mk(label, [r for r in rows if cond(r["n_b_class_boats"] or 0)])
+        for label, cond in buckets
     ]
 
 

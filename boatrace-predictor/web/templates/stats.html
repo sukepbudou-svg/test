@@ -820,6 +820,40 @@ footer{
   </div>
 </div>
 
+<!-- ── B級艇数×実配当額 ── -->
+<div class="section">
+  <h2>B級艇数×実配当額<span class="new-badge">10/23〜 新集計</span></h2>
+  <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
+    1号艇だけでなく、6艇全体のうちB級（B1/B2）の艇が何艇いるかで、レースの実際の
+    配当額に差があるかを検証する集計。的中したかどうかとは無関係に、レースの実際の
+    結果だけを見る。2026-10-23以降に記録されたレースのみが対象。
+  </p>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>B級艇数</th>
+        <th>レース数</th>
+        <th>平均配当額</th>
+        <th>万舟率</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for g in b_class_count_payout_stats %}
+      <tr>
+        <td>{{ g.label }}</td>
+        <td>{{ g.n_races }}</td>
+        <td>{% if g.avg_payout is not none %}¥{{ "{:,}".format(g.avg_payout) }}{% else %}—{% endif %}</td>
+        <td>{% if g.okuma_rate is not none %}{{ g.okuma_rate }}%{% else %}—{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" style="text-align:center;color:var(--dim2);padding:16px;">まだデータがありません</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
 <!-- ── 万舟 配当額帯別集計 ── -->
 <div class="section">
   <h2>万舟 配当額帯別集計<span class="new-badge">10/23〜 新集計（10/16〜遡及）</span></h2>

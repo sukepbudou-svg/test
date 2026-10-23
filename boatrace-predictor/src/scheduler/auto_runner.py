@@ -286,6 +286,22 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
         (str(row.get("venue_code", "")).zfill(2), int(row.get("race_no", 0) or 0)): row.get("grade", "")
         for _, row in df_program[df_program.get("boat_no") == 1].iterrows()
     } if "boat_no" in df_program.columns else {}
+
+    # 6艇全体の級別構成（2026-10-23追加）: 1号艇の級だけでなく、2〜6号艇も含めた
+    # B級艇の数・艇番が万舟の出やすさと相関するかを検証するため、番組表から
+    # レースごとに全艇の級別を抽出する（_boat1_grade_by_keyと同じ静的情報・
+    # 同じ抽出元を艇番を絞らずに使うだけ）。
+    _all_boat_grades_by_key = {}
+    if "boat_no" in df_program.columns:
+        for _, row in df_program.iterrows():
+            key = (str(row.get("venue_code", "")).zfill(2), int(row.get("race_no", 0) or 0))
+            _all_boat_grades_by_key.setdefault(key, {})[int(row.get("boat_no", 0) or 0)] = row.get("grade", "")
+
+    def _b_class_boats_for(venue_code, race_no):
+        grades = _all_boat_grades_by_key.get((venue_code, race_no), {})
+        nos = sorted(bn for bn, g in grades.items() if g in ("B1", "B2"))
+        return len(nos), ",".join(str(n) for n in nos)
+
     _venue_has_b_class = {}
     for vn in _today_venue_names:
         _venue_races = [r for r in schedule if r["venue_name"] == vn]
@@ -440,6 +456,7 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                         # (schedule)から算出するため、途中再起動・遅延起動でも
                         # 正しい「当日何レース目か」を維持できる
                         day_race_no = sum(1 for r in schedule if r["scheduled_dt"] <= scheduled_dt)
+                        _n_b_class_boats, _b_class_boat_nos = _b_class_boats_for(race["venue_code"], race["race_no"])
                         pred_rows = _predict_one_race(
                             race, df_program, model, payout_lookup,
                             today, spreadsheet_id, credentials_path,
@@ -455,6 +472,8 @@ def run_auto(spreadsheet_id: str, credentials_path: str = None) -> None:
                             venue_day_rank=venue_day_rank_map.get(race["venue_name"]),
                             b_class_rank5_ok=b_class_eligibility_map.get(race["venue_name"], {}).get("top5"),
                             b_class_rank3_ok=b_class_eligibility_map.get(race["venue_name"], {}).get("top3"),
+                            n_b_class_boats=_n_b_class_boats,
+                            b_class_boat_nos=_b_class_boat_nos,
                         )
                         race["pred_rows"] = pred_rows or []
                         race["daily_race_count"] = daily_race_count
@@ -531,6 +550,8 @@ def _predict_one_race(
     venue_day_rank: int = None,
     b_class_rank5_ok: int = None,
     b_class_rank3_ok: int = None,
+    n_b_class_boats: int = None,
+    b_class_boat_nos: str = None,
 ) -> list:
     """1レース分の予想を実行してDB(+オプションでSheets)に書き込む。予想行リストを返す"""
     import pandas as pd
@@ -608,6 +629,8 @@ def _predict_one_race(
         row_dict["venue_day_rank"] = venue_day_rank
         row_dict["b_class_rank5_ok"] = b_class_rank5_ok
         row_dict["b_class_rank3_ok"] = b_class_rank3_ok
+        row_dict["n_b_class_boats"] = n_b_class_boats
+        row_dict["b_class_boat_nos"] = b_class_boat_nos
         # DBに保存（常時）
         if db_save_fn:
             try:

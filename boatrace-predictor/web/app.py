@@ -19,6 +19,7 @@ from web.database import (
     get_today_okuma_count,
     get_pt_condition_breakdown, get_odds_band_stats, get_edge_vs_market_stats,
     get_b_class_venue_rank_curve, get_boat1_grade_payout_stats, get_boat1_b_class_hit_stats,
+    get_b_class_count_payout_stats,
     get_b_class_daily_summary_top3, get_b_class_daily_summary_top5, get_b_class_daily_summary_all,
     get_b_class_daily_hit_detail_top3, get_b_class_daily_hit_detail_top5, get_b_class_daily_hit_detail_all,
     _b_class_rank_ok,
@@ -201,6 +202,7 @@ def create_app():
         edge_vs_market_stats = get_edge_vs_market_stats()
         b_class_rank_curve = get_b_class_venue_rank_curve()
         boat1_grade_payout_stats = get_boat1_grade_payout_stats()
+        b_class_count_payout_stats = get_b_class_count_payout_stats()
         boat1_b_class_hit_stats = get_boat1_b_class_hit_stats()
         b_class_daily_top3 = get_b_class_daily_summary_top3()
         b_class_daily_top5 = get_b_class_daily_summary_top5()
@@ -226,6 +228,7 @@ def create_app():
                                edge_vs_market_stats=edge_vs_market_stats,
                                b_class_rank_curve=b_class_rank_curve,
                                boat1_grade_payout_stats=boat1_grade_payout_stats,
+                               b_class_count_payout_stats=b_class_count_payout_stats,
                                boat1_b_class_hit_stats=boat1_b_class_hit_stats,
                                b_class_daily_top3=b_class_daily_top3,
                                b_class_daily_top5=b_class_daily_top5,

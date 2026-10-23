@@ -913,6 +913,28 @@ SG・G1開催会場は1号艇が構造的にB級になり得ないため、`venu
 - `web/app.py`の`stats()`ルートで呼び出し、`web/templates/stats.html`の
   「1号艇級別×実配当額」セクションの直後に新しい表セクションとして追加。
 
+## STATSページに「B級艇数×実配当額」を追加（2026-10-23、新規データ収集・遡及なし）
+- 1号艇の級だけでなく、6艇全体のB級艇数が万舟の出やすさと相関するかを検証する
+  新集計。ユーザーから「絞り要素として今後何が重要そうか」と聞かれた際に提案し、
+  「まず1号艇以外も含めた級別構成を見たい」と了承を得て実装。
+- データ取得: `src/scheduler/auto_runner.py`で、既存の`_boat1_grade_by_key`
+  （1号艇限定の級抽出）と同じ番組表データから、艇番を絞らず`_all_boat_grades_by_key`
+  （{(venue_code, race_no): {boat_no: grade}}）を新設。`_b_class_boats_for(venue_code,
+  race_no)`でレースごとに「B級艇の数」と「B級艇の艇番（例: "2,4"）」を算出し、
+  `_predict_one_race()`に`n_b_class_boats`/`b_class_boat_nos`として渡して
+  `predictions`テーブルに保存する（1号艇の級と同じく番組表に最初から入っている
+  静的情報のため、予想生成前の朝一時点で確定している）。
+  **遡及集計はできない**（1号艇以外の級別は従来保存していなかったため）。
+  2026-10-23以降に記録されたレースから新たに蓄積される。
+- `web/database.py`に`get_b_class_count_payout_stats()`を新設。B級艇数が
+  NULL（この機能より前のデータ）でないレースを対象に、0艇/1艇/2艇/3艇以上の
+  4段階にバケット分けして、レース数・平均配当額・万舟率を比較する。組み合わせ
+  そのもの（どの艇番がB級か）まで細分化すると件数が薄くなりすぎるため、まずは
+  B級艇の数だけで見る方針（深掘りする場合は保存済みの`b_class_boat_nos`列を
+  後から使える）。
+- `web/app.py`の`stats()`ルートで呼び出し、`web/templates/stats.html`の
+  「1号艇級別×実配当額」セクションの直後に新しい表セクションとして追加。
+
 ## 注意事項
 - Google Sheets APIは不要（sheets.pyはあるが `auto_runner.py` でオプション扱い）
 - Sheetsを使う場合のみ `.env` に `SPREADSHEET_ID` と `GOOGLE_CREDENTIALS_PATH` が必要
