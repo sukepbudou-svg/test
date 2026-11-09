@@ -982,7 +982,10 @@ footer{
 
 <!-- ── 日別 参戦/見送り結果 ── -->
 <div class="section">
-  <h2>日別 参戦/見送り結果<span class="new-badge">10/16〜 新集計</span></h2>
+  <h2>日別 参戦/見送り結果<span class="new-badge">10/16〜 新集計・11/9 トータル行+的中詳細を追加</span></h2>
+  <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim2);margin-bottom:8px;">
+    日付をクリックすると、その日・そのラベルで的中したレースの内訳（会場・買い目・金額）を表示できる。
+  </p>
   <div class="table-wrap">
   <table class="data-table">
     <thead>
@@ -1000,9 +1003,31 @@ footer{
       </tr>
     </thead>
     <tbody>
+    {% for label in ['神熱', '見送り'] %}
+      {% set s = pt_summary.get(label) %}
+      {% if s %}
+      <tr style="border-top:2px solid var(--border);background:rgba(255,255,255,0.03);font-weight:600;">
+        <td>トータル</td>
+        <td class="{% if label == '神熱' %}label-shinnetsu{% else %}label-skip{% endif %}">{{ label }}</td>
+        <td>{{ s.n_races }}</td>
+        <td>{{ s.n_races_resulted }}</td>
+        <td>{{ s.n_hits }}</td>
+        <td>{% if s.hit_rate is not none %}{{ s.hit_rate }}%{% else %}—{% endif %}</td>
+        <td>{% if s.hits_per is not none %}{{ s.hits_per }}回に1回{% else %}—{% endif %}</td>
+        <td class="{% if s.roi_pct is none %}{% elif s.roi_pct >= 100 %}roi-good{% elif s.roi_pct >= 70 %}roi-neutral{% else %}roi-bad{% endif %}">
+          {% if s.roi_pct is not none %}{{ s.roi_pct }}%{% else %}—{% endif %}
+        </td>
+        <td>{{ s.n_okuma }}</td>
+        <td class="{% if s.pnl >= 0 %}roi-good{% else %}roi-bad{% endif %}">
+          {% if s.pnl >= 0 %}+{% endif %}¥{{ "{:,}".format(s.pnl) }}
+        </td>
+      </tr>
+      {% endif %}
+    {% endfor %}
     {% for d in pt_daily_entry %}
-      <tr>
-        <td>{{ d.date }}</td>
+      {% set hit_key = d.date + '-' + ('shin' if d.label == '神熱' else 'miokuri') %}
+      <tr onclick="toggleDailyHitDetail('ptdaily-{{ hit_key }}')">
+        <td class="date-clickable">{{ d.date }}</td>
         <td class="{% if d.label == '神熱' %}label-shinnetsu{% else %}label-skip{% endif %}">{{ d.label }}</td>
         <td>{{ d.n_races }}</td>
         <td>{{ d.n_races_resulted }}</td>
@@ -1015,6 +1040,21 @@ footer{
         <td>{{ d.n_okuma }}</td>
         <td class="{% if d.pnl >= 0 %}roi-good{% else %}roi-bad{% endif %}">
           {% if d.pnl >= 0 %}+{% endif %}¥{{ "{:,}".format(d.pnl) }}
+        </td>
+      </tr>
+      <tr id="daily-hit-detail-ptdaily-{{ hit_key }}" style="display:none;">
+        <td colspan="10" style="padding:0;">
+          <div class="daily-hit-detail">
+          {% for h in pt_daily_hits.get(d.date, {}).get(d.label, []) %}
+            <div class="daily-hit-row">
+              <span class="daily-hit-venue">{{ h.venue_name }} {{ h.race_no }}R</span>
+              <span class="daily-hit-combo">{{ h.combination }}</span>
+              <span class="daily-hit-payout">¥{{ "{:,}".format(h.actual_payout) }}</span>
+            </div>
+          {% else %}
+            <div class="daily-hit-empty">的中レースはありません</div>
+          {% endfor %}
+          </div>
         </td>
       </tr>
     {% else %}

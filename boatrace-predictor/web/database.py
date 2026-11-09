@@ -1380,6 +1380,48 @@ def get_pt_daily_entry_stats():
     return out
 
 
+def get_pt_daily_hit_detail():
+    """「日別 参戦/見送り結果」で日付をクリックすると見られる、その日・その
+    ラベル（神熱/見送り）で的中したレースの内訳（会場・レース番号・買い目・
+    金額）を日付×ラベルごとにまとめて返す（2026-11-09追加）。「新戦略 日別
+    サマリー」系のクリック詳細（_b_class_daily_hit_detail_sql）と同じ考え方。
+    bet_labelはレース単位で1つに決まる（同じレース内の複数の買い目は全て
+    同じラベル）ため、MAX(bet_label)で代表させてよい。get_pt_daily_entry_stats()
+    と対象を揃えるため、同じPT_RESET_FILTER（_pt_v4_race_level_sqlの既定値）
+    を使う。
+    Returns: {date: {label: [{"venue_name","race_no","combination","actual_payout"}, ...]}}
+    """
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT date, venue_name, race_no,
+                   MAX(bet_label) as label,
+                   MAX(actual_combination) as combination,
+                   MAX(actual_payout) as actual_payout,
+                   MAX(is_hit) as race_hit
+            FROM predictions
+            WHERE {PT_RESET_FILTER} AND bet_type='3連単'
+              AND result_recorded_at IS NOT NULL
+            GROUP BY date, venue_name, race_no
+        """).fetchall()
+
+    out: dict[str, dict] = {}
+    for r in rows:
+        r = dict(r)
+        if not r["race_hit"]:
+            continue
+        out.setdefault(r["date"], {}).setdefault(r["label"], []).append({
+            "venue_name": r["venue_name"],
+            "race_no": r["race_no"],
+            "combination": r["combination"],
+            "actual_payout": r["actual_payout"] or 0,
+        })
+    for date in out:
+        for label in out[date]:
+            out[date][label].sort(key=lambda h: (h["venue_name"], h["race_no"]))
+    return out
+
+
 def get_pt_summary():
     """新PTスコア方式: 全体サマリー（神熱/見送り/合計）"""
     init_db()
@@ -1407,6 +1449,7 @@ def get_pt_summary():
         n_bets = row.get("n_bets_resulted") or 0
         n_races_resulted = row.get("n_races_resulted") or 0
         row["hit_rate"] = round(100 * (row.get("n_hits") or 0) / n_races_resulted, 1) if n_races_resulted else None
+        row["hits_per"] = round(n_races_resulted / row["n_hits"], 1) if row.get("n_hits") else None
         row["roi_pct"] = round(100 * (row.get("total_return") or 0) / (n_bets * 100), 1) if n_bets else None
         row["okuma_rate"] = round(100 * (row.get("n_okuma") or 0) / n_races_resulted, 1) if n_races_resulted else None
         row["pnl"] = (row.get("total_return") or 0) - n_bets * 100
