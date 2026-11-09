@@ -1344,6 +1344,41 @@ def get_grade_tier_stats():
     }
 
 
+def get_shinnetsu_all_time_streak_and_rate():
+    """ラベル「神熱」だけの、日付をまたいだ全期間での現在の連続不的中数・
+    「何回に1回」を集計する（2026-10-21追加のget_grade_tier_all_time_streaks/
+    get_grade_tier_stats（1号艇級別タイアー軸）と同じ考え方を、ラベル軸(神熱)
+    に適用したもの。TODAY画面に「本日合計」と「本日の会場 当日順位」の間に
+    神熱だけの集計欄を追加するため2026-11-09に新設。
+    既存のget_all_streaks()['label']はキーが(bet_label, bet_type)のタプルで
+    テンプレートから直接使いづらいため、ここでは神熱(3連単)に限定した単純な
+    値（miss_streak・hits_per）だけを返す。PT_RESET_FILTER限定。"""
+    init_db()
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT MAX(is_hit) as race_hit,
+                   MAX(CASE WHEN result_recorded_at IS NOT NULL THEN 1 ELSE 0 END) as has_result
+            FROM predictions
+            WHERE {PT_RESET_FILTER} AND bet_type='3連単' AND bet_label='神熱'
+              AND result_recorded_at IS NOT NULL
+            GROUP BY date, venue_name, race_no
+            ORDER BY MAX(id) DESC
+        """).fetchall()
+    rows = [dict(r) for r in rows]
+
+    n_resulted = len(rows)
+    n_hits = sum(1 for r in rows if r["race_hit"])
+    miss_streak = 0
+    for r in rows:
+        if r["race_hit"]:
+            break
+        miss_streak += 1
+    return {
+        "miss_streak": miss_streak,
+        "hits_per": round(n_resulted / n_hits, 1) if n_hits else None,
+    }
+
+
 def get_pt_daily_entry_stats():
     """新PTスコア方式: 日付×ラベル(神熱/見送り)別の成績集計"""
     init_db()

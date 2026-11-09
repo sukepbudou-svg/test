@@ -14,7 +14,7 @@ from web.database import (
     get_recent_activity, get_activity_watermark,
     get_payout_distribution, get_okuma_payout_band_stats,
     get_pt_score_stats, get_pt_daily_entry_stats, get_pt_daily_hit_detail, get_pt_summary, get_pt_threshold_curve,
-    get_grade_tier_stats, get_grade_tier_all_time_streaks,
+    get_grade_tier_stats, get_grade_tier_all_time_streaks, get_shinnetsu_all_time_streak_and_rate,
     get_venue_okuma_ranking, get_race_position_distribution,
     get_today_okuma_count,
     get_pt_condition_breakdown, get_odds_band_stats, get_edge_vs_market_stats, get_bet_point_stats,
@@ -149,6 +149,22 @@ def create_app():
         grade_counts, grade_total = _build_grade_counts(
             race_list, get_grade_tier_all_time_streaks(), get_grade_tier_stats()
         )
+        # 神熱だけの集計欄（2026-11-09追加）。「本日合計」と「本日の会場 当日順位」の
+        # 間に挿入する。1号艇級別(grade_counts)とは別軸で、ラベル（神熱/見送り）で
+        # 絞った当日分の件数・的中・収支を見る。当日分はrace_listから直接集計し、
+        # 「何回に1回」・連続不的中数は全期間分(get_shinnetsu_all_time_streak_and_rate)
+        # を使う（grade_countsの各行と同じ考え方）。
+        shin_races = [r for r in race_list if r["bets"] and r["bets"][0].get("bet_label") == "神熱"]
+        shin_n_races, shin_n_hits, shin_cost, shin_return = _sum_races(shin_races)
+        shin_all_time = get_shinnetsu_all_time_streak_and_rate()
+        shinnetsu_only = {
+            "tier": "SHINNETSU_ONLY", "label": "神熱のみ", "color": "shinnetsu",
+            "races": shin_n_races, "hits": shin_n_hits,
+            "cost": shin_cost, "return": shin_return, "pnl": shin_return - shin_cost,
+            "miss_streak": shin_all_time["miss_streak"],
+            "hits_per": shin_all_time["hits_per"],
+            "race_objs": shin_races,
+        }
         race_position_distribution = get_race_position_distribution()
         today_okuma = get_today_okuma_count(date)
         # 「現在何R目か」は記録済みレース数(race_list|length)ではなく、本日の全番組表
@@ -169,6 +185,7 @@ def create_app():
         return render_template("index.html", date=date, race_list=race_list, venue_list=venue_list,
                                venue_okuma_ranking=venue_okuma_ranking,
                                grade_counts=grade_counts, grade_total=grade_total,
+                               shinnetsu_only=shinnetsu_only,
                                race_position_distribution=race_position_distribution,
                                today_progress=today_progress, today_okuma=today_okuma,
                                preview_b_class=preview_b_class, preview_b_top5=preview_b_top5,

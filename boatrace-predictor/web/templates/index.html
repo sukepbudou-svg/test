@@ -1013,6 +1013,46 @@ footer{
     </div>
     {% endif %}
 
+    {% if shinnetsu_only %}
+    <div class="tc-row tc-row-shinnetsu" style="cursor:pointer;" onclick="togglePtDetail('{{ shinnetsu_only.tier }}')">
+      <span class="tc-label lbl-shinnetsu">{{ shinnetsu_only.label }}</span>
+      <span class="tc-num lbl-shinnetsu">{{ shinnetsu_only.races }}</span>
+      <span class="tc-sep">|</span>
+      <span class="tc-hit {% if shinnetsu_only.hits > 0 %}has-hit{% endif %}">◎ {{ shinnetsu_only.hits }}</span>
+      <span class="tc-freq">{% if shinnetsu_only.hits_per is not none %}{{ shinnetsu_only.hits_per }}回に1回{% else %}—{% endif %}</span>
+      <span class="tc-sep">|</span>
+      <span class="tc-streak {% if shinnetsu_only.miss_streak >= 5 %}tc-streak-hot{% elif shinnetsu_only.miss_streak >= 1 %}tc-streak-warn{% endif %}">
+        {% if shinnetsu_only.miss_streak == 0 %}0連{% else %}{{ shinnetsu_only.miss_streak }}連外{% endif %}
+      </span>
+      <span class="tc-pnl {% if shinnetsu_only.pnl >= 0 %}tc-pnl-pos{% else %}tc-pnl-neg{% endif %}">
+        {% if shinnetsu_only.pnl >= 0 %}+{% endif %}¥{{ "{:,}".format(shinnetsu_only.pnl) }}
+      </span>
+    </div>
+    <div class="tc-detail" id="pt-detail-{{ shinnetsu_only.tier }}" style="display:none;">
+      {% for race in shinnetsu_only.race_objs %}
+        {% set rr = namespace(found=none, hit=false, payout=0, combo='') %}
+        {% for b in race.bets %}
+          {% if b.result_recorded_at and rr.found is none %}
+            {% set rr.found = b %}
+            {% set rr.combo = b.actual_combination %}
+          {% endif %}
+          {% if b.is_hit %}{% set rr.hit = true %}{% set rr.payout = b.actual_payout %}{% endif %}
+        {% endfor %}
+        <div class="tc-detail-row {% if rr.hit %}tc-detail-hit-shinnetsu{% endif %}"
+             onclick="event.stopPropagation(); scrollToRace('{{ race.venue_name }}', {{ race.race_no }})">
+          <span class="tc-detail-race">{{ race.venue_name }} {{ race.race_no }}R</span>
+          {% if rr.found is none %}
+            <span class="tc-detail-result tc-detail-pending">待機中</span>
+          {% elif rr.hit %}
+            <span class="tc-detail-result">◎ {{ rr.combo }} ¥{{ "{:,}".format(rr.payout) }}</span>
+          {% else %}
+            <span class="tc-detail-result tc-detail-miss">✗ {{ rr.combo }} ¥{{ "{:,}".format(rr.found.actual_payout) }}</span>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
     {% if today_venue_ranking %}
     <div class="vor-rank-list">
       <div class="vor-title">本日の会場 当日順位</div>

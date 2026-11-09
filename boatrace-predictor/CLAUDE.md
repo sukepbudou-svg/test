@@ -1013,6 +1013,24 @@ SG・G1開催会場は1号艇が構造的にB級になり得ないため、`venu
 - `get_pt_daily_entry_stats()`・`get_pt_summary()`と対象を揃えるため、同じ
   `PT_RESET_FILTER`（現行strategy_version='8'のみ）を使う。
 
+## TODAY画面に「神熱のみ」集計欄を追加（2026-11-09、レイアウト変更なし）
+- ユーザーから「本日合計の下、本日の会場 当日順位の上に、神熱だけの集計欄を
+  作ってほしい」との要望。既存のレイアウト（1号艇級別集計の各行→本日合計→
+  本日の会場 当日順位）を崩さず、本日合計のすぐ下に1行追加する形で対応。
+- 既存の1号艇級別集計(grade_counts/_build_grade_counts)とは別の軸（ラベル:
+  神熱/見送り）での絞り込みのため、新たに`web/app.py`の`index()`内で
+  `shin_races = [r for r in race_list if r["bets"][0].get("bet_label") == "神熱"]`
+  として当日分を直接抽出し、既存の`_sum_races()`で件数・的中・収支を集計。
+  「何回に1回」・連続不的中数は前日以前も込みの全期間分を使う（grade_countsの
+  各行と同じ考え方）ため、`web/database.py`に`get_shinnetsu_all_time_streak_and_rate()`
+  を新設（既存の`get_all_streaks()['label']`はキーが(bet_label, bet_type)の
+  タプルでテンプレートから直接使いづらいため、神熱(3連単)限定の単純な辞書を
+  返す専用関数にした）。
+- 表示は既存の1号艇級別集計の行と全く同じ見た目（`tc-row`+クリックで展開する
+  `tc-detail`）を再利用し、`togglePtDetail('SHINNETSU_ONLY')`で開閉する。
+  色は既存の「神熱」配色(`lbl-shinnetsu`/`tc-row-shinnetsu`)を使い、新しい
+  CSSクラスは追加していない。
+
 ## 注意事項
 - Google Sheets APIは不要（sheets.pyはあるが `auto_runner.py` でオプション扱い）
 - Sheetsを使う場合のみ `.env` に `SPREADSHEET_ID` と `GOOGLE_CREDENTIALS_PATH` が必要
